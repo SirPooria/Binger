@@ -1,108 +1,25 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Zap, X, Cpu, Star, HelpCircle, ArrowRight } from 'lucide-react';
-import { getImageUrl, getShowsByGenre, searchShows, getSimilarShows, getPopularShows } from '@/lib/tmdbClient'; 
+import { Send, Bot, User, Loader2, Zap, X, Cpu, Star, HelpCircle, ArrowRight, RotateCcw } from 'lucide-react';
+import { getImageUrl, searchShows, getPopularShows, getShowDetails } from '@/lib/tmdbClient'; 
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 
-// دسته‌بندی دقیق ژانرهای سریال در TMDB
-const GENRE_IDS = {
-  ANIMATION: 16,
-  COMEDY: 35,
-  DRAMA: 18,
-  ACTION_ADVENTURE: 10759,
-  CRIME: 80,
-  MYSTERY: 9648,
-  HORROR_THRILLER: 9648,
-  ROMANCE: 10749,
-  SCI_FI: 10765,
-  WAR_POLITICS: 10768,
-  DOCUMENTARY: 99,
-};
-
-// واژگان غنی‌شده با اصطلاحات عامیانه و سینمایی روز
-const MOOD_RULES: { keywords: string[]; genreId: number; weight: number }[] = [
-  // 💥 اکشن، انتقام و بزن‌بزن
-  { keywords: ['پاره کنه', 'بزنه همه رو', 'بزن بزن', 'انتقام', 'خون و خونریزی', 'جان ویک', 'آدرنالین', 'کشتار'], genreId: GENRE_IDS.ACTION_ADVENTURE, weight: 5 },
-  { keywords: ['اکشن', 'هیجان', 'خشن', 'دعوا', 'کتک', 'تفنگ', 'شلیک', 'بمب', 'انفجار', 'تعقیب', 'گریز', 'مبارزه', 'رزمی', 'سریع'], genreId: GENRE_IDS.ACTION_ADVENTURE, weight: 2 },
-
-  // 🤯 ذهن‌پیچ، معمایی، تعلیق و اصطلاحات خاص
-  { keywords: ['مایندفاک', 'مغزپیچ', 'مغزم رو بپکون', 'برگ ریزون', 'پشم ریزون', 'قفلی', 'پایان غیرمنتظره', 'شوکه کننده'], genreId: GENRE_IDS.MYSTERY, weight: 5 },
-  { keywords: ['معما', 'راز', 'مرموز', 'پیچیده', 'عجیب', 'ذهنی', 'پازل', 'معمایی', 'تعلیق', 'شرلوک', 'رازآلود'], genreId: GENRE_IDS.MYSTERY, weight: 2 },
-
-  // 🕵️ جنایی و مافیایی
-  { keywords: ['مافیا', 'گنگستر', 'مواد', 'پلیسی', 'کاراگاه', 'قتل', 'قاتل', 'سرقت', 'دزد', 'جرم', 'خلاف', 'زندان', 'جنایی'], genreId: GENRE_IDS.CRIME, weight: 3 },
-
-  // 😂 کمدی، طنز و حال‌خوب‌کن
-  { keywords: ['بترکم', 'جر خوردم', 'پکیدم', 'بگو بخند', 'قهقهه', 'خنده دار', 'خندهدار', 'حال خوب'], genreId: GENRE_IDS.COMEDY, weight: 4 },
-  { keywords: ['خنده', 'شاد', 'بخندم', 'طنز', 'کمدی', 'فان', 'جوک', 'مسخره', 'شادی', 'بامزه', 'سیتکام', 'روحیه'], genreId: GENRE_IDS.COMEDY, weight: 2 },
-
-  // 😭 درام، غم و احساسی سنگین
-  { keywords: ['دلم گرفته', 'اشکم دربیاد', 'گریه دار', 'شکست عشقی', 'افسرده', 'داغون'], genreId: GENRE_IDS.DRAMA, weight: 4 },
-  { keywords: ['غم', 'ناراحت', 'گریه', 'درام', 'سنگین', 'بغض', 'اشک', 'عاطفی', 'تلخ', 'غمگین', 'غصه', 'دپرس', 'دلگیر'], genreId: GENRE_IDS.DRAMA, weight: 2 },
-
-  // ⛩️ انیمه و اوتاکو
-  { keywords: ['انیمه', 'اوتاکو', 'مانگا', 'ژاپنی', 'انیمیشن', 'کارتون'], genreId: GENRE_IDS.ANIMATION, weight: 3 },
-
-  // 👻 دلهره‌آور و وحشت
-  { keywords: ['ترسناک', 'وحشت', 'جن', 'روح', 'شبح', 'خون', 'زامبی', 'اسلشر', 'سکته', 'جیغ', 'کابوس', 'تسخیر'], genreId: GENRE_IDS.HORROR_THRILLER, weight: 3 },
-
-  // ❤️ عاشقانه و رمانتیک
-  { keywords: ['عاشقانه', 'رومانتیک', 'عشق', 'احساسی', 'لاو', 'عاشقی', 'بوسه', 'ازدواج', 'کراش'], genreId: GENRE_IDS.ROMANCE, weight: 3 },
-
-  // 👽 علمی تخیلی و فضایی
-  { keywords: ['سایبرپانک', 'سفر در زمان', 'هوش مصنوعی', 'مریخ', 'آدم فضایی', 'بیگانگان', 'ربات'], genreId: GENRE_IDS.SCI_FI, weight: 4 },
-  { keywords: ['علمی تخیلی', 'فضا', 'آینده', 'تکنولوژی', 'زمان', 'کهکشان'], genreId: GENRE_IDS.SCI_FI, weight: 2 },
-
-  // ⚔️ تاریخی، حماسی و پادشاهی
-  { keywords: ['شمشیری', 'قرون وسطی', 'وایکینگ', 'پادشاهی', 'تاریخی', 'جنگجو', 'حماسی', 'قلمرو'], genreId: GENRE_IDS.WAR_POLITICS, weight: 3 },
-
-  // 📚 مستند و دنیای واقعی
-  { keywords: ['مستند', 'راز بقا', 'طبیعت', 'حیوانات', 'بیوگرافی', 'دنیای واقعی'], genreId: GENRE_IDS.DOCUMENTARY, weight: 3 }
-];
-
-const THEMES: Record<string | number, string> = {
-  default: "from-purple-600/10 to-cyan-600/10",
-  [GENRE_IDS.DRAMA]: "from-blue-900/20 to-gray-900/20",
-  [GENRE_IDS.COMEDY]: "from-yellow-400/10 to-orange-500/10",
-  [GENRE_IDS.ACTION_ADVENTURE]: "from-red-600/10 to-orange-600/10",
-  [GENRE_IDS.HORROR_THRILLER]: "from-red-900/20 to-black",
-  [GENRE_IDS.ROMANCE]: "from-pink-500/10 to-rose-500/10",
-  [GENRE_IDS.ANIMATION]: "from-indigo-500/10 to-purple-500/10",
-  [GENRE_IDS.MYSTERY]: "from-emerald-900/20 to-slate-900/20",
-  [GENRE_IDS.CRIME]: "from-amber-900/20 to-zinc-900/20",
-  [GENRE_IDS.SCI_FI]: "from-cyan-900/20 to-blue-950/30",
-  [GENRE_IDS.WAR_POLITICS]: "from-stone-800/30 to-zinc-950/40"
-};
-
-const BOT_VARIANTS = {
-  fallback: [
-    "دقیق متوجه نشدم چه ژانری مد نظرته، ولی این چند تا سریال ترند و محبوب رو حتماً ببین:",
-    "سیگنال کمی ضعیف بود! ولی این لیست برگزیده و داغ الان حسابی طرفدار داره:",
-    "خیلی مطمئن نشدم چه مودی می‌خوای، اما این پیشنهادهای برتر قطعاً سرگرمت می‌کنن:"
-  ],
-  success: [
-    "گرفتم چی می‌خوای! این گزینه‌ها دقیقاً به درد حال و هوات می‌خورن:",
-    "سلیقه‌ت عالیه! این چند تا سریال خوراکِ همین حس و حالتن:",
-    "پردازش شد 🧠. اینم بهترین انتخاب‌ها متناسب با مودِ الانت:",
-    "پیداشون کردم! مطمئنم عاشق اینا میشی:"
-  ]
-};
-
 const QUICK_CHIPS = [
-  { label: "😂 میخوام بترکم", text: "یه سریال کمدی و خنده دار میخوام که حالمو خوب کنه" },
-  { label: "😭 دلم گرفته", text: "خیلی ناراحتم و دلم گرفته، یه درام سنگین میخوام" },
-  { label: "🤯 مغزم رو بپکون", text: "یه سریال مایندفاک و فوق العاده پیچیده و معمایی" },
-  { label: "👺 انیمه خفن", text: "چند تا انیمه خفن و دیدنی معرفی کن" },
-  { label: "🩸 بزنه پاره کنه", text: "یه سریال اکشن و بزن بزن پر از هیجان و آدرنالین" },
-  { label: "❤️ عاشقانه", text: "یه سریال رمانتیک و احساسی قشنگ" },
-  { label: "⚔️ شمشیری و حماسی", text: "یه سریال شمشیری و تاریخی تو سبک وایکینگ ها" }
+  { label: "😂 بترکم از خنده", text: "یه سریال کمدی و خنده دار خفن معرفی کن که حالمو حسابی جا بیاره" },
+  { label: "🤯 مایندفاک و مغزپیچ", text: "یه سریال معمایی و به شدت مایندفاک با پایان غیرقابل پیش‌بینی می‌خوام" },
+  { label: "🩸 بزنه پاره کنه", text: "یه سریال اکشن و انتقامی پر از بزن بزن و آدرنالین خالص" },
+  { label: "😭 دلم گرفته", text: "خیلی دلم گرفته، یه درام سنگین و فوق‌العاده احساسی پیشنهاد بده" },
+  { label: "👺 انیمه شاهکار", text: "چند تا انیمه خفن و دیدنی که حتماً باید دید رو معرفی کن" },
+  { label: "❤️ عاشقانه و خاص", text: "یه سریال رمانتیک و عاطفی دلنشین می‌خوام" },
+  { label: "⚔️ شمشیری و حماسی", text: "یه سریال تاریخی و شمشیری تو مایه‌های وایکینگ‌ها یا بازی تاج و تخت" }
 ];
 
-const SIMILARITY_TRIGGERS = ['شبیه', 'مثل', 'سبک', 'تو مایه های', 'تو مایههای', 'عین', 'مانند'];
-const STOP_WORDS = ['سریال', 'فیلم', 'یه', 'معرفی', 'کن', 'میخوام', 'به', 'رو', 'چی', 'داری', 'بهم', 'بگو', 'هست', 'باشه', 'دارین', 'دوست دارم', 'خوشم میاد'];
-const NEGATION_WORDS = ['نباشه', 'نباشن', 'نمیخوام', 'نمی‌خوام', 'ندارم', 'نبینم', 'نباید', 'دوست ندارم', 'حال نمیکنم'];
+const INITIAL_MESSAGE = { 
+  role: 'bot', 
+  text: 'سلام! من هسته هوشمندِ بینجرم ⚡️\nحس و حال الانت رو برام بنویس یا بگو شبیه چه سریالی دوست داری تا با بررسی سابقه تماشات، بهترین‌ها رو بهت معرفی کنم.' 
+};
 
 export default function MoodChatPage() {
   const router = useRouter();
@@ -111,18 +28,96 @@ export default function MoodChatPage() {
   
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<any[]>([
-    { role: 'bot', text: 'سلام! من هسته هوشمندِ بینجرم ⚡️\nحس و حالتو بگو یا بگو شبیه چه سریالی دوست داری تا بهت پیشنهاد بدم.' }
-  ]);
+  const [messages, setMessages] = useState<any[]>([INITIAL_MESSAGE]);
   const [loading, setLoading] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState(THEMES.default);
+  const [watchedIds, setWatchedIds] = useState<number[]>([]);
+  const [watchedNames, setWatchedNames] = useState<string[]>([]);
 
+  // ۱. خواندن تاریخچه چت‌های قبلی از حافظه کاربر
+  useEffect(() => {
+    try {
+      const savedChat = localStorage.getItem('binger_mood_chat_history');
+      if (savedChat) {
+        const parsed = JSON.parse(savedChat);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('خطا در خواندن تاریخچه چت:', e);
+    }
+  }, []);
+
+  // ۲. اسکرول خودکار به آخرین پیام
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [messages, loading]);
 
+  // ۳. خواندن لیست سریال‌های دیده‌شده کاربر از سوپابیس با حلقه ۱۰۰۰ تایی
+  useEffect(() => {
+    const fetchUserWatchedData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        let allWatched: { show_id: number; created_at: string }[] = [];
+        let from = 0;
+        const PAGE_SIZE = 1000;
+        let hasMore = true;
+
+        // حلقه نامحدود برای دور زدن لیمیت ۱۰۰۰ تایی سوپابیس
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('watched')
+            .select('show_id, created_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .range(from, from + PAGE_SIZE - 1);
+
+          if (error || !data || data.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          allWatched = allWatched.concat(data.map(d => ({ show_id: Number(d.show_id), created_at: d.created_at })));
+
+          if (data.length < PAGE_SIZE) {
+            hasMore = false;
+          } else {
+            from += PAGE_SIZE;
+          }
+        }
+
+        // شناسه‌های یکتا برای فیلتر کردن
+        const uniqueIds: number[] = Array.from(new Set(allWatched.map(w => w.show_id)));
+        setWatchedIds(uniqueIds);
+
+        // استخراج نام چند سریال آخری که دیده تا به هوش مصنوعی منتقل شود
+        const recentShowIds = uniqueIds.slice(0, 6);
+        const namePromises = recentShowIds.map(async (id: any) => {
+          try {
+            // تبدیل شناسه به متن (String) برای سازگاری کامل با تابع
+            const details = await getShowDetails(String(id) as any);
+            return details?.name || null;
+          } catch {
+            return null;
+          }
+        });
+
+        const resolvedNames = await Promise.all(namePromises);
+        const validNames = resolvedNames.filter((n): n is string => Boolean(n));
+        setWatchedNames(validNames);
+      } catch (err) {
+        console.error('خطا در دریافت سریال‌های دیده‌شده کاربر:', err);
+      }
+    };
+
+    fetchUserWatchedData();
+  }, []);
+
+  // دکمه بازگشت و خروج
   const handleBack = () => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
@@ -131,146 +126,106 @@ export default function MoodChatPage() {
     }
   };
 
-  const getRandomResponse = (type: 'success' | 'fallback') => {
-    const list = BOT_VARIANTS[type];
-    return list[Math.floor(Math.random() * list.length)];
+  // پاک کردن تاریخچه چت و شروع مجدد
+  const handleResetChat = () => {
+    setMessages([INITIAL_MESSAGE]);
+    try {
+      localStorage.removeItem('binger_mood_chat_history');
+    } catch (e) {}
   };
 
-  // بررسی هوشمند کلمات با وزن‌دهی و درک نفی
-  const detectBestGenre = (text: string): number | null => {
-    const normalizedText = text.toLowerCase();
-    const scores: Record<number, number> = {};
-
-    for (const rule of MOOD_RULES) {
-      for (const kw of rule.keywords) {
-        if (normalizedText.includes(kw)) {
-          const isNegated = NEGATION_WORDS.some(neg => {
-            const patternAfter = `${kw} ${neg}`;
-            const patternTogether = `${kw}${neg}`;
-            return normalizedText.includes(patternAfter) || normalizedText.includes(patternTogether);
-          });
-
-          if (!isNegated) {
-            scores[rule.genreId] = (scores[rule.genreId] || 0) + rule.weight;
-          }
-        }
-      }
-    }
-
-    let bestGenreId: number | null = null;
-    let maxScore = 0;
-
-    for (const [genreIdStr, score] of Object.entries(scores)) {
-      if (score > maxScore) {
-        maxScore = score;
-        bestGenreId = Number(genreIdStr);
-      }
-    }
-
-    return bestGenreId;
-  };
-
+  // ارسال پیام به هوش مصنوعی و دریافت پوسترها
   const handleSend = async (textOverride?: string) => {
     const textToSend = textOverride || input;
     if (!textToSend.trim() || loading) return;
 
     const userMsg = { role: 'user', text: textToSend };
-    setMessages(prev => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setInput("");
     setLoading(true);
 
-    // --- ۱. بررسی درخواست بر اساس شباهت به یک سریال دیگر ---
-    const similarityTrigger = SIMILARITY_TRIGGERS.find(t => textToSend.includes(t));
-    
-    if (similarityTrigger) {
-      let query = textToSend;
-      query = query.replace(similarityTrigger, "");
-      STOP_WORDS.forEach(word => query = query.replace(new RegExp(word, 'g'), ""));
-      query = query.trim();
+    try {
+      // ارتباط با هوش مصنوعی واقعی Groq از طریق روت سرور
+      const response = await fetch('/api/mood', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: textToSend,
+          watchedShowNames: watchedNames,
+        }),
+      });
 
-      if (query.length > 1) {
-        try {
-          const searchResults = await searchShows(query);
-          if (searchResults && searchResults.length > 0) {
-            const targetShow = searchResults[0];
-            const similarShows = await getSimilarShows(targetShow.id);
-            
-            setTimeout(() => {
-              const botText = `اگه «${targetShow.name}» رو دوست داری، احتمالاً عاشق اینایی:`;
-              const suggestions = (similarShows && similarShows.length > 0) ? similarShows.slice(0, 10) : [];
-              const botMsg = { role: 'bot', text: botText, suggestions };
-              setMessages(prev => [...prev, botMsg]);
-              setLoading(false);
-            }, 700);
-            return;
-          }
-        } catch (e) {
-          console.error("خطا در جستجوی شباهت:", e);
-        }
+      if (!response.ok) {
+        throw new Error('خطا در پاسخ هوش مصنوعی');
       }
-    }
 
-    // --- ۲. بررسی هوشمند حس و حال با سیستم امتیازدهی ---
-    const selectedGenreId = detectBestGenre(textToSend);
+      const data = await response.json();
+      const botText = data.reply || 'این گزینه‌ها متناسب با حس و حالتن:';
+      const recommendedTitles: string[] = data.recommended_titles || [];
 
-    setTimeout(async () => {
-      let shows: any[] = [];
-      let botText = "";
-      const randomPage = Math.floor(Math.random() * 5) + 1;
-
-      try {
-        if (selectedGenreId) {
-          shows = await getShowsByGenre(selectedGenreId, randomPage);
-          
-          if (shows && shows.length > 0) {
-            shows = shows.sort(() => 0.5 - Math.random());
-            botText = getRandomResponse('success');
-            const newTheme = THEMES[selectedGenreId] || THEMES.default;
-            setCurrentTheme(newTheme);
-          } else {
-            shows = await getPopularShows(1);
-            botText = "حال و هواتو گرفتم! این مجموعه‌ی دیدنی و پرطرفدار رو برات انتخاب کردم:";
-          }
-        } else {
-          shows = await getPopularShows(randomPage);
-          if (!shows || shows.length === 0) {
-            shows = await getPopularShows(1);
-          }
-          botText = getRandomResponse('fallback');
-          setCurrentTheme(THEMES.default);
-
+      // دریافت پوسترها و مشخصات واقعی TMDB برای عناوین پیشنهادی هوش مصنوعی
+      let suggestions: any[] = [];
+      if (recommendedTitles.length > 0) {
+        const searchPromises = recommendedTitles.map(async (title: string) => {
           try {
-            await supabase.from('ai_logs').insert([{ query: textToSend, status: 'failed' }] as any);
-          } catch (e) {
-            // بدون وقفه در تجربه کاربر
+            const results = await searchShows(title);
+            if (results && results.length > 0) {
+              // سریال‌هایی که کاربر قبلاً دیده از کارت‌ها حذف می‌شوند
+              const unWatched = results.filter((s: any) => !watchedIds.includes(s.id));
+              return unWatched.length > 0 ? unWatched[0] : null;
+            }
+            return null;
+          } catch {
+            return null;
           }
-        }
-      } catch (err) {
-        console.error("خطا در دریافت سریال‌ها:", err);
-        try {
-          shows = await getPopularShows(1);
-        } catch (_) {
-          shows = [];
-        }
-        botText = "متوجه شدم چی می‌خوای ولی ارتباط با سرور کمی دچار اختلال شد. این چند مورد پرطرفدار رو ببین:";
+        });
+
+        const resolvedShows = await Promise.all(searchPromises);
+        suggestions = resolvedShows.filter(Boolean);
       }
 
-      const botMsg = { 
-        role: 'bot', 
-        text: botText, 
-        suggestions: (shows || []).slice(0, 10) 
+      // اگر احیاناً هیچ پوستری پیدا نشد، ترندهای روز به عنوان پشتیبان لود می‌شوند تا صفحه خالی نماند
+      if (suggestions.length === 0) {
+        const fallbackShows = await getPopularShows(1);
+        suggestions = (fallbackShows || [])
+          .filter((s: any) => !watchedIds.includes(s.id))
+          .slice(0, 6);
+      }
+
+      const botMsg = {
+        role: 'bot',
+        text: botText,
+        suggestions: suggestions.slice(0, 8),
       };
 
-      setMessages(prev => [...prev, botMsg]);
+      const finalMessages = [...newMessages, botMsg];
+      setMessages(finalMessages);
+      localStorage.setItem('binger_mood_chat_history', JSON.stringify(finalMessages));
+
+    } catch (err) {
+      console.error('خطا در پردازش پیام:', err);
+      // حالت پشتیبان در صورت خطای شبکه
+      const fallbackShows = await getPopularShows(1);
+      const botMsg = {
+        role: 'bot',
+        text: 'متوجه حال و هوات شدم! ارتباط سرور کمی تاخیر داشت، اما این چند تا سریال منتخب که با سلیقه‌ت جور درمیاد رو ببین:',
+        suggestions: (fallbackShows || []).slice(0, 6),
+      };
+
+      const finalMessages = [...newMessages, botMsg];
+      setMessages(finalMessages);
+      localStorage.setItem('binger_mood_chat_history', JSON.stringify(finalMessages));
+    } finally {
       setLoading(false);
-    }, 700);
+    }
   };
 
   return (
     <div dir="rtl" className="h-[100dvh] w-full bg-[#050505] text-white font-['Vazirmatn'] flex flex-col pb-20 md:pb-0 relative overflow-hidden pt-20 transition-colors duration-1000">
       
-      {/* گرادیان داینامیک پس‌زمینه بر اساس مود */}
-      <div className={`absolute top-0 right-0 w-full h-full bg-gradient-to-br ${currentTheme} blur-[120px] opacity-40 pointer-events-none transition-all duration-1000`}></div>
+      {/* نور سینمایی پس‌زمینه */}
+      <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-[#ccff00]/10 via-transparent to-purple-950/20 blur-[130px] opacity-40 pointer-events-none"></div>
 
       {/* مدال راهنما */}
       {showHelpModal && (
@@ -287,42 +242,37 @@ export default function MoodChatPage() {
               <div className="w-16 h-16 bg-[#ccff00]/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#ccff00]/20">
                 <HelpCircle size={32} className="text-[#ccff00]" />
               </div>
-              <h3 className="text-xl font-black text-white mb-2">راهنمای هوش مصنوعی بینجر</h3>
+              <h3 className="text-xl font-black text-white mb-2">هوش مصنوعی بینجر</h3>
             </div>
             <div className="space-y-4 text-right">
               <div>
                 <h4 className="font-bold text-[#ccff00] mb-2 text-sm flex items-center gap-2">
-                  <Zap size={16}/> بر اساس حس و حال
+                  <Zap size={16}/> متصل به هوش مصنوعی واقعی
                 </h4>
                 <p className="text-gray-300 text-xs leading-6 bg-white/5 p-3 rounded-xl border border-white/5">
-                  کافیه احساست رو به زبان خودت بگی:
-                  <br/>• "یه سریال کمدی که واقعاً <span className="text-white font-bold">بترکم</span> از خنده"
-                  <br/>• "یه سریال <span className="text-white font-bold">اکشن و انتقامی</span> پر از بزن بزن"
-                  <br/>• "یه داستان <span className="text-white font-bold">مایندفاک و پیچیده</span>"
+                  با زبان خودت حرف بزن! هوش مصنوعی بینجر با درک کامل زبان فارسی و اصطلاحات فیلم‌بازها، سریال‌های متناسب با حس و حالت را پیشنهاد می‌دهد.
                 </p>
               </div>
               <div>
-                <h4 className="font-bold text-purple-400 mb-2 text-sm flex items-center gap-2">
-                  <Star size={16}/> بر اساس شباهت به سریال دیگر
+                <h4 className="font-bold text-green-400 mb-2 text-sm flex items-center gap-2">
+                  <Star size={16}/> هماهنگ با سابقه تماشای تو
                 </h4>
                 <p className="text-gray-300 text-xs leading-6 bg-white/5 p-3 rounded-xl border border-white/5">
-                  نام سریالی که دوست داری رو بنویس:
-                  <br/>• "یه سریال <span className="text-white font-bold">شبیه بریکینگ بد</span> معرفی کن"
-                  <br/>• "چیزی <span className="text-white font-bold">تو مایه های دارک</span> داری؟"
+                  سریال‌هایی که قبلاً در بینجر تماشا کرده‌ای از لیست پیشنهادات حذف می‌شوند تا همیشه با شاهکارهای جدید شگفت‌زده شوی!
                 </p>
               </div>
               <p className="text-center text-[11px] text-gray-500 pt-3 border-t border-white/5">
-                نسخه هوشمند BETA — هماهنگ با دیتابیس بینجر ⚡️
+                نسخه پیشرفته Binger AI — با پشتیبانی از مدل Llama 3.3 ⚡️
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* هدر صفحه: شامل دکمه بازگشت جدید در سمت راست */}
+      {/* هدر صفحه: شامل دکمه بازگشت، وضعیت و دکمه شروع مجدد */}
       <header className="p-4 border-b border-white/5 bg-[#0a0a0a]/80 backdrop-blur-md flex items-center justify-between shadow-2xl z-20 relative">
         <div className="flex items-center gap-3">
-          {/* دکمه بازگشت و خروج */}
+          {/* دکمه بازگشت */}
           <button 
             onClick={handleBack} 
             title="بازگشت"
@@ -339,18 +289,31 @@ export default function MoodChatPage() {
           </div>
           <div>
             <h1 className="font-black text-base flex items-center gap-2">
-              Binger AI <span className="bg-[#ccff00]/10 text-[#ccff00] text-[9px] px-2 py-0.5 rounded-full font-mono border border-[#ccff00]/20">BETA</span>
+              Binger AI <span className="bg-[#ccff00]/10 text-[#ccff00] text-[9px] px-2 py-0.5 rounded-full font-mono border border-[#ccff00]/20">PRO</span>
             </h1>
-            <p className="text-[10px] text-gray-400">موتور پیشنهاد هوشمند بر اساس مود</p>
+            <p className="text-[10px] text-gray-400">دستیار فوق‌هوشمند سینما</p>
           </div>
         </div>
-        <button 
-          onClick={() => setShowHelpModal(true)} 
-          title="راهنما"
-          className="p-2 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 hover:border-[#ccff00]/50 hover:text-[#ccff00] transition-all cursor-pointer text-gray-400 hover:text-white"
-        >
-          <HelpCircle size={20} />
-        </button>
+
+        <div className="flex items-center gap-2">
+          {/* دکمه ریست چت */}
+          <button 
+            onClick={handleResetChat} 
+            title="شروع مجدد گفتگو"
+            className="p-2 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 hover:border-red-500/50 hover:text-red-400 transition-all cursor-pointer text-gray-400"
+          >
+            <RotateCcw size={18} />
+          </button>
+
+          {/* دکمه راهنما */}
+          <button 
+            onClick={() => setShowHelpModal(true)} 
+            title="راهنما"
+            className="p-2 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 hover:border-[#ccff00]/50 hover:text-[#ccff00] transition-all cursor-pointer text-gray-400 hover:text-white"
+          >
+            <HelpCircle size={18} />
+          </button>
+        </div>
       </header>
 
       {/* بخش چت و پیام‌ها */}
@@ -361,7 +324,7 @@ export default function MoodChatPage() {
               {msg.role === 'user' ? <User size={16} className="text-gray-300" /> : <Zap size={16} className="text-black fill-black" />}
             </div>
             <div className={`flex flex-col gap-3 max-w-[85%] min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-              <div className={`p-3.5 rounded-2xl text-sm leading-relaxed shadow-lg ${msg.role === 'user' ? 'bg-[#1e1e1e] text-white rounded-tr-none border border-white/5' : 'bg-[#121212] border border-white/10 text-gray-200 rounded-tl-none'}`}>
+              <div className={`p-3.5 rounded-2xl text-sm leading-relaxed shadow-lg whitespace-pre-wrap ${msg.role === 'user' ? 'bg-[#1e1e1e] text-white rounded-tr-none border border-white/5' : 'bg-[#121212] border border-white/10 text-gray-200 rounded-tl-none'}`}>
                 {msg.text}
               </div>
               
@@ -413,7 +376,7 @@ export default function MoodChatPage() {
         )}
       </div>
 
-      {/* بخش ورودی پیام و چیپ‌های سریع */}
+      {/* بخش ورودی پیام و دکمه‌های سریع (Chips) */}
       <div className="bg-[#0a0a0a]/95 border-t border-white/10 backdrop-blur-xl z-20 flex flex-col gap-2 pb-3">
         <div className="overflow-x-auto no-scrollbar py-2 px-4">
           <div className="flex gap-2 w-max">
@@ -436,7 +399,7 @@ export default function MoodChatPage() {
             onChange={(e) => setInput(e.target.value)} 
             onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
             type="text" 
-            placeholder="حس و حالت رو بنویس... (مثلاً: یه سریال بزن بزن و انتقامی)" 
+            placeholder="حس و حالت رو به زبان خودت بنویس..." 
             className="w-full bg-[#151515] border border-white/10 rounded-full py-3.5 pr-5 pl-14 text-sm focus:outline-none focus:border-[#ccff00]/60 focus:bg-[#181818] transition-all text-white placeholder:text-gray-500 shadow-inner"
           />
           <button 
