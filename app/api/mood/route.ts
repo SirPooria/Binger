@@ -8,32 +8,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'پیامی ارسال نشده است' }, { status: 400 });
     }
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY?.trim();
     if (!apiKey) {
       return NextResponse.json({ error: 'کلید Groq تنظیم نشده است' }, { status: 500 });
     }
 
-    // دستورالعمل و لحن کارشناس سینمایی برای هوش مصنوعی
+    // دستورالعمل با الزام صریح به قالب json طبق استاندارد سرور Groq
     const systemPrompt = `
-تو دستیار هوشمند، رفیق و کارشناس فیلم و سریال اپلیکیشن «بینجر» (Binger) هستی.
-زبان تو: فارسی عامیانه، بسیار صمیمی، حرفه‌ای و جذاب برای مخاطبان فیلم‌باز ایرانی.
+        You are the intelligent cinema expert assistant for the web app "Binger".
+        You MUST respond strictly in valid json format.
 
-اطلاعات کاربر:
-${watchedShowNames && watchedShowNames.length > 0 ? `سریال‌هایی که این کاربر قبلاً دیده و ثبت کرده: ${watchedShowNames.join('، ')}` : 'کاربر هنوز سریالی به عنوان دیده شده ثبت نکرده است.'}
+        مخاطب تو یک کاربر فیلم‌باز ایرانی است.
+        زبان پاسخ تو در فیلد reply باید فارسی عامیانه، بسیار صمیمی، جذاب و با لحن رفیق سینمایی باشد.
 
-دستورالعمل‌ها:
-۱. پیام کاربر را دقیق تحلیل کن. اگر نام سریالی را آورد یا حسی را گفت، متناسب با آن ۳ تا ۵ سریال عالی به او پیشنهاد بده.
-۲. بسیار مهم: هرگز سریال‌هایی که کاربر قبلاً دیده را پیشنهاد نده! اگر کاربر سریالی شبیه یکی از کارهایی که قبلاً دیده خواست، حتماً با اشاره بگو (مثلاً: «دیدم قبلاً فلان سریال رو دیدی، برای همین این گزینه‌ها رو پیشنهاد می‌دم...»).
-۳. پاسخ تو باید دقیقاً یک فرمت JSON با ساختار زیر باشد تا برنامه بتواند پوسترها را پیدا کند. هیچ متن اضافه‌ای خارج از این JSON ننویس:
+        اطلاعات کاربر:
+        ${watchedShowNames && watchedShowNames.length > 0 ? `سریال‌هایی که این کاربر قبلاً دیده: ${watchedShowNames.join('، ')}` : 'کاربر هنوز سریالی ثبت نکرده است.'}
 
-{
-  "reply": "متن صمیمی و فارسی برای کاربر در ۲ تا ۴ خط همراه با توضیح مختصر اینکه چرا این سریال‌ها رو پیشنهاد دادی",
-  "recommended_titles": ["Original English Title 1", "Original English Title 2", "Original English Title 3"]
-}
-نکته: در بخش recommended_titles حتماً نام انگلیسی و رسمی سریال‌ها در TMDB را بنویس (مثلا: "The Punisher" یا "Breaking Bad") تا پوسترها پیدا شوند.
-`;
+        دستورالعمل‌ها:
+        ۱. پیام کاربر را تحلیل کن و ۳ تا ۵ سریال عالی متناسب با حس و حالش پیشنهاد بده.
+        ۲. هرگز سریال‌هایی که کاربر قبلاً دیده را پیشنهاد نده.
+        ۳. در بخش recommended_titles حتماً نام انگلیسی اصلی و رسمی سریال‌ها در TMDB را بنویس (مثلاً: ["The Punisher", "Banshee"]).
 
-    // ارسال مستقیم به سریع‌ترین مدل هوش مصنوعی Groq
+        Respond in valid json with this exact structure:
+        {
+        "reply": "متن صمیمی و فارسی برای کاربر در ۲ تا ۳ خط",
+        "recommended_titles": ["Title 1", "Title 2", "Title 3"]
+    }`;
+
+    // ارسال به Groq
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -52,9 +54,14 @@ ${watchedShowNames && watchedShowNames.length > 0 ? `سریال‌هایی که 
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      console.error('Groq API Error:', err);
-      return NextResponse.json({ error: 'خطا در ارتباط با سرور هوش مصنوعی' }, { status: 500 });
+      const errText = await response.text();
+      console.error('Groq API Error Details:', errText);
+      // برگرداندن متن دقیق خطای Groq جهت خطایابی سریع
+      return NextResponse.json({ 
+        error: 'خطا در ارتباط با سرور هوش مصنوعی', 
+        status: response.status,
+        detail: errText 
+      }, { status: 500 });
     }
 
     const data = await response.json();
@@ -66,8 +73,11 @@ ${watchedShowNames && watchedShowNames.length > 0 ? `سریال‌هایی که 
       recommended_titles: parsed.recommended_titles || []
     });
 
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ error: 'خطای غیرمنتظره در پردازش هوش مصنوعی' }, { status: 500 });
+  } catch (error: any) {
+    console.error('Server Route Error:', error);
+    return NextResponse.json({ 
+      error: 'خطای غیرمنتظره در پردازش',
+      detail: error?.message || String(error)
+    }, { status: 500 });
   }
 }
