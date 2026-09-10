@@ -13,30 +13,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'کلید Groq تنظیم نشده است' }, { status: 500 });
     }
 
-    // دستورالعمل با الزام صریح به ساختار json
+    // دستورالعمل تخصصی و سینمایی با الزام به ساختار json
     const systemPrompt = `
-        You are the intelligent cinema expert assistant for the web app "Binger".
-        You MUST respond strictly in valid json format.
+You are the cinema expert assistant for the web app "Binger".
+You MUST respond strictly in valid json format.
 
-        مخاطب تو یک کاربر فیلم‌باز ایرانی است.
-        زبان پاسخ تو در فیلد reply باید فارسی عامیانه، بسیار صمیمی، جذاب و با لحن رفیق سینمایی باشد.
+مخاطب تو یک کاربر فیلم‌باز ایرانی است.
+زبان پاسخ تو در فیلد reply باید فارسی عامیانه، بسیار صمیمی، جذاب و با لحن یک دوست سینماشناس باشد.
 
-        اطلاعات کاربر:
-        ${watchedShowNames && watchedShowNames.length > 0 ? `سریال‌هایی که این کاربر قبلاً دیده: ${watchedShowNames.join('، ')}` : 'کاربر هنوز سریالی ثبت نکرده است.'}
+اطلاعات کاربر:
+${watchedShowNames && watchedShowNames.length > 0 ? `سریال‌هایی که این کاربر قبلاً دیده: ${watchedShowNames.join('، ')}` : 'کاربر هنوز سریالی ثبت نکرده است.'}
 
-        دستورالعمل‌ها:
-        ۱. پیام کاربر را تحلیل کن و ۳ تا ۵ سریال عالی متناسب با حس و حالش پیشنهاد بده.
-        ۲. هرگز سریال‌هایی که کاربر قبلاً دیده را پیشنهاد نده. اگر به آن‌ها مرتبط بود، اشاره کن که چون فلان سریال را دیده‌ای، این‌ها را پیشنهاد می‌دهم.
-        ۳. در بخش recommended_titles حتماً نام انگلیسی اصلی و رسمی سریال‌ها در TMDB را بنویس (مثلاً: ["The Punisher", "Banshee"]).
+دستورالعمل‌ها:
+۱. پیام کاربر را بررسی کن و متناسب با حس، ژانر یا شباهتی که خواسته ۳ تا ۵ سریال فوق‌العاده پیشنهاد بده.
+۲. بسیار مهم: هرگز سریال‌هایی که کاربر قبلاً دیده را پیشنهاد نده! اگر به آن‌ها شباهت داشت، در متن reply بگو (مثلاً: چون دیدم قبلاً فلان سریال رو دیدی، سراغ این گزینه‌ها رفتم...).
+۳. در بخش recommended_titles حتماً فقط نام انگلیسی اصلی و رسمی سریال‌ها در TMDB را بنویس (مثلاً: ["The Punisher", "Banshee"]).
 
-        Respond in valid json with this exact structure:
-        {
-        "reply": "متن صمیمی و فارسی برای کاربر در ۲ تا ۳ خط",
-        "recommended_titles": ["Title 1", "Title 2", "Title 3"]
-        }
+Respond in valid json with this exact structure:
+{
+  "reply": "متن صمیمی و فارسی برای کاربر در ۲ تا ۳ خط همراه با دلیل کوتاه پیشنهاد",
+  "recommended_titles": ["Title 1", "Title 2", "Title 3"]
+}
 `;
 
-    // ارسال به مدل رسمی و فعال رایگان Groq
+    // ارسال به مدل اختصاصی و فعال اکانت شما
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
@@ -65,11 +65,21 @@ export async function POST(req: Request) {
     }
 
     const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-    const parsed = JSON.parse(content || '{}');
+    const rawContent = data.choices[0]?.message?.content || '{}';
+
+    // استخراج تمیز ساختار جیسون حتی اگر کاراکتر اضافه‌ای داشته باشد
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(rawContent);
+    } catch {
+      const match = rawContent.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { parsed = JSON.parse(match[0]); } catch {}
+      }
+    }
 
     return NextResponse.json({
-      reply: parsed.reply || 'این گزینه‌ها متناسب با حس و حالتن:',
+      reply: parsed.reply || 'این چند تا گزینه دقیقاً متناسب با سلیقه و مودِ الانتن:',
       recommended_titles: parsed.recommended_titles || []
     });
 
