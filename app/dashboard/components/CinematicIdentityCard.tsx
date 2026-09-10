@@ -449,7 +449,7 @@ export default function CinematicIdentityCard({
               onClick={() => prescription?.id && router.push(`/dashboard/tv/${prescription.id}`)}
               className="flex-1 bg-white hover:bg-gray-200 text-black font-black text-xs py-3 rounded-xl transition-all active:scale-95 text-center cursor-pointer"
             >
-              مشاهده سریال
+              ثبت سریال
             </button>
             <button 
               onClick={handleQuickAddWatchlist}
@@ -461,7 +461,7 @@ export default function CinematicIdentityCard({
               }`}
             >
               {addedToWatchlist ? <Check size={16} /> : <Plus size={16} />}
-              {addedToWatchlist ? 'اضافه شد' : 'واچ‌لیست'}
+              {addedToWatchlist ? 'اضافه شد' : 'لیست انتظار'}
             </button>
           </div>
         </div>
