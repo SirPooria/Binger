@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'کلید Groq تنظیم نشده است' }, { status: 500 });
     }
 
-    // دستورالعمل با الزام صریح به قالب json طبق استاندارد سرور Groq
+    // دستورالعمل با الزام صریح به ساختار json
     const systemPrompt = `
         You are the intelligent cinema expert assistant for the web app "Binger".
         You MUST respond strictly in valid json format.
@@ -26,16 +26,17 @@ export async function POST(req: Request) {
 
         دستورالعمل‌ها:
         ۱. پیام کاربر را تحلیل کن و ۳ تا ۵ سریال عالی متناسب با حس و حالش پیشنهاد بده.
-        ۲. هرگز سریال‌هایی که کاربر قبلاً دیده را پیشنهاد نده.
+        ۲. هرگز سریال‌هایی که کاربر قبلاً دیده را پیشنهاد نده. اگر به آن‌ها مرتبط بود، اشاره کن که چون فلان سریال را دیده‌ای، این‌ها را پیشنهاد می‌دهم.
         ۳. در بخش recommended_titles حتماً نام انگلیسی اصلی و رسمی سریال‌ها در TMDB را بنویس (مثلاً: ["The Punisher", "Banshee"]).
 
         Respond in valid json with this exact structure:
         {
         "reply": "متن صمیمی و فارسی برای کاربر در ۲ تا ۳ خط",
         "recommended_titles": ["Title 1", "Title 2", "Title 3"]
-    }`;
+        }
+`;
 
-    // ارسال به Groq
+    // ارسال به مدل رسمی و فعال رایگان Groq
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'llama-3.1-8b-instant',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
@@ -56,7 +57,6 @@ export async function POST(req: Request) {
     if (!response.ok) {
       const errText = await response.text();
       console.error('Groq API Error Details:', errText);
-      // برگرداندن متن دقیق خطای Groq جهت خطایابی سریع
       return NextResponse.json({ 
         error: 'خطا در ارتباط با سرور هوش مصنوعی', 
         status: response.status,
