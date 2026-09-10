@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+import CinematicIdentityCard from '@/app/dashboard/components/CinematicIdentityCard';
 import { 
   getTrendingShows, getImageUrl, getBackdropUrl, 
   getShowDetails, getIranianShows, getNewestIranianShows,
@@ -68,9 +69,35 @@ function DashboardContent() {
         }
         setUser(user);
 
-        // ۱. دریافت دیتای کاربر از دیتابیس
+       // ۱. دریافت دیتای کاربر از دیتابیس
         const { data: wList } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
-        const { data: watched } = await supabase.from('watched').select('show_id').eq('user_id', user.id);
+
+        // دریافت نامحدود برای محاسبه دقیق ادامه تماشا
+        let allWatchedRows: any[] = [];
+        let page = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data } = await supabase
+            .from('watched')
+            .select('show_id')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .range(page * 1000, (page + 1) * 1000 - 1);
+
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allWatchedRows = [...allWatchedRows, ...data];
+            if (data.length < 1000) {
+              hasMore = false;
+            } else {
+              page++;
+            }
+          }
+        }
+
+        const watched = allWatchedRows;
 
         const wIds = wList?.map((i: any) => i.show_id) || [];
         const wEdIds = watched?.map((i: any) => i.show_id) || [];
@@ -447,135 +474,9 @@ function CinematicHero({ recommendedShow, router }: any) {
     const genres = recommendedShow?.genres?.map((g: any) => g.name).join(' • ') || "درام • هیجان‌انگیز";
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 mb-12 animate-in slide-in-from-bottom-8 duration-700">
-            
+        <div className="mb-12 animate-in slide-in-from-bottom-8 duration-700">
             {/* --- بخش DNA سینمایی --- */}
-            <div className="lg:col-span-7 relative bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-6 md:p-8 overflow-visible shadow-2xl group">
-                <div className="absolute -top-32 -right-32 w-64 h-64 bg-purple-600/30 blur-[100px] rounded-full mix-blend-screen group-hover:bg-purple-500/40 transition-colors duration-700 pointer-events-none z-0"></div>
-                
-                <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-right">
-                    
-                    {/* آواتار */}
-                    <div className="relative shrink-0">
-                        <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-br from-fuchsia-500 via-purple-600 to-cyan-400 animate-spin-slow shadow-[0_0_30px_rgba(168,85,247,0.4)]">
-                            <div className="w-full h-full bg-[#050505] rounded-full flex items-center justify-center overflow-hidden border-2 border-black">
-                                <span className="text-4xl">🎬</span>
-                            </div>
-                        </div>
-                        <div className="absolute -bottom-3 -right-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg border border-white/20 whitespace-nowrap">
-                            VIP USER
-                        </div>
-                    </div>
-
-                    {/* اطلاعات DNA */}
-                    <div className="flex-1 space-y-3 w-full mt-2 sm:mt-0">
-                        <h2 className="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-200 to-cyan-200">
-                            هویت سینمایی شما
-                        </h2>
-                        
-                        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden flex shadow-inner">
-                            <div className="h-full bg-gradient-to-r from-fuchsia-500 to-purple-500 w-[70%]"></div>
-                            <div className="h-full bg-cyan-400 w-[30%]"></div>
-                        </div>
-                        
-                        {/* تگ‌های هویتی با Tooltip */}
-                        <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-1">
-                            
-                            {/* تگ ۱ */}
-                            <div className="relative group/tag cursor-help">
-                                <span className="text-xs font-bold bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-lg text-gray-300 block">
-                                    ۷۰٪ درام، ۳۰٪ هیجان‌انگیز
-                                </span>
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/tag:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
-                                    <strong className="text-white block mb-1">ترکیب ژانرها</strong>
-                                    بیشتر سریال‌هایی که تماشا کرده‌اید در این دو ژانر دسته‌بندی می‌شوند.
-                                </div>
-                            </div>
-
-                            {/* تگ ۲ */}
-                            <div className="relative group/tag cursor-help">
-                                <span className="text-xs font-bold bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 py-1.5 rounded-lg block">
-                                    فاز: فضای تاریک
-                                </span>
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/tag:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
-                                    <strong className="text-purple-400 block mb-1">اتمسفر غالب</strong>
-                                    بر اساس دیتای TMDB، سلیقه فعلی شما به سمت سریال‌های رازآلود و تاریک گرایش دارد.
-                                </div>
-                            </div>
-
-                            {/* تگ ۳ */}
-                            <div className="relative group/tag cursor-help">
-                                <span className="text-xs font-bold bg-pink-500/10 border border-pink-500/20 text-pink-300 px-2.5 py-1.5 rounded-lg block">
-                                    دنبال‌کننده آثار ترند
-                                </span>
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/tag:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
-                                    <strong className="text-pink-400 block mb-1">الگوی تماشا</strong>
-                                    شما معمولاً سریال‌هایی را می‌بینید که در لیست پرمخاطب‌ترین‌های سال قرار دارند.
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* --- بخش بلیت طلایی اختصاصی (ویرایش شده) --- */}
-            <div className="lg:col-span-5 relative bg-[#111] border border-[#ccff00]/30 rounded-[2rem] p-1 overflow-hidden shadow-[0_0_40px_rgba(204,255,0,0.1)] group flex min-h-[220px]">
-                
-                {/* تصویر پس‌زمینه تار و بلار */}
-                <div 
-                    className="absolute inset-0 bg-cover bg-center opacity-40 blur-sm scale-110 group-hover:scale-100 transition-transform duration-1000"
-                    style={{ backgroundImage: `url(${showImage})` }}
-                ></div>
-                
-                {/* گرادینت برای خوانایی متن */}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent z-0"></div>
-                
-                {/* بریدگی‌های بلیت */}
-                <div className="absolute top-1/2 -left-3 w-6 h-6 bg-[#050505] rounded-full -translate-y-1/2 border-r border-[#ccff00]/30 z-20"></div>
-                <div className="absolute top-1/2 -right-3 w-6 h-6 bg-[#050505] rounded-full -translate-y-1/2 border-l border-[#ccff00]/30 z-20"></div>
-                
-                <div className="relative z-10 w-full rounded-[1.8rem] p-6 flex flex-col justify-between h-full border border-dashed border-[#ccff00]/20 backdrop-blur-[2px]">
-                    
-                    <div>
-                        <div className="flex justify-between items-start mb-3">
-                            <h3 className="text-[#ccff00] text-sm font-black tracking-widest flex items-center gap-2 drop-shadow-md">
-                                <Sparkles size={16} /> پیشنهاد طلایی
-                            </h3>
-                            
-                            {/* نمره IMDB / TMDB */}
-                            <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg border border-white/10">
-                                <Star size={12} fill="#ccff00" className="text-[#ccff00]" />
-                                <span className="text-xs font-bold text-white ltr">{rating}</span>
-                            </div>
-                        </div>
-                        
-                        {/* نام انگلیسی سریال */}
-                        <h4 className="text-xl md:text-2xl font-black text-white line-clamp-1 leading-tight ltr text-left drop-shadow-lg font-sans mt-2">
-                            {originalName}
-                        </h4>
-                        {/* 👇 این بخش اضافه شده 👇 */}
-                        <p className="text-[11px] md:text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed opacity-80 italic">
-                            {recommendedShow?.overview || "خلاصه‌ای برای این اثر در دسترس نیست."}
-                        </p>
-                        {/* 👆 پایان بخش اضافه شده 👆 */}
-                        {/* ژانرها */}
-                        <p className="text-xs font-bold text-gray-300 mt-2 opacity-90">
-                            {genres}
-                        </p>
-                    </div>
-
-                    <div className="mt-5">
-                        <button 
-                            onClick={() => recommendedShow?.id && router.push(`/dashboard/tv/${recommendedShow.id}`)}
-                            className="w-full bg-[#ccff00] hover:bg-white text-black font-black text-sm py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(204,255,0,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                            ورود به صفحه سریال
-                        </button>
-                    </div>
-                </div>
-            </div>
-
+            <CinematicIdentityCard/>
         </div>
     );
 }

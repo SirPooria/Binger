@@ -51,18 +51,20 @@ export const searchShows = async (query: string) => {
 
 export const getShowDetails = async (id: string) => {
   try {
-    const resFa = await fetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=fa-IR`);
-    const dataFa = await resFa.json();
+    // دریافت اطلاعات با زبان انگلیسی تا همیشه پوستر اورجینال جهانی لود شود
+    const resEn = await fetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=en-US`);
+    const dataEn = await resEn.json();
 
-    if (!dataFa.overview || dataFa.overview.trim() === "") {
-       const resEn = await fetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=en-US`);
-       const dataEn = await resEn.json();
-       dataFa.overview = dataEn.overview;
-       dataFa.tagline = dataEn.tagline;
-       if (!dataFa.name) dataFa.name = dataEn.name;
-    }
+    // در صورت تمایل برای داشتن خلاصه داستان فارسی، خلاصه را جداگانه از fa-IR می‌خوانیم
+    try {
+      const resFa = await fetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=fa-IR`);
+      const dataFa = await resFa.json();
+      if (dataFa.overview && dataFa.overview.trim() !== "") {
+        dataEn.overview = dataFa.overview;
+      }
+    } catch {}
 
-    return dataFa;
+    return dataEn;
   } catch (error) {
     console.error(error);
     return null;
@@ -206,7 +208,7 @@ export const getShowsByGenre = async (genreId: number | null, page: number = 1) 
 
 export const getRecommendations = async (showId: number) => {
   try {
-    const res = await fetch(`${BASE_URL}/tv/${showId}/recommendations?api_key=${API_KEY}&language=fa-IR&page=1`);
+    const res = await fetch(`${BASE_URL}/tv/${showId}/recommendations?api_key=${API_KEY}&language=en-US&page=1`);
     const data = await res.json();
     if (!data.results || data.results.length < 5) {
         const resEn = await fetch(`${BASE_URL}/tv/${showId}/recommendations?api_key=${API_KEY}&language=en-US&page=1`);
@@ -215,4 +217,37 @@ export const getRecommendations = async (showId: number) => {
     }
     return data.results || [];
   } catch (error) { console.error("Error fetching recommendations:", error); return []; }
+};
+// --- موتور جستجوی پیشرفته و فیلترهای TMDB ---
+export const advancedDiscoverShows = async (filters: {
+  genreId?: number | null;
+  minRating?: number | null;
+  originCountry?: string | null;
+  yearFrom?: number | null;
+  yearTo?: number | null;
+  sortBy?: string;
+  page?: number;
+}) => {
+  try {
+    const params = new URLSearchParams({
+      api_key: API_KEY,
+      language: 'en-US',
+      page: String(filters.page || 1),
+      sort_by: filters.sortBy || 'popularity.desc',
+      'vote_count.gte': '30', // حداقل ۳۰ رای برای واقعی بودن امتیاز
+    });
+
+    if (filters.genreId) params.append('with_genres', String(filters.genreId));
+    if (filters.minRating) params.append('vote_average.gte', String(filters.minRating));
+    if (filters.originCountry) params.append('with_origin_country', filters.originCountry);
+    if (filters.yearFrom) params.append('first_air_date.gte', `${filters.yearFrom}-01-01`);
+    if (filters.yearTo) params.append('first_air_date.lte', `${filters.yearTo}-12-31`);
+
+    const res = await fetch(`${BASE_URL}/discover/tv?${params.toString()}`);
+    const data = await res.json();
+    return data.results || [];
+  } catch (error) {
+    console.error("Advanced Discover Error:", error);
+    return [];
+  }
 };
