@@ -7,7 +7,7 @@ import { getImageUrl } from '@/lib/tmdbClient';
 import Link from 'next/link';
 import { 
   ArrowRight, Share2, Globe, Lock, Layers, 
-  Loader2, CheckCircle2, Film
+  Loader2, CheckCircle2, Film, BookmarkPlus, BookmarkCheck
 } from 'lucide-react';
 
 export default function SingleListPage() {
@@ -22,6 +22,9 @@ export default function SingleListPage() {
   const [items, setItems] = useState<any[]>([]);
   const [isPrivateDenied, setIsPrivateDenied] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saveCount, setSaveCount] = useState(0);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -58,6 +61,15 @@ export default function SingleListPage() {
 
         setList(listData);
 
+        if (user) {
+          const [savedByUser, saves] = await Promise.all([
+            supabase.from('list_saves').select('id').eq('list_id', String(listId)).eq('user_id', user.id).maybeSingle(),
+            supabase.from('list_saves').select('id', { count: 'exact', head: true }).eq('list_id', String(listId)),
+          ]);
+          setIsSaved(!!savedByUser.data);
+          setSaveCount(saves.count || 0);
+        }
+
         // ۲. دریافت اطلاعات سازنده لیست
         const { data: creatorData } = await supabase
           .from('profiles')
@@ -92,6 +104,30 @@ export default function SingleListPage() {
     if (typeof window !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(window.location.href);
       showToast('لینک اختصاصی لیست کپی شد!');
+    }
+  };
+
+  const handleToggleSave = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !list) return;
+    setSaveLoading(true);
+    try {
+      if (isSaved) {
+        const { error } = await supabase.from('list_saves').delete().eq('list_id', String(listId)).eq('user_id', user.id);
+        if (error) throw error;
+        setIsSaved(false);
+        setSaveCount((count) => Math.max(0, count - 1));
+      } else {
+        const { error } = await supabase.from('list_saves').insert({ list_id: String(listId), user_id: user.id });
+        if (error) throw error;
+        setIsSaved(true);
+        setSaveCount((count) => count + 1);
+      }
+    } catch (error) {
+      console.error('List save failed', error);
+      showToast('خطا در ذخیره لیست.');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -160,14 +196,27 @@ export default function SingleListPage() {
             <span className="hidden sm:inline">بازگشت</span>
           </button>
 
-          <button
-            onClick={handleShare}
-            className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-gray-300 hover:text-white transition-all flex items-center gap-2 text-xs font-bold cursor-pointer"
-            title="اشتراک‌گذاری لیست"
-          >
-            <Share2 size={16} className="text-[#ccff00]" />
-            <span className="hidden sm:inline">اشتراک‌گذاری لیست</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {list?.is_public && (
+              <button
+                onClick={handleToggleSave}
+                disabled={saveLoading}
+                className={`p-2.5 rounded-full border transition-all flex items-center gap-2 text-xs font-bold cursor-pointer ${isSaved ? 'bg-[#ccff00] text-black border-[#ccff00]' : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-300'}`}
+                title="ذخیره لیست"
+              >
+                {isSaved ? <BookmarkCheck size={16} /> : <BookmarkPlus size={16} />}
+                <span className="hidden sm:inline">{isSaved ? 'ذخیره شده' : 'ذخیره لیست'} ({saveCount})</span>
+              </button>
+            )}
+            <button
+              onClick={handleShare}
+              className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-gray-300 hover:text-white transition-all flex items-center gap-2 text-xs font-bold cursor-pointer"
+              title="اشتراک‌گذاری لیست"
+            >
+              <Share2 size={16} className="text-[#ccff00]" />
+              <span className="hidden sm:inline">اشتراک‌گذاری لیست</span>
+            </button>
+          </div>
         </div>
 
         {/* کارت معرفی لیست و سازنده */}

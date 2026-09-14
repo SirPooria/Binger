@@ -659,7 +659,7 @@ export default function ShowDetailsPage() {
                 }`}
               >
                 {watchlistLoading ? <Loader2 className="animate-spin" size={18} /> : (inWatchlist ? <Check size={18} /> : <Plus size={18} />)}
-                <span>{inWatchlist ? 'در لیست من' : 'افزودن به لیست'}</span>
+                <span>{inWatchlist ? 'در لیست انتظار' : 'افزودن به لیست'}</span>
               </button>
               
               {progressPercent === 100 ? (

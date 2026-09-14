@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { 
   Plus, MoreVertical, Trash2, Edit3, Share2, Globe, 
   Lock, ArrowUp, ArrowDown, Search, X, Loader2, ArrowRight, 
-  Check, Film, Layers, CheckCircle2 
+  Check, Film, Layers, CheckCircle2, Compass
 } from 'lucide-react';
 
 export default function CustomListsPage() {
@@ -328,6 +328,12 @@ export default function CustomListsPage() {
             <Plus size={18} />
             <span>ساخت لیست جدید</span>
           </button>
+          <Link
+            href="/dashboard/custom-lists/explore"
+            className="bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs px-5 py-3 rounded-2xl flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <Compass size={18} /> کشف لیست‌های عمومی
+          </Link>
         </div>
 
         {/* کارت‌های لیست‌ها */}

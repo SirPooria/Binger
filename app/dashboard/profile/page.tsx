@@ -2,13 +2,26 @@
 
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { getShowDetails, getBackdropUrl, getImageUrl } from '@/lib/tmdbClient';
+      const cachePayload: any = {
+        profileInfo: { username: '', bio: '', avatar_url: '😎' },
+        timeStats: { months: 0, days: 0, hours: 0 },
+        totalEpisodes: 0,
+        socialStats: { followers: 0, following: 0, comments: 0 },
+        achievementStats: { watchedRows: [], comments: [], followingIds: [], followerIds: [], favoriteIds: [], episodeRatings: [], commentLikeCount: 0, savedListCount: 0, eventTypes: [] },
+        favorites: [],
+        watchedShows: [],
+        customLists: [],
+        savedLists: [],
+        coverImage: null,
+      };
+
+import { getShowDetailsLite, getBackdropUrl, getImageUrl } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Loader2, Zap, MessageSquare, Heart, 
   Plus, Award, X, Clock, Play, User as UserIcon, 
-  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, Tv, Layers
+  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers
 } from 'lucide-react';
 
 // --- لیست نهایی ۳۵ اچیومنت رسمی بینجر ---
@@ -57,6 +70,28 @@ const ALL_ACHIEVEMENTS = [
   { id: 'viral_critic', title: 'Viral Critic', icon: '🚀', category: 'اجتماعی', desc: 'کلیک خوردن لینک نقد شما در خارج از اپلیکیشن بینجر.', threshold: 1, type: 'viral' },
 ];
 
+const PROFILE_CACHE_TTL = 5 * 60 * 1000;
+const getProfileCacheKey = (userId: string) => `binger-profile-cache:${userId}`;
+
+const readProfileCache = (userId: string) => {
+  try {
+    const raw = sessionStorage.getItem(getProfileCacheKey(userId));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    return Date.now() - cached.cachedAt < PROFILE_CACHE_TTL ? cached : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeProfileCache = (userId: string, data: any) => {
+  try {
+    sessionStorage.setItem(getProfileCacheKey(userId), JSON.stringify({ ...data, cachedAt: Date.now() }));
+  } catch {
+    // Session storage can be unavailable or full; the profile still works without it.
+  }
+};
+
 export default function ProfilePage() {
   const supabase = createClient() as any; 
   const router = useRouter();
@@ -64,16 +99,29 @@ export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [profileInfo, setProfileInfo] = useState({ username: '', bio: '', avatar_url: '😎' });
   const [loading, setLoading] = useState(true);
+  const [contentLoading, setContentLoading] = useState(true);
   
   // Stats
   const [timeStats, setTimeStats] = useState({ months: 0, days: 0, hours: 0 });
   const [totalEpisodes, setTotalEpisodes] = useState(0);
   const [socialStats, setSocialStats] = useState({ followers: 0, following: 0, comments: 0 });
+  const [achievementStats, setAchievementStats] = useState({
+    watchedRows: [] as any[],
+    comments: [] as any[],
+    followingIds: [] as string[],
+    followerIds: [] as string[],
+    favoriteIds: [] as number[],
+    episodeRatings: [] as any[],
+    commentLikeCount: 0,
+    savedListCount: 0,
+    eventTypes: [] as string[],
+  });
   
   // Lists
   const [favorites, setFavorites] = useState<any[]>([]);
   const [watchedShows, setWatchedShows] = useState<any[]>([]);
   const [customLists, setCustomLists] = useState<any[]>([]);
+  const [savedLists, setSavedLists] = useState<any[]>([]);
   const [coverImage, setCoverImage] = useState<string | null>(null);
 
   // Modals
@@ -83,6 +131,47 @@ export default function ProfilePage() {
   const [selectedBadge, setSelectedBadge] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('همه');
 
+  // Fast path for profile data that does not depend on TMDB.
+  useEffect(() => {
+    let cancelled = false;
+    const loadFastProfileData = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser || cancelled) return;
+
+      const [profileRes, followersRes, followingRes, commentsRes, listsRes, savedRowsRes] = await Promise.all([
+        supabase.from('profiles').select('username, bio, avatar_url').eq('id', currentUser.id).single(),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', currentUser.id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', currentUser.id),
+        supabase.from('comments').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+        supabase.from('user_lists').select('*, list_items ( id, show_id, show_name, poster_path )').eq('user_id', currentUser.id).order('order_index', { ascending: true }).order('created_at', { ascending: false }),
+        supabase.from('list_saves').select('list_id, created_at').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
+      ]);
+
+      if (cancelled) return;
+      if (profileRes.data) {
+        setProfileInfo({
+          username: profileRes.data.username || '',
+          bio: profileRes.data.bio || '',
+          avatar_url: profileRes.data.avatar_url || currentUser.user_metadata?.avatar_url || '😎',
+        });
+      }
+      setSocialStats({ followers: followersRes.count || 0, following: followingRes.count || 0, comments: commentsRes.count || 0 });
+      setCustomLists(listsRes.data || []);
+
+      const savedIds = (savedRowsRes.data || []).map((row: any) => String(row.list_id));
+      if (savedIds.length > 0) {
+        const { data: savedData } = await supabase.from('user_lists').select('*, list_items ( id, show_id, show_name, poster_path )').in('id', savedIds).eq('is_public', true);
+        const order = new Map<string, number>(savedIds.map((id: string, index: number) => [id, index]));
+        setSavedLists((savedData || []).sort((first: any, second: any) => (order.get(String(first.id)) || 0) - (order.get(String(second.id)) || 0)));
+      } else {
+        setSavedLists([]);
+      }
+    };
+
+    loadFastProfileData();
+    return () => { cancelled = true; };
+  }, [supabase.auth]);
+
   useEffect(() => {
     const fetchProfileData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -90,6 +179,23 @@ export default function ProfilePage() {
       setUser(user);
 
       try {
+        const cachedProfile = readProfileCache(user.id);
+        if (cachedProfile) {
+          setProfileInfo(cachedProfile.profileInfo);
+          setTimeStats(cachedProfile.timeStats);
+          setTotalEpisodes(cachedProfile.totalEpisodes);
+          setSocialStats(cachedProfile.socialStats);
+          setAchievementStats(cachedProfile.achievementStats);
+          setFavorites(cachedProfile.favorites);
+          setWatchedShows(cachedProfile.watchedShows);
+          setCustomLists(cachedProfile.customLists);
+          setSavedLists(cachedProfile.savedLists);
+          setCoverImage(cachedProfile.coverImage);
+          setLoading(false);
+          setContentLoading(false);
+          return;
+        }
+
         // ۱. واکشی اطلاعات پروفایل (نام کاربری و بیو)
         const { data: profileData } = await supabase
               .from('profiles')
@@ -98,11 +204,13 @@ export default function ProfilePage() {
               .single();
               
           if (profileData) {
-              setProfileInfo({
+              const nextProfileInfo = {
                   username: profileData.username || '',
                   bio: profileData.bio || '',
                   avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎'
-              });
+              };
+              cachePayload.profileInfo = nextProfileInfo;
+              setProfileInfo(nextProfileInfo);
           }
 
         // ۲. دریافت اطلاعات تماشا شده‌ها و محاسبه پروگرس‌بارها
@@ -115,7 +223,7 @@ export default function ProfilePage() {
           while (hasMore) {
             const { data, error } = await supabase
               .from('watched')
-              .select('show_id, created_at')
+              .select('show_id, episode_id, created_at')
               .eq('user_id', user.id)
               .order('created_at', { ascending: false })
               .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -133,18 +241,53 @@ export default function ProfilePage() {
           }
 
           const watchedData = allWatchedData;
+        const [commentsRes, followingRes, followersRes, favoritesRes] = await Promise.all([
+          supabase.from('comments').select('id, show_id, episode_id, parent_id, created_at').eq('user_id', user.id).order('created_at', { ascending: true }),
+          supabase.from('follows').select('following_id, created_at').eq('follower_id', user.id),
+          supabase.from('follows').select('follower_id, created_at').eq('following_id', user.id),
+          supabase.from('favorites').select('show_id').eq('user_id', user.id),
+        ]);
+        const commentIds = (commentsRes.data || []).map((comment: any) => comment.id);
+        const [episodeRatingsRes, commentLikesRes, eventsRes] = await Promise.all([
+          supabase.from('episode_ratings').select('episode_id, show_id, rating').eq('user_id', user.id),
+          commentIds.length > 0 ? supabase.from('comment_likes').select('comment_id').in('comment_id', commentIds) : Promise.resolve({ data: [] }),
+          supabase.from('achievement_events').select('event_type').eq('user_id', user.id),
+        ]);
+        setAchievementStats({
+          watchedRows: watchedData,
+          comments: commentsRes.data || [],
+          followingIds: (followingRes.data || []).map((item: any) => item.following_id),
+          followerIds: (followersRes.data || []).map((item: any) => item.follower_id),
+          favoriteIds: (favoritesRes.data || []).map((item: any) => Number(item.show_id)),
+          episodeRatings: episodeRatingsRes.data || [],
+          commentLikeCount: (commentLikesRes.data || []).length,
+          savedListCount: 0,
+          eventTypes: (eventsRes.data || []).map((item: any) => item.event_type),
+        });
+        cachePayload.achievementStats = {
+          watchedRows: watchedData,
+          comments: commentsRes.data || [],
+          followingIds: (followingRes.data || []).map((item: any) => item.following_id),
+          followerIds: (followersRes.data || []).map((item: any) => item.follower_id),
+          favoriteIds: (favoritesRes.data || []).map((item: any) => Number(item.show_id)),
+          episodeRatings: episodeRatingsRes.data || [],
+          commentLikeCount: (commentLikesRes.data || []).length,
+          savedListCount: 0,
+          eventTypes: (eventsRes.data || []).map((item: any) => item.event_type),
+        };
         
         const showsDetailsMap: any = {};
 
         if (watchedData && watchedData.length > 0) {
           setTotalEpisodes(watchedData.length);
+          cachePayload.totalEpisodes = watchedData.length;
 
           // مرتب‌سازی سریال‌ها از جدیدترین به قدیمی‌ترین
         const sortedWatched = [...watchedData].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const uniqueShowIds = Array.from(new Set(sortedWatched.map((i: any) => i.show_id)));
           
           await Promise.all(uniqueShowIds.map(async (id) => {
-            const d = await getShowDetails(String(id));
+            const d = await getShowDetailsLite(String(id));
             if (d) showsDetailsMap[String(id)] = d;
           }));
 
@@ -164,11 +307,14 @@ export default function ProfilePage() {
           const days = daysTotal % 30;
 
           setTimeStats({ months, days, hours: hoursTotal });
+          cachePayload.timeStats = { months, days, hours: hoursTotal };
 
           // تصویر کاور بر اساس آخرین اثر تماشا شده
           const lastShowId = sortedWatched[0]?.show_id;
           if (showsDetailsMap[String(lastShowId)]?.backdrop_path) {
-            setCoverImage(getBackdropUrl(showsDetailsMap[String(lastShowId)].backdrop_path));
+            const nextCoverImage = getBackdropUrl(showsDetailsMap[String(lastShowId)].backdrop_path);
+            cachePayload.coverImage = nextCoverImage;
+            setCoverImage(nextCoverImage);
           }
 
           // آماده‌سازی تمام سریال‌های تماشا شده به همراه پروگرس‌بار
@@ -184,6 +330,7 @@ export default function ProfilePage() {
           }).filter(Boolean);
 
           setWatchedShows(allWatchedList);
+          cachePayload.watchedShows = allWatchedList;
         }
 
         // ۳. آمارهای اجتماعی
@@ -191,6 +338,7 @@ export default function ProfilePage() {
         const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id);
         const { count: comments } = await supabase.from('comments').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
         setSocialStats({ followers: followers || 0, following: following || 0, comments: comments || 0 });
+        cachePayload.socialStats = { followers: followers || 0, following: following || 0, comments: comments || 0 };
 
         // ۴. سریال‌های محبوب به همراه محاسبه پروگرس‌بار
         const { data: favData } = await supabase.from('favorites').select('show_id').eq('user_id', user.id);
@@ -198,7 +346,7 @@ export default function ProfilePage() {
           const favs = await Promise.all(favData.map(async (f: any) => {
             let d = showsDetailsMap[String(f.show_id)];
             if (!d) {
-              d = await getShowDetails(String(f.show_id));
+              d = await getShowDetailsLite(String(f.show_id));
             }
             if (!d) return null;
 
@@ -209,6 +357,7 @@ export default function ProfilePage() {
             return { ...d, progress, watchedCount, totalEps };
           }));
           setFavorites(favs.filter(Boolean));
+          cachePayload.favorites = favs.filter(Boolean);
         }
         // ۵. خواندن لیست‌های اختصاصی کاربر با اولویت تعیین‌شده
         const { data: listsData } = await supabase
@@ -222,9 +371,39 @@ export default function ProfilePage() {
           .order('created_at', { ascending: false });
 
         setCustomLists(listsData || []);
+        cachePayload.customLists = listsData || [];
+        if (listsData?.length > 0) {
+          const listIds = listsData.map((list: any) => String(list.id));
+          const { data: savedLists } = await supabase.from('list_saves').select('list_id').in('list_id', listIds);
+          setAchievementStats(prev => ({ ...prev, savedListCount: savedLists?.length || 0 }));
+          cachePayload.achievementStats.savedListCount = savedLists?.length || 0;
+        }
+
+        const { data: savedListRows } = await supabase
+          .from('list_saves')
+          .select('list_id, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        const savedListIds = (savedListRows || []).map((row: any) => String(row.list_id));
+        if (savedListIds.length > 0) {
+          const { data: savedListData } = await supabase
+            .from('user_lists')
+            .select('*, list_items ( id, show_id, show_name, poster_path )')
+            .in('id', savedListIds)
+            .eq('is_public', true);
+          const savedOrder = new Map<string, number>(savedListIds.map((id: string, index: number) => [id, index]));
+          const sortedSavedLists = (savedListData || []).sort((first: any, second: any) => (savedOrder.get(String(first.id)) || 0) - (savedOrder.get(String(second.id)) || 0));
+          cachePayload.savedLists = sortedSavedLists;
+          setSavedLists(sortedSavedLists);
+        } else {
+          cachePayload.savedLists = [];
+          setSavedLists([]);
+        }
+        writeProfileCache(user.id, cachePayload);
       } catch (err) {
         console.error("Error loading profile:", err);
       } finally {
+        setContentLoading(false);
         setLoading(false);
       }
     };
@@ -264,10 +443,66 @@ export default function ProfilePage() {
 
   const getBadgeProgress = (badge: any) => {
     let current = 0;
+    const watchedRows = achievementStats.watchedRows;
+    const watchedDates = watchedRows
+      .map((row: any) => new Date(row.created_at))
+      .filter((date: Date) => !Number.isNaN(date.getTime()))
+      .sort((firstDate: Date, secondDate: Date) => firstDate.getTime() - secondDate.getTime());
+    const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+    const uniqueDateKeys = Array.from(new Set(watchedDates.map(dateKey)));
+
+    const longestConsecutiveRun = (keys: string[]) => {
+      let longest = 0;
+      let currentRun = 0;
+      let previousTime = 0;
+      keys.sort().forEach((key) => {
+        const currentTime = new Date(`${key}T00:00:00Z`).getTime();
+        if (currentTime - previousTime === 24 * 60 * 60 * 1000) currentRun += 1;
+        else currentRun = 1;
+        previousTime = currentTime;
+        longest = Math.max(longest, currentRun);
+      });
+      return longest;
+    };
+
+    const longestConsecutiveNumbers = (values: number[]) => {
+      const sortedValues = Array.from(new Set(values)).sort((first, second) => first - second);
+      let longest = 0;
+      let currentRun = 0;
+      let previousValue: number | null = null;
+      sortedValues.forEach((value) => {
+        currentRun = previousValue !== null && value === previousValue + 1 ? currentRun + 1 : 1;
+        previousValue = value;
+        longest = Math.max(longest, currentRun);
+      });
+      return longest;
+    };
+
+    const watchedByShow = new Map<number, any[]>();
+    watchedRows.forEach((row: any) => {
+      const showId = Number(row.show_id);
+      watchedByShow.set(showId, [...(watchedByShow.get(showId) || []), row]);
+    });
 
     // ۱. تماشای قسمت اول از ۵ سریال مختلف
     if (badge.type === 'pilot') {
       current = watchedShows.length;
+    }
+    else if (badge.type === 'completed_long') {
+      current = watchedShows.filter((show: any) => show.number_of_seasons >= 5 && show.progress >= 100).length;
+    }
+    else if (badge.type === 'genres') {
+      current = new Set(watchedShows.flatMap((show: any) => (show.genres || []).map((genre: any) => genre.id))).size;
+    }
+    else if (badge.type === 'rated_season') {
+      current = 0;
+    }
+    else if (badge.type === 'early_review') {
+      current = achievementStats.comments.some((comment: any) => {
+        const show = watchedShows.find((watchedShow: any) => Number(watchedShow.id) === Number(comment.show_id));
+        if (!show?.first_air_date || !comment.created_at) return false;
+        return new Date(comment.created_at).getTime() - new Date(show.first_air_date).getTime() <= 48 * 60 * 60 * 1000;
+      }) ? 1 : 0;
     }
     // ۲. تماشای ۵ اپیزود بین ۱۲ شب تا ۴ صبح (جغد شب)
     else if (badge.type === 'night_owl') {
@@ -280,30 +515,77 @@ export default function ProfilePage() {
     }
     // ۴. ماراتن ۵ اپیزود در ۲۴ ساعت
     else if (badge.type === 'marathon') {
-      current = totalEpisodes >= 5 ? 5 : totalEpisodes;
+      current = 0;
+      watchedByShow.forEach((rows: any[]) => {
+        for (let index = 0; index < rows.length; index += 1) {
+          const windowStart = new Date(rows[index].created_at).getTime();
+          const withinDay = rows.filter((row: any) => new Date(row.created_at).getTime() - windowStart <= 24 * 60 * 60 * 1000).length;
+          current = Math.max(current, withinDay);
+        }
+      });
     }
     // ۵. ایستر اگ (با کلیک روی آواتار فعال می‌شود)
     else if (badge.type === 'easter_egg') {
-      current = typeof window !== 'undefined' && localStorage.getItem('binger_egg') ? 1 : 0;
+      current = achievementStats.eventTypes.includes('easter_egg_found') ? 1 : 0;
     }
     // ۶. سن اکانت و عضویت ۱ ساله
     else if (badge.type === 'account_age') {
       const createdAt = user?.created_at ? new Date(user.created_at).getTime() : Date.now();
       current = Math.floor((Date.now() - createdAt) / (1000 * 60 * 60 * 24));
     }
+    else if (badge.type === 'weekend') {
+      const weekendWeeks = watchedDates
+        .filter((date: Date) => [5, 6].includes(date.getDay()))
+        .map((date: Date) => Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - date.getUTCDay()) / (7 * 24 * 60 * 60 * 1000)));
+      current = longestConsecutiveNumbers(weekendWeeks);
+    }
+    else if (badge.type === 'streak') {
+      current = longestConsecutiveRun(uniqueDateKeys);
+    }
+    else if (badge.type === 'monthly') {
+      const monthIndexes = watchedDates.map((date: Date) => date.getUTCFullYear() * 12 + date.getUTCMonth());
+      current = longestConsecutiveNumbers(monthIndexes);
+    }
+    else if (badge.type === 'loyal') {
+      current = watchedShows.filter((show: any) => show.progress >= 100 && ['Returning Series', 'Ended', 'Canceled'].includes(show.status)).length;
+    }
     // ۷. اشتراک‌گذاری پروفایل
     else if (badge.type === 'advocate') {
-      current = typeof window !== 'undefined' && localStorage.getItem('binger_shared') ? 1 : 0;
+      current = achievementStats.eventTypes.filter((eventType) => ['profile_shared', 'show_shared', 'advocacy_click'].includes(eventType)).length > 0 ? 1 : 0;
     }
     // ۸. مدال‌های سوشیال و تعاملی
     else if (badge.type === 'pillar') {
       current = Math.min(socialStats.followers, socialStats.comments);
     }
     else if (badge.type === 'mutual') {
-      current = Math.min(socialStats.followers, socialStats.following);
+      current = achievementStats.followingIds.filter((id) => achievementStats.followerIds.includes(id)).length;
     }
     else if (badge.type === 'debater' || badge.type === 'critic_streak') {
-      current = socialStats.comments;
+      if (badge.type === 'critic_streak') {
+        const commentWeeks = Array.from(new Set(achievementStats.comments.map((comment: any) => {
+          const date = new Date(comment.created_at);
+          const firstDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - date.getUTCDay()));
+          return firstDay.toISOString().slice(0, 10);
+        })));
+        current = longestConsecutiveRun(commentWeeks);
+      } else {
+        current = achievementStats.comments.filter((comment: any) => comment.parent_id).length;
+      }
+    }
+    else if (badge.type === 'starter') {
+      current = achievementStats.comments.filter((comment: any) => comment.parent_id).length;
+    }
+    else if (badge.type === 'review_likes') {
+      current = achievementStats.commentLikeCount;
+    }
+    else if (badge.type === 'squad') {
+      current = achievementStats.savedListCount;
+    }
+    else if (badge.type === 'randomizer') {
+      current = achievementStats.eventTypes.includes('randomizer_completed') ? 1 : 0;
+    }
+    else if (badge.type === 'chronological') {
+      current = achievementStats.eventTypes.includes('chronological_completed') ? 1 : 0;
     }
 
     const percentage = Math.min(100, Math.round((current / badge.threshold) * 100));
@@ -315,8 +597,19 @@ export default function ProfilePage() {
     router.push('/login');
   };
 
+  const recordAchievementEvent = async (eventType: string) => {
+    if (!user) return;
+    await supabase.from('achievement_events').insert({ user_id: user.id, event_type: eventType });
+    sessionStorage.removeItem(getProfileCacheKey(user.id));
+    setAchievementStats(prev => ({ ...prev, eventTypes: [...prev.eventTypes, eventType] }));
+  };
+
+  const handleEasterEggClick = () => {
+    recordAchievementEvent('easter_egg_found');
+  };
+
   const handleShareProfile = () => {
-    localStorage.setItem('binger_shared', 'true');
+    recordAchievementEvent('profile_shared');
     if (navigator.share) {
       navigator.share({
         title: `پروفایل ${profileInfo.username || 'کاربر'} در بینجر`,
@@ -384,7 +677,7 @@ export default function ProfilePage() {
 
           <div className="absolute bottom-0 w-full px-6 pb-6 flex flex-col items-center z-20 translate-y-8">
             <div className="relative group cursor-pointer">
-              <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden relative z-10">{profileInfo.avatar_url || '😎'}</div>
+              <button onClick={handleEasterEggClick} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden relative z-10 cursor-pointer" title="آواتار پروفایل">{profileInfo.avatar_url || '😎'}</button>
               <div className="absolute inset-0 bg-[#ccff00] blur-2xl opacity-20 rounded-full group-hover:opacity-40 transition-opacity"></div>
             </div>
             
@@ -415,11 +708,13 @@ export default function ProfilePage() {
             </div>
 
             <div className="flex items-center gap-2 mt-6 bg-[#1a1a1a]/80 border border-white/10 backdrop-blur-xl p-1.5 rounded-2xl shadow-xl">
-              <SocialItem count={socialStats.followers} label="Followers" onClick={() => openListModal('followers')} />
-              <div className="w-px h-8 bg-white/10"></div>
-              <SocialItem count={socialStats.following} label="Following" onClick={() => openListModal('following')} />
-              <div className="w-px h-8 bg-white/10"></div>
-              <SocialItem count={socialStats.comments} label="Comments" onClick={() => openListModal('comments')} />
+              {loading ? <ProfileBoxLoading /> : <>
+                <SocialItem count={socialStats.followers} label="Followers" onClick={() => openListModal('followers')} />
+                <div className="w-px h-8 bg-white/10"></div>
+                <SocialItem count={socialStats.following} label="Following" onClick={() => openListModal('following')} />
+                <div className="w-px h-8 bg-white/10"></div>
+                <SocialItem count={socialStats.comments} label="Comments" onClick={() => openListModal('comments')} />
+              </>}
             </div>
           </div>
         </div>
@@ -432,25 +727,29 @@ export default function ProfilePage() {
             <div className="md:col-span-2 bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Clock size={100} /></div>
               <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-4 flex items-center gap-2"><Zap className="text-[#ccff00]" size={14} /> زمانی که برای تماشای سریال صرف کردید: </h3>
-              <div className="flex items-end gap-4 ltr">
-                <div className="flex flex-col"><span className="text-3xl md:text-5xl font-black text-white leading-none">{timeStats.months}</span><span className="text-[10px] text-gray-500 uppercase font-bold">ماه</span></div>
-                <div className="flex flex-col"><span className="text-3xl md:text-5xl font-black text-white leading-none">{timeStats.days}</span><span className="text-[10px] text-gray-500 uppercase font-bold">روز</span></div>
-                <div className="flex flex-col"><span className="text-3xl md:text-5xl font-black text-white/50 leading-none">{timeStats.hours}</span><span className="text-[10px] text-gray-500 uppercase font-bold">ساعت</span></div>
-              </div>
+              {contentLoading ? <ProfileBoxLoading /> : (
+                <div className="flex items-end gap-4 ltr">
+                  <div className="flex flex-col"><span className="text-3xl md:text-5xl font-black text-white leading-none">{timeStats.months}</span><span className="text-[10px] text-gray-500 uppercase font-bold">ماه</span></div>
+                  <div className="flex flex-col"><span className="text-3xl md:text-5xl font-black text-white leading-none">{timeStats.days}</span><span className="text-[10px] text-gray-500 uppercase font-bold">روز</span></div>
+                  <div className="flex flex-col"><span className="text-3xl md:text-5xl font-black text-white/50 leading-none">{timeStats.hours}</span><span className="text-[10px] text-gray-500 uppercase font-bold">ساعت</span></div>
+                </div>
+              )}
             </div>
 
             <div className="bg-[#ccff00] text-black rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden group shadow-[0_0_40px_rgba(204,255,0,0.1)]">
               <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:opacity-20 transition-transform group-hover:scale-110"><Play size={120} fill="black" /></div>
-              <h3 className="text-black/60 text-xs font-bold uppercase tracking-wider">شما تا به امروز </h3>
-              <div className="text-4xl md:text-5xl font-black mt-2">{totalEpisodes}</div>
-              <p className="text-[10px] font-bold mt-1 opacity-60">اپیروز سریال تماشا کردید</p>
+              {contentLoading ? <div className="h-16 w-24 bg-black/10 rounded-xl animate-pulse" /> : <>
+                <h3 className="text-black/60 text-xs font-bold uppercase tracking-wider">شما تا به امروز </h3>
+                <div className="text-4xl md:text-5xl font-black mt-2">{totalEpisodes}</div>
+                <p className="text-[10px] font-bold mt-1 opacity-60">اپیروز سریال تماشا کردید</p>
+              </>}
             </div>
 
             {/* ویترین افتخارات با تب‌های فیلتر */}
                 <div className="md:col-span-3 bg-white/5 border border-white/10 rounded-3xl p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                      <Award className="text-pink-500" size={16} /> ویترین افتخارات ({ALL_ACHIEVEMENTS.filter(b => getBadgeProgress(b).isUnlocked).length} از {ALL_ACHIEVEMENTS.length})
+                      <Award className="text-pink-500" size={16} /> ویترین افتخارات {loading ? '' : `(${ALL_ACHIEVEMENTS.filter(b => getBadgeProgress(b).isUnlocked).length} از ${ALL_ACHIEVEMENTS.length})`}
                     </h3>
 
                     {/* دکمه‌های فیلتر دسته‌بندی */}
@@ -472,25 +771,27 @@ export default function ProfilePage() {
                   </div>
 
                   {/* گرید اسکرول مدال‌ها */}
-                  <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                    {ALL_ACHIEVEMENTS
-                      .filter(b => selectedCategory === 'همه' || b.category === selectedCategory)
-                      .map((badge) => (
-                        <BadgeItem 
-                          key={badge.id} 
-                          badge={badge} 
-                          progress={getBadgeProgress(badge)} 
-                          onClick={() => setSelectedBadge(badge)} 
-                        />
-                    ))}
-                  </div>
+                  {contentLoading ? <ProfileBoxLoading /> : (
+                    <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                      {ALL_ACHIEVEMENTS
+                        .filter(b => selectedCategory === 'همه' || b.category === selectedCategory)
+                        .map((badge) => (
+                          <BadgeItem
+                            key={badge.id}
+                            badge={badge}
+                            progress={getBadgeProgress(badge)}
+                            onClick={() => setSelectedBadge(badge)}
+                          />
+                      ))}
+                    </div>
+                  )}
                 </div>
           </div>
           {/* بخش لیست‌های اختصاصی کاربر با اولویت‌بندی */}
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black flex items-center gap-2">
-                <Layers size={20} className="text-[#ccff00]" /> لیست‌های اختصاصی من ({customLists.length})
+                <Layers size={20} className="text-[#ccff00]" /> لیست‌های اختصاصی من {loading ? '' : `(${customLists.length})`}
               </h2>
               <Link 
                 href="/dashboard/custom-lists" 
@@ -500,7 +801,7 @@ export default function ProfilePage() {
               </Link>
             </div>
 
-            {customLists.length > 0 ? (
+            {loading ? <ProfileBoxLoading /> : customLists.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {customLists.map((list, idx) => {
                   const items = list.list_items || [];
@@ -556,17 +857,56 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <BookmarkCheck size={20} className="text-[#ccff00]" /> لیست‌های ذخیره‌شده {loading ? '' : `(${savedLists.length})`}
+              </h2>
+              <Link href="/dashboard/custom-lists/explore" className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-white/10">
+                <BookmarkPlus size={14} /> کشف لیست‌ها
+              </Link>
+            </div>
+
+            {loading ? <ProfileBoxLoading /> : savedLists.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {savedLists.map((list) => {
+                  const items = list.list_items || [];
+                  return (
+                    <Link
+                      key={list.id}
+                      href={`/dashboard/custom-lists/${list.id}`}
+                      className="bg-white/5 border border-white/10 hover:border-[#ccff00]/40 rounded-3xl p-5 transition-all block group"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold bg-[#ccff00]/10 text-[#ccff00] px-2 py-1 rounded-md flex items-center gap-1">
+                          <BookmarkCheck size={12} /> ذخیره‌شده
+                        </span>
+                        <span className="text-xs text-gray-500 font-bold">{items.length} سریال</span>
+                      </div>
+                      <h4 className="text-base font-black text-white group-hover:text-[#ccff00] transition-colors">{list.title}</h4>
+                      {list.description && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{list.description}</p>}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="w-full py-8 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center gap-2 text-gray-500">
+                <BookmarkPlus size={28} strokeWidth={1.5} />
+                <p className="text-xs">هنوز لیستی ذخیره نکرده‌اید.</p>
+              </div>
+            )}
+          </div>
           {/* ۱. سریال‌های محبوب من (با پروگرس‌بار زیر هر اثر) */}
           <div>
             <div className="flex justify-between items-end mb-6">
               <h2 className="text-xl font-black flex items-center gap-2">
-                <Heart className="text-red-500 fill-red-500" size={20} /> محبوب ترین سریال ها ({favorites.length})
+                <Heart className="text-red-500 fill-red-500" size={20} /> محبوب ترین سریال ها {loading ? '' : `(${favorites.length})`}
               </h2>
               <Link href="/dashboard/favorites" className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-white/10">
                 <Plus size={14} /> مدیریت
               </Link>
             </div>
-            {favorites.length > 0 ? (
+            {contentLoading ? <ProfileBoxLoading /> : favorites.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                 {favorites.map((s) => (
                   <ShowCard key={s.id} show={s} router={router} />
@@ -595,7 +935,7 @@ export default function ProfilePage() {
               </Link>
             </div>
 
-            {watchedShows.length > 0 ? (
+            {contentLoading ? <ProfileBoxLoading /> : watchedShows.length > 0 ? (
               <div 
                 id="watched-carousel"
                 dir="rtl"
@@ -710,6 +1050,15 @@ function SocialItem({ count, label, onClick }: { count: number, label: string, o
       <span className="text-lg font-black text-white group-hover:text-[#ccff00] transition-colors">{count}</span>
       <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wide">{label}</span>
     </button>
+  );
+}
+
+function ProfileBoxLoading() {
+  return (
+    <div className="flex items-center gap-3 min-h-16 text-xs text-gray-500">
+      <Loader2 size={18} className="animate-spin text-[#ccff00]" />
+      <span>در حال بارگذاری...</span>
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 export const API_KEY = "f474d12230f4cf16e1cabdd5d2b59cf8";
 export const BASE_URL = 'https://empty-frog-082d.prafooseh.workers.dev/3';
+const liteDetailsCache = new Map<string, any>();
 
 // 1. گرفتن سریال‌های ترند هفته (با قابلیت صفحه بندی)
 export const getTrendingShows = async (page: number = 1) => {
@@ -289,5 +290,22 @@ export const advancedDiscoverShows = async (filters: {
   } catch (error) {
     console.error("Advanced Discover Error:", error);
     return [];
+  }
+};
+
+// Lightweight details for lists and profile cards. Avoids the second fa-IR request.
+export const getShowDetailsLite = async (id: string) => {
+  const cached = liteDetailsCache.get(id);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=en-US`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    liteDetailsCache.set(id, data);
+    return data;
+  } catch (error) {
+    console.error('TMDB lightweight details error:', error);
+    return null;
   }
 };

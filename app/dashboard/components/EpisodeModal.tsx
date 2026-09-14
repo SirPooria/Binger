@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { 
-  X, Check, Star, Play, Clock, Calendar, MessageSquare, 
+  X, Check, Star, Play, Clock, Calendar, MessageSquare, Heart,
   ChevronRight, ChevronLeft, Share2, Loader2, Send, Lock,
   CheckCircle2, Eye, Award, Reply, ArrowRight, CornerDownLeft,
   Image as ImageIcon
@@ -44,6 +44,7 @@ export default function EpisodeModal({
   const [user, setUser] = useState<any>(null);
   const [episode, setEpisode] = useState<any>(null);
   const [isWatched, setIsWatched] = useState(false);
+  const [episodeRating, setEpisodeRating] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [currentView, setCurrentView] = useState<'overview' | 'forum'>('overview');
@@ -62,6 +63,8 @@ export default function EpisodeModal({
 
   // نظرات و ریپلای
   const [comments, setComments] = useState<any[]>([]);
+  const [likedCommentIds, setLikedCommentIds] = useState<number[]>([]);
+  const [commentLikeCounts, setCommentLikeCounts] = useState<Record<number, number>>({});
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -146,6 +149,14 @@ export default function EpisodeModal({
         .eq('show_id', Number(showId))
         .eq('episode_id', currentEp.id)
         .then(({ count }: any) => setFriendsWatchedCount(count || 0));
+
+      supabase
+        .from('episode_ratings')
+        .select('rating')
+        .eq('user_id', user.id)
+        .eq('episode_id', currentEp.id)
+        .maybeSingle()
+        .then(({ data }: any) => setEpisodeRating(data?.rating || 0));
 
       // خواندن رای و ری‌اکشن خود کاربر از دیتابیس
       // خواندن رای و ری‌اکشن کاربر از جدول جدید دیتابیس
@@ -238,12 +249,23 @@ export default function EpisodeModal({
       if (cData && cData.length > 0) {
         setComments(cData);
         const userIds = Array.from(new Set(cData.map((c: any) => c.user_id)));
+        const commentIds = cData.map((comment: any) => comment.id);
 
-        const [profilesRes, watchedRes, showRes] = await Promise.all([
+        const [profilesRes, watchedRes, showRes, likesRes] = await Promise.all([
           supabase.from('profiles').select('id, username, avatar_url').in('id', userIds),
           supabase.from('watched').select('user_id').eq('show_id', Number(showId)).in('user_id', userIds),
-          getShowDetails(String(showId))
+          getShowDetails(String(showId)),
+          supabase.from('comment_likes').select('comment_id, user_id').in('comment_id', commentIds)
         ]);
+
+        const likeCounts: Record<number, number> = {};
+        const userLikedIds: number[] = [];
+        (likesRes.data || []).forEach((like: any) => {
+          likeCounts[like.comment_id] = (likeCounts[like.comment_id] || 0) + 1;
+          if (like.user_id === user?.id) userLikedIds.push(like.comment_id);
+        });
+        setCommentLikeCounts(likeCounts);
+        setLikedCommentIds(userLikedIds);
 
         const profiles = profilesRes.data || [];
         const watchedList = watchedRes.data || [];
@@ -269,6 +291,22 @@ export default function EpisodeModal({
       }
     } catch (err) {
       console.error("Error loading comments:", err);
+    }
+  };
+
+  const handleToggleCommentLike = async (commentId: number) => {
+    if (!user) return;
+    const isLiked = likedCommentIds.includes(commentId);
+    if (isLiked) {
+      const { error } = await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', user.id);
+      if (error) return;
+      setLikedCommentIds((ids) => ids.filter((id) => id !== commentId));
+      setCommentLikeCounts((counts) => ({ ...counts, [commentId]: Math.max(0, (counts[commentId] || 0) - 1) }));
+    } else {
+      const { error } = await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
+      if (error) return;
+      setLikedCommentIds((ids) => [...ids, commentId]);
+      setCommentLikeCounts((counts) => ({ ...counts, [commentId]: (counts[commentId] || 0) + 1 }));
     }
   };
 
@@ -313,6 +351,22 @@ export default function EpisodeModal({
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleRateEpisode = async (rating: number) => {
+    if (!user || !episode || !isWatched) return;
+    const previousRating = episodeRating;
+    setEpisodeRating(rating);
+    const { error } = await supabase
+      .from('episode_ratings')
+      .upsert({ user_id: user.id, show_id: Number(showId), episode_id: episode.id, rating, updated_at: new Date().toISOString() }, { onConflict: 'user_id, episode_id' });
+    if (error) {
+      console.error('Episode rating failed', error);
+      setEpisodeRating(previousRating);
+      showToast('خطا در ثبت امتیاز اپیزود.');
+      return;
+    }
+    showToast('امتیاز اپیزود ثبت شد.');
   };
 
  // ثبت ری‌اکشن حسی در دیتابیس
@@ -612,6 +666,24 @@ export default function EpisodeModal({
                     {episode.overview || 'خلاصه داستانی برای این قسمت ثبت نشده است.'}
                   </p>
                 </div>
+
+                {isWatched && (
+                  <div className="bg-[#181818] border border-white/10 rounded-2xl p-4 flex items-center justify-between gap-4">
+                    <span className="text-xs font-bold text-gray-300">امتیاز شما به این اپیزود</span>
+                    <div className="flex gap-1" dir="ltr">
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <button
+                          key={rating}
+                          onClick={() => handleRateEpisode(rating)}
+                          className="p-1 cursor-pointer hover:scale-110 transition-transform"
+                          aria-label={`امتیاز ${rating} از ۵`}
+                        >
+                          <Star size={22} fill={rating <= episodeRating ? '#ccff00' : 'none'} className={rating <= episodeRating ? 'text-[#ccff00]' : 'text-gray-600 hover:text-gray-300'} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* دکمه علامت‌گذاری تماشا */}
                 <div>
@@ -918,6 +990,14 @@ export default function EpisodeModal({
                             <span className="text-[10px] text-gray-500 ltr font-mono">
                               {new Date(comment.created_at).toLocaleDateString('fa-IR')}
                             </span>
+                            <button
+                              onClick={() => handleToggleCommentLike(comment.id)}
+                              className={`text-xs flex items-center gap-1 transition-colors cursor-pointer px-2.5 py-1 rounded-lg ${likedCommentIds.includes(comment.id) ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-white/5'}`}
+                              title="پسندیدن نظر"
+                            >
+                              <Heart size={13} fill={likedCommentIds.includes(comment.id) ? 'currentColor' : 'none'} />
+                              <span>{commentLikeCounts[comment.id] || 0}</span>
+                            </button>
                             <button
                               onClick={() => {
                                 if (isReplyingHere) {
