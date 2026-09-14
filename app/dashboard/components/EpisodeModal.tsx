@@ -282,22 +282,24 @@ export default function EpisodeModal({
 
     try {
       if (!nextState) {
-        await supabase
+        const { error } = await supabase
           .from('watched')
           .delete()
           .eq('user_id', user.id)
           .eq('show_id', Number(showId))
           .eq('episode_id', episode.id);
+        if (error) throw error;
 
         showToast('علامت تماشا برداشته شد.');
       } else {
-        await supabase
+        const { error } = await supabase
           .from('watched')
-          .insert([{
+          .upsert([{
             user_id: user.id,
             show_id: Number(showId),
             episode_id: episode.id
-          }]);
+          }], { onConflict: 'user_id, episode_id' });
+        if (error) throw error;
 
         triggerCelebration();
         showToast('دیدم! تالار نظرات و نظرسنجی باز شد 🎉');

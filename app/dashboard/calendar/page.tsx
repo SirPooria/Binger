@@ -24,35 +24,86 @@ export default function CalendarPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { window.location.href = '/login'; return; }
 
-      const p1 = supabase.from('watched').select('show_id').eq('user_id', user.id);
       const p2 = supabase.from('watchlist').select('show_id').eq('user_id', user.id);
-      const [wRes, lRes] = await Promise.all([p1, p2]);
+            const [lRes] = await Promise.all([p2]);
 
-      const myShowIds = new Set<number>();
-      wRes.data?.forEach((i: any) => myShowIds.add(i.show_id));
-      lRes.data?.forEach((i: any) => myShowIds.add(i.show_id));
-      
-      const uniqueMyIds = Array.from(myShowIds);
+            // هر قسمت یک ردیف جدا دارد؛ بنابراین برای جلوگیری از سقف ۱۰۰۰ ردیف، همه watchedها را صفحه‌ای می‌خوانیم.
+            const watchedRows: any[] = [];
+            let watchedPage = 0;
+            let hasMoreWatched = true;
+            while (hasMoreWatched) {
+                const { data, error } = await supabase
+                    .from('watched')
+                    .select('show_id')
+                    .eq('user_id', user.id)
+                    .range(watchedPage * 1000, (watchedPage + 1) * 1000 - 1);
+
+                if (error || !data || data.length === 0) {
+                    hasMoreWatched = false;
+                } else {
+                    watchedRows.push(...data);
+                    hasMoreWatched = data.length === 1000;
+                    watchedPage++;
+                }
+            }
+
+        const watchedShowIds = new Set<number>();
+        const watchlistShowIds = new Set<number>();
+            watchedRows.forEach((i: any) => watchedShowIds.add(Number(i.show_id)));
+        lRes.data?.forEach((i: any) => watchlistShowIds.add(Number(i.show_id)));
+
+        const uniqueMyIds = Array.from(new Set([...watchedShowIds, ...watchlistShowIds]));
 
       let myUpcoming: any[] = [];
       if (uniqueMyIds.length > 0) {
-        const recentIds = uniqueMyIds.slice(0, 20);
-        const showsData = await Promise.all(recentIds.map(async (id) => await getShowDetails(String(id))));
+                const showsData: any[] = [];
+                const batchSize = 6;
+
+                // بررسی همه سریال‌های کاربر؛ محدود کردن به ۲۰ شناسه باعث حذف تصادفی سریال‌ها از تقویم می‌شد.
+                for (let index = 0; index < uniqueMyIds.length; index += batchSize) {
+                    const batch = uniqueMyIds.slice(index, index + batchSize);
+                    const batchData = await Promise.all(batch.map(async (id) => {
+                        for (let attempt = 0; attempt < 3; attempt++) {
+                            const show = await getShowDetails(String(id));
+                            if (show) return show;
+                        }
+                        return null;
+                    }));
+                    showsData.push(...batchData);
+                }
         
-        myUpcoming = showsData
+                const upcomingShows = showsData
           .filter((s: any) => s && s.next_episode_to_air && new Date(s.next_episode_to_air.air_date) >= new Date())
-          .map((s: any) => ({ ...s, isMine: true }));
+                myUpcoming = upcomingShows
+                    .filter((s: any) => watchedShowIds.has(Number(s.id)))
+                    .map((s: any) => ({ ...s, isMine: true, isWatchlist: false }));
+
+                const waitingUpcoming = upcomingShows
+                    .filter((s: any) => !watchedShowIds.has(Number(s.id)) && watchlistShowIds.has(Number(s.id)))
+                    .map((s: any) => ({ ...s, isMine: false, isWatchlist: true }));
+
+                const globalData = await getGlobalAiringShows();
+                const trending = globalData
+                    .filter((s: any) => !watchedShowIds.has(Number(s.id)) && !watchlistShowIds.has(Number(s.id)))
+                    .map((s: any) => ({ ...s, isMine: false, isWatchlist: false }));
+
+                const sortFn = (a: any, b: any) => new Date(a.next_episode_to_air.air_date).getTime() - new Date(b.next_episode_to_air.air_date).getTime();
+
+                setMyEpisodes(myUpcoming.sort(sortFn));
+                setGlobalEpisodes([...waitingUpcoming.sort(sortFn), ...trending.sort(sortFn)]);
+                setLoading(false);
+                return;
       }
 
       const globalData = await getGlobalAiringShows();
       const trending = globalData
-        .filter((s: any) => !myShowIds.has(s.id))
-        .map((s: any) => ({ ...s, isMine: false }));
+                .filter((s: any) => !watchedShowIds.has(Number(s.id)) && !watchlistShowIds.has(Number(s.id)))
+                .map((s: any) => ({ ...s, isMine: false, isWatchlist: false }));
       
       const sortFn = (a: any, b: any) => new Date(a.next_episode_to_air.air_date).getTime() - new Date(b.next_episode_to_air.air_date).getTime();
 
       setMyEpisodes(myUpcoming.sort(sortFn));
-      setGlobalEpisodes(trending.sort(sortFn));
+    setGlobalEpisodes(trending.sort(sortFn));
       setLoading(false);
     };
 
@@ -160,7 +211,7 @@ export default function CalendarPage() {
                   {globalEpisodes.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {globalEpisodes.map((item) => (
-                              <LandscapeCard key={item.id} item={item} onClick={() => openModal(item)} isMine={false} />
+                              <LandscapeCard key={item.id} item={item} onClick={() => openModal(item)} isMine={false} isWatchlist={item.isWatchlist} />
                           ))}
                       </div>
                   ) : (
@@ -178,7 +229,7 @@ export default function CalendarPage() {
 }
 
 // --- کامپوننت کارت افقی (Landscape) بدون تغییر باقی می‌ماند ---
-const LandscapeCard = ({ item, onClick, isMine }: any) => {
+const LandscapeCard = ({ item, onClick, isMine, isWatchlist }: any) => {
     const ep = item.next_episode_to_air;
     
     // محاسبه زمان باقی‌مانده (فقط بر اساس روز)
@@ -218,6 +269,12 @@ const LandscapeCard = ({ item, onClick, isMine }: any) => {
             <div className={`absolute top-3 right-3 px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg flex items-center gap-1 ${status.color}`}>
                 <Clock size={12} /> {status.text}
             </div>
+
+            {isWatchlist && (
+                <div className="absolute top-3 left-3 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-500 text-white shadow-lg">
+                    در لیست انتظار شما
+                </div>
+            )}
 
             <div className="absolute bottom-0 left-0 w-full p-4 md:p-5">
                 <h3 className="text-lg md:text-xl font-black text-white leading-tight mb-1 drop-shadow-md group-hover:text-[#ccff00] transition-colors line-clamp-1">{item.name}</h3>

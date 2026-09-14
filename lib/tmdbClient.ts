@@ -97,6 +97,28 @@ export const getEpisodeDetails = async (showId: string, seasonNum: string, episo
   } catch (error) { return null; }
 };
 
+export const getPersonDetails = async (id: string) => {
+  try {
+    const res = await fetch(`${BASE_URL}/person/${id}?api_key=${API_KEY}&language=fa-IR&append_to_response=tv_credits`);
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    if (!data.biography || !data.biography.trim()) {
+      const fallbackRes = await fetch(`${BASE_URL}/person/${id}?api_key=${API_KEY}&language=en-US&append_to_response=tv_credits`);
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json();
+        data.biography = fallbackData.biography || '';
+        data.tv_credits = data.tv_credits || fallbackData.tv_credits;
+      }
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Person details error:', error);
+    return null;
+  }
+};
+
 export const getGlobalAiringShows = async () => {
   try {
     const today = new Date();
@@ -137,10 +159,28 @@ export const getGlobalAiringShows = async () => {
 
 export const getSimilarShows = async (id: string) => {
   try {
-    const res = await fetch(`${BASE_URL}/tv/${id}/similar?api_key=${API_KEY}&language=en-US`);
-    const data = await res.json();
-    return data.results.slice(0, 5); 
-  } catch (error) { return []; }
+    const [recommendationsRes, similarRes] = await Promise.all([
+      fetch(`${BASE_URL}/tv/${id}/recommendations?api_key=${API_KEY}&language=en-US&page=1`),
+      fetch(`${BASE_URL}/tv/${id}/similar?api_key=${API_KEY}&language=en-US&page=1`)
+    ]);
+    const recommendationsData = await recommendationsRes.json();
+    const similarData = await similarRes.json();
+
+    const recommendations = (recommendationsData.results || []).filter((show: any) => show.id !== Number(id));
+    const similar = (similarData.results || []).filter((show: any) => show.id !== Number(id));
+    const uniqueShows = new Map<number, any>();
+
+    [...recommendations, ...similar].forEach((show: any) => {
+      if (show.poster_path && show.name && !uniqueShows.has(show.id)) {
+        uniqueShows.set(show.id, show);
+      }
+    });
+
+    return Array.from(uniqueShows.values()).slice(0, 5);
+  } catch (error) {
+    console.error('Similar shows error:', error);
+    return [];
+  }
 };
 
 export const getLatestAnime = async () => {

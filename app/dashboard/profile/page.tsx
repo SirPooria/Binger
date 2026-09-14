@@ -587,30 +587,12 @@ export default function ProfilePage() {
                 <Tv size={20} className="text-[#ccff00]" /> آخرین سریال های تماشا شده
               </h2>
               
-              {/* دکمه‌های چپ و راست برای کنترل آسان با کلیک */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500 ml-2 hidden sm:inline">۲۰ اثر اخیر</span>
-                <button 
-                  onClick={() => {
-                    const el = document.getElementById('watched-carousel');
-                    if (el) el.scrollBy({ left: 300, behavior: 'smooth' });
-                  }}
-                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all cursor-pointer"
-                  title="بعدی"
-                >
-                  ▶
-                </button>
-                <button 
-                  onClick={() => {
-                    const el = document.getElementById('watched-carousel');
-                    if (el) el.scrollBy({ left: -300, behavior: 'smooth' });
-                  }}
-                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-gray-300 hover:text-white transition-all cursor-pointer"
-                  title="قبلی"
-                >
-                  ◀
-                </button>
-              </div>
+              <Link
+                href="/dashboard/lists"
+                className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all border border-white/10"
+              >
+                مشاهده همه
+              </Link>
             </div>
 
             {watchedShows.length > 0 ? (

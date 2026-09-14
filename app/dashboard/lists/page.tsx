@@ -4,20 +4,32 @@ import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { getShowDetails, getImageUrl } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
-import { Loader2, ArrowRight, ListChecks, Bookmark, Eye, Clock, Tv } from 'lucide-react';
+import { Loader2, ArrowRight, ListChecks, Bookmark, Eye, Clock, Tv, CheckCircle } from 'lucide-react';
 
 export default function MyListsPage() {
   const supabase = createClient() as any;
   const router = useRouter();
   
-  const [activeTab, setActiveTab] = useState<'watched' | 'watchlist'>('watched');
+  const [activeTab, setActiveTab] = useState<'completed' | 'watched' | 'watchlist'>('watched');
+  const [tabInitialized, setTabInitialized] = useState(false);
+  const [completedFilter, setCompletedFilter] = useState<'all' | 'upcoming' | 'ended'>('all');
   const [shows, setShows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [watchedStatus, setWatchedStatus] = useState<any>({});
-  const [myShowsCount, setMyShowsCount] = useState({ watched: 0, watchlist: 0 });
+  const [myShowsCount, setMyShowsCount] = useState({ completed: 0, watched: 0, watchlist: 0 });
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'completed' || tab === 'watched' || tab === 'watchlist') {
+      setActiveTab(tab);
+    }
+    setTabInitialized(true);
+  }, []);
+
+  useEffect(() => {
+    if (!tabInitialized) return;
+
     const fetchData = async () => {
       setLoading(true);
       setShows([]); 
@@ -60,36 +72,58 @@ export default function MyListsPage() {
         // ۳. تفکیک دقیق با تبدیل همه آیدی‌ها به عدد
         // سریال‌هایی که حداقل یک قسمت از آن‌ها دیده شده است
         const uniqueWatchedShowIds = Array.from(new Set(watchedIds.map((item: any) => Number(item.show_id))));
-        const watchedSet = new Set(uniqueWatchedShowIds);
-
         // لیست انتظار: فقط آثاری که در واچ‌لیست هستند ولی حتی ۱ اپیزود هم از آنها دیده نشده
-        const waitingShowIds = Array.from(new Set(watchlistIds.map((item: any) => Number(item.show_id))))
+        const waitingShowIds: number[] = Array.from(new Set<number>(watchlistIds.map((item: any) => Number(item.show_id))))
           .filter((id: any) => !uniqueWatchedShowIds.includes(Number(id)));
 
         setMyShowsCount(prev => ({ ...prev, watchlist: waitingShowIds.length }));
 
-        const idsToFetch = activeTab === 'watched' ? uniqueWatchedShowIds : waitingShowIds;
-
         // ۴. دریافت اطلاعات از TMDB
-        if (idsToFetch.length > 0) {
-          const showsData = await Promise.all(
-            idsToFetch.map(async (id) => await getShowDetails(String(id)))
-          );
-          
-          const validShows = showsData.filter(s => s !== null);
+        const loadShowDetails = async (ids: number[]) => {
+          const results: any[] = [];
+          const batchSize = 6;
 
-          if (activeTab === 'watched') {
-            const statusMap: any = {};
-            const finalWatchingShows: any[] = [];
+          for (let index = 0; index < ids.length; index += batchSize) {
+            const batch = ids.slice(index, index + batchSize);
+            const batchResults = await Promise.all(batch.map(async (id) => {
+              for (let attempt = 0; attempt < 3; attempt++) {
+                const show = await getShowDetails(String(id));
+                if (show) return show;
+              }
+              return null;
+            }));
+            results.push(...batchResults);
+          }
 
-            validShows.forEach(show => {
+          return results;
+        };
+
+        if (uniqueWatchedShowIds.length > 0 || waitingShowIds.length > 0) {
+          const watchedDetails = await loadShowDetails(uniqueWatchedShowIds);
+          const waitingDetails = activeTab === 'watchlist' ? await loadShowDetails(waitingShowIds) : [];
+          const validShows = [...watchedDetails, ...waitingDetails].filter(Boolean);
+
+          const statusMap: any = {};
+          const finalWatchingShows: any[] = [];
+          const completedShows: any[] = [];
+          const watchedShows = validShows.filter(show => uniqueWatchedShowIds.includes(Number(show.id)));
+          const waitingShows = validShows.filter(show => waitingShowIds.includes(Number(show.id)));
+
+          watchedShows.forEach(show => {
               // محاسبه مجموع اپیزودهای منتشر شده (بدون فصل صفر)
+              const nextEpisode = show.next_episode_to_air;
+              const nextEpisodeIsUpcoming = nextEpisode?.air_date && new Date(nextEpisode.air_date) > new Date();
               const totalReleasedEps = show.seasons?.reduce((sum: number, season: any) => {
                 if (season.season_number === 0) return sum;
-                if (season.air_date && new Date(season.air_date) <= new Date()) {
-                  return sum + season.episode_count;
+                if (!season.air_date || new Date(season.air_date) > new Date()) {
+                  return sum;
                 }
-                return sum;
+                if (nextEpisodeIsUpcoming && season.season_number === nextEpisode.season_number) {
+                  // اگر قسمت بعدی داخل همین فصل است، قسمت‌های اعلام‌شده اما پخش‌نشده هم باید در مخرج باشند.
+                  // قسمت اول فصل آینده هنوز بخشی از فصل فعلی کاربر محسوب نمی‌شود.
+                  return nextEpisode.episode_number > 1 ? sum + season.episode_count : sum;
+                }
+                return sum + season.episode_count;
               }, 0) || 0;
               
               // تعداد اپیزودهای تماشا شده کاربر
@@ -108,20 +142,23 @@ export default function MyListsPage() {
                 isEnded
               };
 
-              // فقط سریال‌هایی که کامل تمام نشده‌اند یا در انتظار فصل جدیدند
-              if (!(isCompleted && isEnded)) {
+              // هر سریالی که تمام قسمت‌های منتشرشده‌اش دیده شده، کامل محسوب می‌شود.
+              if (!isCompleted) {
                 finalWatchingShows.push(show);
+              } else {
+                completedShows.push(show);
               }
             });
 
-            setWatchedStatus(statusMap);
-            setShows(finalWatchingShows);
-            setMyShowsCount(prev => ({ ...prev, watched: finalWatchingShows.length }));
-            
-          } else {
-            // لیست انتظار (سریال‌هایی که هنوز شروع نشده‌اند)
-            setShows(validShows);
-          }
+          setWatchedStatus(statusMap);
+          setShows(activeTab === 'watchlist'
+            ? waitingShows
+            : activeTab === 'completed' ? completedShows : finalWatchingShows);
+          setMyShowsCount(prev => ({
+            ...prev,
+            completed: completedShows.length,
+            watched: finalWatchingShows.length,
+          }));
         }
       } catch (err) {
         console.error("Error loading my lists:", err);
@@ -131,7 +168,12 @@ export default function MyListsPage() {
     };
 
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, tabInitialized]);
+
+  const changeTab = (tab: 'completed' | 'watched' | 'watchlist') => {
+    setActiveTab(tab);
+    router.replace(`/dashboard/lists?tab=${tab}`, { scroll: false });
+  };
 
   const RenderShowCard = (show: any) => {
     const status = watchedStatus[show.id] || { watchedCount: 0, totalReleasedEps: 0, percentage: 0, isCompleted: false, isEnded: false };
@@ -140,10 +182,16 @@ export default function MyListsPage() {
     let statusColor = 'text-cyan-400';
     let barColor = 'bg-cyan-400';
 
-    if (status.isCompleted && !status.isEnded) {
-      statusText = 'منتظر قسمت جدید';
-      statusColor = 'text-[#ccff00]';
-      barColor = 'bg-[#ccff00]';
+    if (status.isCompleted) {
+      if (status.isEnded) {
+        statusText = 'پایان یافته';
+        statusColor = 'text-emerald-400';
+        barColor = 'bg-emerald-400';
+      } else {
+        statusText = 'منتظر فصل جدید';
+        statusColor = 'text-[#ccff00]';
+        barColor = 'bg-[#ccff00]';
+      }
     }
 
     return (
@@ -163,7 +211,7 @@ export default function MyListsPage() {
         <div className="absolute bottom-0 p-4 w-full">
           <h3 className="text-lg font-bold text-white line-clamp-1 ltr text-left">{show.name}</h3>
           
-          {activeTab === 'watched' && (
+          {(activeTab === 'watched' || activeTab === 'completed') && (
             <div className="mt-2">
               <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mb-1.5">
                 <div 
@@ -201,6 +249,14 @@ export default function MyListsPage() {
     );
   };
 
+  const visibleShows = activeTab === 'completed'
+    ? shows
+        .filter(show => completedFilter === 'all' || (completedFilter === 'upcoming' ? !watchedStatus[show.id]?.isEnded : watchedStatus[show.id]?.isEnded))
+        .sort((firstShow, secondShow) => Number(watchedStatus[firstShow.id]?.isEnded) - Number(watchedStatus[secondShow.id]?.isEnded))
+    : shows;
+  const upcomingCompletedCount = shows.filter(show => !watchedStatus[show.id]?.isEnded).length;
+  const endedCompletedCount = shows.filter(show => watchedStatus[show.id]?.isEnded).length;
+
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20 pt-28 md:pt-32">
       
@@ -217,7 +273,18 @@ export default function MyListsPage() {
       {/* تب‌ها */}
       <div className="flex gap-6 mb-8 border-b border-white/10 px-2 max-w-5xl mx-auto w-full">
         <button
-          onClick={() => setActiveTab('watched')}
+          onClick={() => changeTab('completed')}
+          className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'completed'
+              ? 'border-emerald-400 text-emerald-400 font-bold'
+              : 'border-transparent text-gray-400 hover:text-white'
+          }`}
+        >
+          <CheckCircle size={18} className={activeTab === 'completed' ? 'text-emerald-400' : 'text-gray-500'} />
+          سریال‌های تمام شده ({myShowsCount.completed})
+        </button>
+        <button
+          onClick={() => changeTab('watched')}
           className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
             activeTab === 'watched'
               ? 'border-[#ccff00] text-[#ccff00] font-bold'
@@ -228,7 +295,7 @@ export default function MyListsPage() {
           در حال تماشا ({myShowsCount.watched})
         </button>
         <button
-          onClick={() => setActiveTab('watchlist')}
+          onClick={() => changeTab('watchlist')}
           className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
             activeTab === 'watchlist'
               ? 'border-purple-500 text-purple-500 font-bold'
@@ -241,21 +308,49 @@ export default function MyListsPage() {
       </div>
 
       <div className="max-w-5xl mx-auto">
+        {activeTab === 'completed' && !loading && (
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <span className="text-sm text-gray-400 ml-2">نمایش:</span>
+            {([
+              ['all', 'همه'],
+              ['upcoming', `منتظر فصل جدید (${upcomingCompletedCount})`],
+              ['ended', `پایان یافته (${endedCompletedCount})`],
+            ] as const).map(([filter, label]) => (
+              <button
+                key={filter}
+                onClick={() => setCompletedFilter(filter)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  completedFilter === filter
+                    ? 'bg-[#ccff00] text-black border-[#ccff00]'
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {loading ? (
           <div className="flex justify-center mt-20 text-[#ccff00]">
             <Loader2 className="animate-spin" size={40} />
           </div>
-        ) : shows.length > 0 ? (
+        ) : visibleShows.length > 0 ? (
           <div className="animate-in fade-in zoom-in-95 duration-300">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-              {shows.map(RenderShowCard)}
+              {visibleShows.map(RenderShowCard)}
             </div>
           </div>
         ) : (
           <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col items-center justify-center mt-20 text-gray-500 gap-4 bg-white/5 p-10 rounded-3xl border border-white/5 border-dashed max-w-2xl mx-auto text-center">
             <Tv size={64} strokeWidth={1} className="opacity-50" />
             <p className="text-lg text-gray-400">
-              {activeTab === 'watched' 
+              {activeTab === 'completed'
+                ? completedFilter === 'upcoming'
+                  ? 'سریالی منتظر قسمت جدید نیست.'
+                  : completedFilter === 'ended'
+                    ? 'هنوز سریال پایان‌یافته‌ای نداری!'
+                    : 'هنوز سریال تمام‌شده‌ای نداری!'
+                : activeTab === 'watched'
                 ? 'سریال در حال تماشایی نداری! (سریال‌های تمام شده مخفی می‌شوند)' 
                 : 'لیست انتظارت خالیه!'}
             </p>

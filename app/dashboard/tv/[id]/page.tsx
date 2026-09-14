@@ -93,6 +93,9 @@ export default function ShowDetailsPage() {
   const [showConfirmAll, setShowConfirmAll] = useState(false); 
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set());
   const carouselRef = useRef<HTMLDivElement>(null);
+  const watchedEpisodesRef = useRef<number[]>([]);
+  const seasonActionInFlight = useRef<Set<number>>(new Set());
+  const seasonActionQueue = useRef(Promise.resolve());
 
   // استیت‌های لودینگ
   const [seasonLoading, setSeasonLoading] = useState<{[key: number]: boolean}>({}); 
@@ -150,8 +153,16 @@ export default function ShowDetailsPage() {
 
   const refreshWatched = async (userId: string) => {
     const { data } = await supabase.from('watched').select('episode_id').eq('user_id', userId).eq('show_id', showId);
-    if (data) setWatchedEpisodes(data.map((item: any) => item.episode_id));
+    if (data) {
+      const episodeIds = data.map((item: any) => item.episode_id);
+      watchedEpisodesRef.current = episodeIds;
+      setWatchedEpisodes(episodeIds);
+    }
   };
+
+  useEffect(() => {
+    watchedEpisodesRef.current = watchedEpisodes;
+  }, [watchedEpisodes]);
 
   const fetchRatings = async (userId: string) => {
     const [myR, allR] = await Promise.all([
@@ -214,19 +225,26 @@ export default function ShowDetailsPage() {
 
         if (details) {
           const firstSeason = details.seasons?.find((s: any) => s.season_number > 0)?.season_number || 1;
+          const seasonsToLoad = details.seasons?.filter((s: any) => s.season_number >= 0) || [];
           setActiveSeason(firstSeason);
           setExpandedSeasons(new Set([firstSeason]));
 
-          const [sData] = await Promise.all([
-            getSeasonDetails(showId, firstSeason),
+          const [seasonDataList] = await Promise.all([
+            Promise.all(seasonsToLoad.map((s: any) => getSeasonDetails(showId, s.season_number))),
             fetchCredits(showId),
             refreshWatched(currentUser.id),
             fetchRatings(currentUser.id)
           ]);
 
-          const eps = sData?.episodes || [];
+          const seasonsMap: any = {};
+          seasonDataList.forEach((seasonData: any) => {
+            if (seasonData?.season_number !== undefined) {
+              seasonsMap[seasonData.season_number] = seasonData.episodes || [];
+            }
+          });
+          const eps = seasonsMap[firstSeason] || [];
           setEpisodes(eps);
-          setAllSeasonsData({ [firstSeason]: eps });
+          setAllSeasonsData(seasonsMap);
         }
 
       } catch (error) {
@@ -301,12 +319,27 @@ export default function ShowDetailsPage() {
       let newWatchedList: number[];
       if (isWatched) {
         newWatchedList = watchedEpisodes.filter(id => id !== episodeId);
+        const { error } = await supabase
+          .from('watched')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('show_id', Number(showId))
+          .eq('episode_id', episodeId);
+        if (error) {
+          console.error('Episode delete failed', error);
+          return;
+        }
         setWatchedEpisodes(newWatchedList);
-        await supabase.from('watched').delete().eq('user_id', user.id).eq('episode_id', episodeId);
       } else {
         newWatchedList = [...watchedEpisodes, episodeId];
+        const { error } = await supabase
+          .from('watched')
+          .upsert([{ user_id: user.id, show_id: Number(showId), episode_id: episodeId }] as any, { onConflict: 'user_id, episode_id' });
+        if (error) {
+          console.error('Episode update failed', error);
+          return;
+        }
         setWatchedEpisodes(newWatchedList);
-        await supabase.from('watched').insert([{ user_id: user.id, show_id: Number(showId), episode_id: episodeId }] as any);
         
         const released = episodes.filter(ep => isReleased(ep.air_date)).map(e => e.id);
         if (released.every(id => newWatchedList.includes(id))) triggerCelebration();
@@ -329,7 +362,7 @@ export default function ShowDetailsPage() {
       }
     }
 
-    toggleWatched(episodeId, true);
+    await toggleWatched(episodeId, true);
   };
 
   const handleGapConfirm = async () => {
@@ -337,9 +370,7 @@ export default function ShowDetailsPage() {
     
     const allIds = [...gapEpisodesToMark, targetGapEpisode];
     
-    setWatchedEpisodes(prev => Array.from(new Set([...prev, ...allIds])));
     setShowGapModal(false);
-    triggerCelebration(); 
 
     const records = allIds.map(id => ({
       user_id: user.id,
@@ -347,48 +378,72 @@ export default function ShowDetailsPage() {
       episode_id: id
     }));
     
-    await supabase.from('watched').upsert(records, { onConflict: 'user_id, episode_id' } as any);
-  };
-
-  const toggleSeasonWatched = async (seasonNum: number, seasonEpisodes: any[]) => {
-    if (!user) return;
-    let targetEpisodes = seasonEpisodes;
-    if (!targetEpisodes) {
-      setSeasonLoading(prev => ({ ...prev, [seasonNum]: true }));
-      const sData = await getSeasonDetails(showId, seasonNum);
-      targetEpisodes = sData?.episodes || [];
-      setAllSeasonsData((prev: any) => ({ ...prev, [seasonNum]: targetEpisodes }));
-    }
-
-    if (!targetEpisodes || targetEpisodes.length === 0) {
-      setSeasonLoading(prev => ({ ...prev, [seasonNum]: false }));
+    const { error } = await supabase.from('watched').upsert(records, { onConflict: 'user_id, episode_id' } as any);
+    if (error) {
+      console.error('Gap update failed', error);
       return;
     }
 
+    setWatchedEpisodes(prev => Array.from(new Set([...prev, ...allIds])));
+    triggerCelebration();
+  };
+
+  const toggleSeasonWatched = async (seasonNum: number, seasonEpisodes: any[]) => {
+    if (!user || seasonActionInFlight.current.has(seasonNum)) return;
+    seasonActionInFlight.current.add(seasonNum);
     setSeasonLoading(prev => ({ ...prev, [seasonNum]: true }));
-    
-    const releasedEpisodes = targetEpisodes.filter((ep: any) => isReleased(ep.air_date));
-    const seasonEpisodeIds = releasedEpisodes.map((ep: any) => ep.id);
-    const allWatched = seasonEpisodeIds.every((id: number) => watchedEpisodes.includes(id));
-    
-    let newWatchedList: number[] = [...watchedEpisodes];
-    if (allWatched) {
-      newWatchedList = newWatchedList.filter(id => !seasonEpisodeIds.includes(id));
-      setWatchedEpisodes(newWatchedList);
-      await supabase.from('watched').delete().eq('user_id', user.id).in('episode_id', seasonEpisodeIds);
-    } else {
-      const newIdsToInsert = seasonEpisodeIds
-        .filter((id: number) => !watchedEpisodes.includes(id))
-        .map((id: number) => ({ user_id: user.id, show_id: Number(showId), episode_id: id }));
-      
-      if (newIdsToInsert.length > 0) {
-        newIdsToInsert.forEach(item => newWatchedList.push(item.episode_id));
+
+    const processSeason = async () => {
+      try {
+        let targetEpisodes = seasonEpisodes;
+        if (!targetEpisodes) {
+          const sData = await getSeasonDetails(showId, seasonNum);
+          targetEpisodes = sData?.episodes || [];
+          setAllSeasonsData((prev: any) => ({ ...prev, [seasonNum]: targetEpisodes }));
+        }
+
+        const seasonEpisodeIds = targetEpisodes
+          .filter((ep: any) => isReleased(ep.air_date))
+          .map((ep: any) => ep.id);
+        if (seasonEpisodeIds.length === 0) return;
+
+        const currentWatched = watchedEpisodesRef.current;
+        const allWatched = seasonEpisodeIds.every((id: number) => currentWatched.includes(id));
+        let newWatchedList: number[];
+
+        if (allWatched) {
+          newWatchedList = currentWatched.filter(id => !seasonEpisodeIds.includes(id));
+          const { error } = await supabase
+            .from('watched')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('show_id', Number(showId))
+            .in('episode_id', seasonEpisodeIds);
+          if (error) throw error;
+        } else {
+          const newIdsToInsert = seasonEpisodeIds
+            .filter((id: number) => !currentWatched.includes(id))
+            .map((id: number) => ({ user_id: user.id, show_id: Number(showId), episode_id: id }));
+          newWatchedList = Array.from(new Set([...currentWatched, ...seasonEpisodeIds]));
+          if (newIdsToInsert.length > 0) {
+            const { error } = await supabase.from('watched').upsert(newIdsToInsert, { onConflict: 'user_id, episode_id' } as any);
+            if (error) throw error;
+            triggerCelebration();
+          }
+        }
+
+        watchedEpisodesRef.current = newWatchedList;
         setWatchedEpisodes(newWatchedList);
-        await supabase.from('watched').upsert(newIdsToInsert, { onConflict: 'user_id, episode_id' } as any); 
-        triggerCelebration(); 
+      } catch (error) {
+        console.error('Season watch update failed', error);
+      } finally {
+        seasonActionInFlight.current.delete(seasonNum);
+        setSeasonLoading(prev => ({ ...prev, [seasonNum]: false }));
       }
-    }
-    setSeasonLoading(prev => ({ ...prev, [seasonNum]: false }));
+    };
+
+    seasonActionQueue.current = seasonActionQueue.current.then(processSeason, processSeason);
+    await seasonActionQueue.current;
   };
 
   const handleMarkShowAsWatched = async () => {
@@ -397,6 +452,12 @@ export default function ShowDetailsPage() {
     try {
       const seasonPromises = show.seasons.map((s: any) => getSeasonDetails(showId, s.season_number));
       const allSeasonsResults = await Promise.all(seasonPromises);
+      const failedSeasonIndex = allSeasonsResults.findIndex((season: any, index: number) =>
+        show.seasons[index]?.episode_count > 0 && !season
+      );
+      if (failedSeasonIndex !== -1) {
+        throw new Error(`Season ${show.seasons[failedSeasonIndex].season_number} could not be loaded`);
+      }
       
       const newSeasonsData = { ...allSeasonsData };
       allSeasonsResults.forEach((s: any) => {
@@ -430,7 +491,8 @@ export default function ShowDetailsPage() {
       const chunkSize = 50; 
       for (let i = 0; i < records.length; i += chunkSize) {
         const chunk = records.slice(i, i + chunkSize);
-        await supabase.from('watched').upsert(chunk, { onConflict: 'user_id, episode_id' } as any);
+        const { error } = await supabase.from('watched').upsert(chunk, { onConflict: 'user_id, episode_id' } as any);
+        if (error) throw error;
       }
       
       setWatchedEpisodes(prev => Array.from(new Set([...prev, ...idsToMark])));
@@ -672,15 +734,19 @@ export default function ShowDetailsPage() {
                 <h3 className="font-bold text-gray-200 mb-4">بازیگران</h3>
                 <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
                   {cast.map((actor: any) => (
-                    <div key={actor.id} className="flex flex-col items-center w-20 shrink-0">
+                    <div
+                      key={actor.id}
+                      onClick={() => router.push(`/dashboard/actor/${actor.id}`)}
+                      className="flex flex-col items-center w-20 shrink-0 cursor-pointer group"
+                    >
                       {actor.profile_path ? (
                         <img 
                           src={getImageUrl(actor.profile_path)} 
-                          className="w-16 h-16 rounded-full object-cover mb-2 border border-white/10" 
+                          className="w-16 h-16 rounded-full object-cover mb-2 border border-white/10 group-hover:border-[#ccff00] group-hover:scale-105 transition-all"
                           alt={actor.original_name}
                         />
                       ) : (
-                        <div className="w-16 h-16 rounded-full mb-2 border border-white/10 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-gray-400 font-black text-sm tracking-wider">
+                        <div className="w-16 h-16 rounded-full mb-2 border border-white/10 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-gray-400 font-black text-sm tracking-wider group-hover:border-[#ccff00] transition-all">
                           {getInitials(actor.original_name)}
                         </div>
                       )}
@@ -907,11 +973,9 @@ export default function ShowDetailsPage() {
                   const isExpanded = expandedSeasons.has(season.season_number);
                   const isLoading = seasonLoading[season.season_number];
                   const loadedSeasonEpisodes = allSeasonsData[season.season_number] || [];
-                  const hasData = loadedSeasonEpisodes.length > 0;
                   
-                  const isFullyWatched = isShowCompleted || (hasData && loadedSeasonEpisodes.every((ep: any) => 
-                    !isReleased(ep.air_date) || watchedEpisodes.includes(ep.id)
-                  ));
+                  const releasedSeasonEpisodes = loadedSeasonEpisodes.filter((ep: any) => isReleased(ep.air_date));
+                  const isFullyWatched = releasedSeasonEpisodes.length > 0 && releasedSeasonEpisodes.every((ep: any) => watchedEpisodes.includes(ep.id));
 
                   return (
                     <div key={season.id} className="border border-white/10 rounded-2xl overflow-hidden bg-[#111]">
