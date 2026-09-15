@@ -7,6 +7,32 @@ import { useRouter } from 'next/navigation';
 import { Loader2, Calendar as CalIcon, ArrowRight, Clock, Zap, AlertCircle, CheckCircle, PlayCircle } from 'lucide-react';
 import EpisodeModal from '../components/EpisodeModal';
 
+const CALENDAR_CACHE_TTL = 10 * 60 * 1000;
+const getCalendarCacheKey = (userId: string) => `binger-calendar-cache:${userId}`;
+
+const readCalendarCache = (userId: string) => {
+    try {
+        const raw = sessionStorage.getItem(getCalendarCacheKey(userId));
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        return Date.now() - cached.cachedAt < CALENDAR_CACHE_TTL ? cached : null;
+    } catch {
+        return null;
+    }
+};
+
+const writeCalendarCache = (userId: string, myEpisodes: any[], globalEpisodes: any[]) => {
+    try {
+        sessionStorage.setItem(getCalendarCacheKey(userId), JSON.stringify({
+            cachedAt: Date.now(),
+            myEpisodes,
+            globalEpisodes,
+        }));
+    } catch {
+        // The calendar still works if sessionStorage is unavailable or full.
+    }
+};
+
 export default function CalendarPage() {
   const router = useRouter();
   const supabase = createClient() as any;
@@ -23,6 +49,14 @@ export default function CalendarPage() {
     const fetchCalendar = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { window.location.href = '/login'; return; }
+
+            const cachedCalendar = readCalendarCache(user.id);
+            if (cachedCalendar) {
+                setMyEpisodes(cachedCalendar.myEpisodes || []);
+                setGlobalEpisodes(cachedCalendar.globalEpisodes || []);
+                setLoading(false);
+                return;
+            }
 
       const p2 = supabase.from('watchlist').select('show_id').eq('user_id', user.id);
             const [lRes] = await Promise.all([p2]);
@@ -90,7 +124,9 @@ export default function CalendarPage() {
                 const sortFn = (a: any, b: any) => new Date(a.next_episode_to_air.air_date).getTime() - new Date(b.next_episode_to_air.air_date).getTime();
 
                 setMyEpisodes(myUpcoming.sort(sortFn));
-                setGlobalEpisodes([...waitingUpcoming.sort(sortFn), ...trending.sort(sortFn)]);
+                const nextGlobalEpisodes = [...waitingUpcoming.sort(sortFn), ...trending.sort(sortFn)];
+                setGlobalEpisodes(nextGlobalEpisodes);
+                writeCalendarCache(user.id, myUpcoming, nextGlobalEpisodes);
                 setLoading(false);
                 return;
       }
@@ -103,7 +139,9 @@ export default function CalendarPage() {
       const sortFn = (a: any, b: any) => new Date(a.next_episode_to_air.air_date).getTime() - new Date(b.next_episode_to_air.air_date).getTime();
 
       setMyEpisodes(myUpcoming.sort(sortFn));
-    setGlobalEpisodes(trending.sort(sortFn));
+            const nextGlobalEpisodes = trending.sort(sortFn);
+            setGlobalEpisodes(nextGlobalEpisodes);
+            writeCalendarCache(user.id, myUpcoming, nextGlobalEpisodes);
       setLoading(false);
     };
 
