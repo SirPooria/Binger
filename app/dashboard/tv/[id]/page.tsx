@@ -16,7 +16,7 @@ import confetti from 'canvas-confetti';
 
 // --- اسکلت لودینگ (Skeleton Loader) ---
 const SkeletonPage = () => (
-  <div className="min-h-screen bg-[#050505] animate-pulse pb-20 overflow-hidden pt-20">
+  <div className="min-h-screen bg-[#050505] animate-pulse pb-20 overflow-hidden">
     <div className="relative w-full h-[65vh] md:h-[75vh] bg-white/5">
       <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent"></div>
       <div className="absolute bottom-0 right-0 w-full md:w-2/3 p-6 md:p-12 flex flex-col items-start gap-4 pb-20">

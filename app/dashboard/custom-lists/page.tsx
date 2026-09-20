@@ -292,7 +292,7 @@ export default function CustomListsPage() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 pt-24 md:pt-28">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
 
         {/* هدر بالای صفحه */}

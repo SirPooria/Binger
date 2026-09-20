@@ -17,6 +17,7 @@ export interface Database {
           full_name: string | null
           avatar_url: string | null
           website: string | null
+          is_vip: boolean | null
         }
         Insert: {
           id: string
@@ -25,6 +26,7 @@ export interface Database {
           full_name?: string | null
           avatar_url?: string | null
           website?: string | null
+          is_vip?: boolean | null
         }
         Update: {
           id?: string
@@ -33,6 +35,7 @@ export interface Database {
           full_name?: string | null
           avatar_url?: string | null
           website?: string | null
+          is_vip?: boolean | null
         }
       }
       comments: {
@@ -156,6 +159,14 @@ export interface Database {
           email: string
           score: number
         }[]
+      }
+      get_mood_ai_status: {
+        Args: Record<string, never>
+        Returns: { is_vip: boolean; remaining: number | null }
+      }
+      consume_mood_ai_credit: {
+        Args: Record<string, never>
+        Returns: { allowed: boolean; is_vip: boolean; remaining: number | null }
       }
     }
   }

@@ -17,7 +17,7 @@ import {
 
 // --- SKELETON LOADER ---
 const DashboardSkeleton = () => (
-  <div className="w-full min-h-screen bg-[#050505] p-6 space-y-10 animate-pulse pt-24">
+    <div className="w-full min-h-screen bg-[#050505] p-6 space-y-10 animate-pulse">
      <div className="w-full h-[30vh] bg-white/5 rounded-3xl relative overflow-hidden" />
      {[1, 2].map((i) => (
          <div key={i} className="space-y-4">
@@ -212,10 +212,10 @@ function DashboardContent() {
   };
 
   if (loading) return <DashboardSkeleton />;
-  if (errorMsg) return <div className="h-full flex flex-col items-center justify-center text-red-500 gap-4 pt-20"><AlertTriangle size={48} /><p>{errorMsg}</p></div>;
+    if (errorMsg) return <div className="h-full flex flex-col items-center justify-center text-red-500 gap-4"><AlertTriangle size={48} /><p>{errorMsg}</p></div>;
 
   return (
-    <div className="animate-in fade-in duration-700 relative w-full overflow-hidden flex flex-col min-h-screen bg-[#050505] pt-24 md:pt-32">
+    <div className="animate-in fade-in duration-700 relative w-full overflow-hidden flex flex-col min-h-screen bg-[#050505]">
         
         {toastMsg && (
             <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[200] bg-[#ccff00] text-black px-6 py-3 rounded-full font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5">

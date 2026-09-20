@@ -160,7 +160,7 @@ export default function LeaderboardPage() {
   const restUsers = leaderboard.slice(3);
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pt-24 md:pt-28 pb-32">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-32">
       <div className="max-w-4xl mx-auto">
 
         {/* هدر بالای صفحه */}

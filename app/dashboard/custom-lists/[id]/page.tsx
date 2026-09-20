@@ -142,7 +142,7 @@ export default function SingleListPage() {
   // اگر لیست خصوصی بود و متعلق به کاربر جاری نبود
   if (isPrivateDenied) {
     return (
-      <div dir="rtl" className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 pt-28">
+      <div dir="rtl" className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4">
         <div className="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-md text-center">
           <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mx-auto mb-4 text-gray-400">
             <Lock size={32} />
@@ -165,7 +165,7 @@ export default function SingleListPage() {
   // اگر لیست پیدا نشد
   if (!list) {
     return (
-      <div dir="rtl" className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 pt-28">
+      <div dir="rtl" className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4">
         <div className="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-md text-center">
           <h2 className="text-xl font-black mb-2">لیست پیدا نشد</h2>
           <p className="text-xs text-gray-400 mb-6">
@@ -183,7 +183,7 @@ export default function SingleListPage() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 pt-24 md:pt-28">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
 
         {/* هدر بالای صفحه */}

@@ -537,7 +537,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </header>
 
-      <main className="flex-1 w-full relative">
+      <main className="flex-1 w-full relative pt-24 pb-20 md:pb-0">
         {children}
       </main>
 

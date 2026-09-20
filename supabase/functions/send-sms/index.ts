@@ -7,6 +7,10 @@ declare const Deno: {
   serve(handler: (request: Request) => Response | Promise<Response>): void
 }
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<unknown>): void
+}
+
 const MELIPAYAMAK_URL =
   'https://api.payamak-panel.com/post/Send.asmx/SendByBaseNumber2'
 
@@ -53,24 +57,35 @@ Deno.serve(async (request) => {
       bodyId,
     })
 
-    const response = await fetch(`${MELIPAYAMAK_URL}?${params.toString()}`, {
-      method: 'GET',
-      redirect: 'error',
-    })
-    const rawResult = (await response.text()).trim()
-    const result = rawResult
-      .replace(/<[^>]*>/g, '')
-      .trim()
-      .replace(/^['"]|['"]$/g, '')
+    // ارسال پیامک در پس‌زمینه بدون مسدود کردن سوپابیس
+    const sendSmsTask = (async () => {
+      try {
+        const response = await fetch(`${MELIPAYAMAK_URL}?${params.toString()}`, {
+          method: 'GET',
+          redirect: 'error',
+        })
+        const rawResult = (await response.text()).trim()
+        const result = rawResult
+          .replace(/<[^>]*>/g, '')
+          .trim()
+          .replace(/^['"]|['"]$/g, '')
 
-    if (!response.ok || !/^\d+$/.test(result) || result.startsWith('-')) {
-      console.error('Mellipayamak rejected SMS:', result)
-      return jsonResponse(
-        { error: `SMS provider rejected the message: ${result || rawResult}` },
-        502,
-      )
+        if (!response.ok || !/^\d+$/.test(result) || result.startsWith('-')) {
+          console.error('Mellipayamak rejected SMS:', result)
+        } else {
+          console.log('Mellipayamak SMS sent successfully, ID:', result)
+        }
+      } catch (err) {
+        console.error('Mellipayamak fetch failed in background:', err)
+      }
+    })()
+
+    // به سوپابیس اطلاع می‌دهیم که تسک را در پس‌زمینه زنده نگه دارد
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      EdgeRuntime.waitUntil(sendSmsTask)
     }
 
+    // پاسخ فوری ۲۰۰ به سوپابیس در کمتر از ۳۰ میلی‌ثانیه
     return jsonResponse({})
   } catch (error) {
     console.error('Send SMS hook failed:', error)

@@ -258,7 +258,7 @@ export default function MyListsPage() {
   const endedCompletedCount = shows.filter(show => watchedStatus[show.id]?.isEnded).length;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20 pt-28 md:pt-32">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20">
       
       <div className="flex items-center gap-4 mb-8">
         <button onClick={() => router.back()} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all cursor-pointer">

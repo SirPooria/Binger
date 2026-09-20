@@ -158,14 +158,14 @@ export default function CalendarPage() {
 
   if (loading) {
     return (
-        <div className="min-h-screen bg-[#050505] flex justify-center items-center pt-20 text-[#ccff00]">
+        <div className="min-h-screen bg-[#050505] flex justify-center items-center text-[#ccff00]">
             <Loader2 className="animate-spin" size={40} />
         </div>
     );
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20 pt-28 md:pt-32">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20">
       
       {/* MODAL */}
       {selectedEpData && (

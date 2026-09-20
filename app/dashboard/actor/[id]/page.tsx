@@ -62,7 +62,7 @@ export default function ActorPage() {
   const birthDate = actor.birthday ? new Date(actor.birthday).toLocaleDateString('fa-IR') : null;
 
   return (
-    <main dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-20 pt-24">
+    <main dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-20">
       <div className="max-w-7xl mx-auto px-4 md:px-8">
         <button
           onClick={() => router.back()}

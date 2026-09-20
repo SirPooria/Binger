@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Zap, X, Cpu, Star, HelpCircle, ArrowRight, RotateCcw } from 'lucide-react';
+import { Send, Bot, User, Loader2, Zap, X, Cpu, Star, HelpCircle, ArrowRight, RotateCcw, Crown } from 'lucide-react';
 import { getImageUrl, searchShows, getPopularShows, getShowDetails } from '@/lib/tmdbClient'; 
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
@@ -32,6 +32,9 @@ export default function MoodChatPage() {
   const [loading, setLoading] = useState(false);
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
   const [watchedNames, setWatchedNames] = useState<string[]>([]);
+  const [isVip, setIsVip] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(true);
 
   // ۱. خواندن تاریخچه چت‌های قبلی از حافظه کاربر
   useEffect(() => {
@@ -40,12 +43,27 @@ export default function MoodChatPage() {
       if (savedChat) {
         const parsed = JSON.parse(savedChat);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
+          const legacyFallback = 'متوجه حال و هوات شدم! ارتباط سرور کمی تاخیر داشت، اما این چند تا سریال منتخب که با سلیقه‌ت جور درمیاد رو ببین:';
+          setMessages(parsed.filter((message) => message.text !== legacyFallback));
         }
       }
     } catch (e) {
       console.error('خطا در خواندن تاریخچه چت:', e);
     }
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/mood')
+      .then(async (response) => {
+        if (!response.ok) throw new Error('quota status unavailable');
+        return response.json();
+      })
+      .then((data) => {
+        setIsVip(data.is_vip === true);
+        setRemaining(typeof data.remaining === 'number' ? data.remaining : null);
+      })
+      .catch(() => {})
+      .finally(() => setQuotaLoading(false));
   }, []);
 
   // ۲. اسکرول خودکار به آخرین پیام
@@ -156,11 +174,24 @@ export default function MoodChatPage() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('خطا در پاسخ هوش مصنوعی');
-      }
-
       const data = await response.json();
+      if (!response.ok) {
+        if (response.status === 429) {
+          setRemaining(0);
+          const limitMessage = {
+            role: 'bot',
+            text: 'امشب فقط یک بار می‌تونی از پیشنهاد هوشمند استفاده کنی. برای گرفتن پیشنهادهای بیشتر و گفت‌وگوی نامحدود با دستیار سینمایی، اشتراک VIP تهیه کن.',
+            showSubscriptionCta: true,
+          };
+          const limitedMessages = [...newMessages, limitMessage];
+          setMessages(limitedMessages);
+          localStorage.setItem('binger_mood_chat_history', JSON.stringify(limitedMessages));
+          return;
+        }
+        throw new Error(data.error || 'خطا در پاسخ هوش مصنوعی');
+      }
+      setIsVip(data.isVip === true);
+      setRemaining(typeof data.remaining === 'number' ? data.remaining : null);
       const botText = data.reply || 'این گزینه‌ها متناسب با حس و حالتن:';
       const recommendedTitles: string[] = data.recommended_titles || [];
 
@@ -222,7 +253,7 @@ export default function MoodChatPage() {
   };
 
   return (
-    <div dir="rtl" className="h-[100dvh] w-full bg-[#050505] text-white font-['Vazirmatn'] flex flex-col pb-20 md:pb-0 relative overflow-hidden pt-20 transition-colors duration-1000">
+    <div dir="rtl" className="min-h-[calc(100dvh-6rem)] w-full bg-[#050505] text-white font-['Vazirmatn'] flex flex-col relative overflow-hidden transition-colors duration-1000">
       
       {/* نور سینمایی پس‌زمینه */}
       <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-[#ccff00]/10 via-transparent to-purple-950/20 blur-[130px] opacity-40 pointer-events-none"></div>
@@ -316,6 +347,13 @@ export default function MoodChatPage() {
         </div>
       </header>
 
+      <div className="relative z-20 flex justify-center px-4 pt-3">
+        <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] ${isVip ? 'border-amber-400/30 bg-amber-400/10 text-amber-300' : 'border-white/10 bg-white/5 text-gray-400'}`}>
+          {isVip ? <Crown size={13} className="text-amber-300" /> : <Zap size={13} className="text-[#ccff00]" />}
+          {quotaLoading ? 'در حال بررسی دسترسی...' : isVip ? 'VIP · گفت‌وگوی نامحدود' : `نسخه امشب · ${remaining === 0 ? 'سهمیه امروز استفاده شده' : '۱ پیشنهاد هوشمند در روز'}`}
+        </div>
+      </div>
+
       {/* بخش چت و پیام‌ها */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth z-10 no-scrollbar">
         {messages.map((msg, idx) => (
@@ -326,6 +364,14 @@ export default function MoodChatPage() {
             <div className={`flex flex-col gap-3 max-w-[85%] min-w-0 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div className={`p-3.5 rounded-2xl text-sm leading-relaxed shadow-lg whitespace-pre-wrap ${msg.role === 'user' ? 'bg-[#1e1e1e] text-white rounded-tr-none border border-white/5' : 'bg-[#121212] border border-white/10 text-gray-200 rounded-tl-none'}`}>
                 {msg.text}
+                {msg.showSubscriptionCta && (
+                  <button
+                    onClick={() => router.push('/dashboard/subscription')}
+                    className="mt-4 w-full rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 px-4 py-2.5 text-xs font-black text-black shadow-[0_0_20px_rgba(245,158,11,0.25)] transition-transform hover:scale-[1.02]"
+                  >
+                    خرید اشتراک VIP
+                  </button>
+                )}
               </div>
               
               {/* کاروسل افقی پوسترها */}

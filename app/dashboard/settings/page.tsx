@@ -162,7 +162,7 @@ export default function SettingsPage() {
       const cleanUsername = username.trim();
       const cleanPhone = phone.trim();
       const cleanEmail = email.trim();
-      const cleanBio = bio.trim();
+      const cleanBio = bio.trim().slice(0, 120);
 
       // ذخیره در جدول profiles
       const profilePayload: any = {
@@ -220,7 +220,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 pt-24 md:pt-28 flex justify-center items-start">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 flex justify-center items-start">
       <div className="w-full max-w-2xl">
 
         {/* دکمه بازگشت به پروفایل */}
@@ -381,10 +381,12 @@ export default function SettingsPage() {
                   <textarea
                     rows={3}
                     value={bio}
-                    onChange={(e) => setBio(e.target.value)}
+                    maxLength={120}
+                    onChange={(e) => setBio(e.target.value.slice(0, 120))}
                     placeholder="مثلاً: عاشق سینمای نولان و سیت‌کام‌های کلاسیک..."
                     className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl p-3.5 text-white placeholder-gray-600 focus:border-[#ccff00] focus:outline-none transition-colors text-sm resize-none leading-relaxed"
                   />
+                  <div className="mt-1 text-left text-[10px] text-gray-500">{bio.length}/۱۲۰</div>
                 </div>
 
               </div>

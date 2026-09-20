@@ -96,7 +96,7 @@ export default function ExploreListsPage() {
   };
 
   return (
-    <main dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20 pt-36 md:pt-40">
+    <main dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20">
       <div className="max-w-6xl mx-auto">
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-5 mb-8">
           <div className="flex items-center gap-4">

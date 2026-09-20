@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
       const cachePayload: any = {
-        profileInfo: { username: '', bio: '', avatar_url: '😎' },
+        profileInfo: { username: '', bio: '', avatar_url: '😎', is_vip: false },
         timeStats: { months: 0, days: 0, hours: 0 },
         totalEpisodes: 0,
         socialStats: { followers: 0, following: 0, comments: 0 },
@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { 
   Loader2, Zap, MessageSquare, Heart, 
   Plus, Award, X, Clock, Play, User as UserIcon, 
-  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers
+  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck
 } from 'lucide-react';
 
 // --- لیست نهایی ۳۵ اچیومنت رسمی بینجر ---
@@ -71,7 +71,7 @@ const ALL_ACHIEVEMENTS = [
 ];
 
 const PROFILE_CACHE_TTL = 5 * 60 * 1000;
-const getProfileCacheKey = (userId: string) => `binger-profile-cache:${userId}`;
+const getProfileCacheKey = (userId: string) => `binger-profile-cache:v2:${userId}`;
 
 const readProfileCache = (userId: string) => {
   try {
@@ -97,7 +97,7 @@ export default function ProfilePage() {
   const router = useRouter();
   
   const [user, setUser] = useState<any>(null);
-  const [profileInfo, setProfileInfo] = useState({ username: '', bio: '', avatar_url: '😎' });
+  const [profileInfo, setProfileInfo] = useState({ username: '', bio: '', avatar_url: '😎', is_vip: false });
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   
@@ -139,7 +139,7 @@ export default function ProfilePage() {
       if (!currentUser || cancelled) return;
 
       const [profileRes, followersRes, followingRes, commentsRes, listsRes, savedRowsRes] = await Promise.all([
-        supabase.from('profiles').select('username, bio, avatar_url').eq('id', currentUser.id).single(),
+        supabase.from('profiles').select('*').eq('id', currentUser.id).single(),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', currentUser.id),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', currentUser.id),
         supabase.from('comments').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id),
@@ -153,6 +153,7 @@ export default function ProfilePage() {
           username: profileRes.data.username || '',
           bio: profileRes.data.bio || '',
           avatar_url: profileRes.data.avatar_url || currentUser.user_metadata?.avatar_url || '😎',
+          is_vip: profileRes.data.is_vip === true,
         });
       }
       setSocialStats({ followers: followersRes.count || 0, following: followingRes.count || 0, comments: commentsRes.count || 0 });
@@ -199,7 +200,7 @@ export default function ProfilePage() {
         // ۱. واکشی اطلاعات پروفایل (نام کاربری و بیو)
         const { data: profileData } = await supabase
               .from('profiles')
-              .select('username, bio, avatar_url')
+              .select('*')
               .eq('id', user.id)
               .single();
               
@@ -207,7 +208,8 @@ export default function ProfilePage() {
               const nextProfileInfo = {
                   username: profileData.username || '',
                   bio: profileData.bio || '',
-                  avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎'
+                  avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎',
+                  is_vip: profileData.is_vip === true,
               };
               cachePayload.profileInfo = nextProfileInfo;
               setProfileInfo(nextProfileInfo);
@@ -677,18 +679,50 @@ export default function ProfilePage() {
 
           <div className="absolute bottom-0 w-full px-6 pb-6 flex flex-col items-center z-20 translate-y-8">
             <div className="relative group cursor-pointer">
-              <button onClick={handleEasterEggClick} className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden relative z-10 cursor-pointer" title="آواتار پروفایل">{profileInfo.avatar_url || '😎'}</button>
-              <div className="absolute inset-0 bg-[#ccff00] blur-2xl opacity-20 rounded-full group-hover:opacity-40 transition-opacity"></div>
+              {/* قاب طلایی درخشان دور آواتار مخصوص کاربر VIP */}
+              <div className={`rounded-full transition-all relative z-10 ${
+                ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
+                  ? 'p-1 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 shadow-[0_0_35px_rgba(245,158,11,0.6)]'
+                  : 'p-0'
+              }`}>
+                <button 
+                  onClick={handleEasterEggClick} 
+                  className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden cursor-pointer" 
+                  title="آواتار پروفایل"
+                >
+                  {profileInfo.avatar_url || '😎'}
+                </button>
+              </div>
+
+              {/* هاله نور پس‌زمینه (طلایی درخشان برای VIP و سبز نئونی برای عادی) */}
+              <div className={`absolute inset-0 blur-2xl rounded-full transition-opacity ${
+                ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
+                  ? 'bg-amber-400 opacity-40 group-hover:opacity-70'
+                  : 'bg-[#ccff00] opacity-20 group-hover:opacity-40'
+              }`}></div>
             </div>
             
             {/* نمایش نام کاربری و بیو */}
-            <h1 className="text-2xl md:text-3xl font-black mt-4 ltr tracking-tight text-white">
-              {profileInfo.username || user?.phone || user?.email?.split('@')[0] || 'کاربر بینجر'}
-            </h1>
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <h1 className={`text-2xl md:text-3xl font-black ltr tracking-tight ${
+                ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
+                  ? 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]'
+                  : 'text-white'
+              }`}>
+                {profileInfo.username || user?.phone || user?.email?.split('@')[0] || 'کاربر بینجر'}
+              </h1>
+
+              {/* تیک آبی مخصوص کاربر VIP */}
+              {((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin') && (
+                <span title="حساب تایید شده VIP" className="inline-flex items-center text-sky-400">
+                  <BadgeCheck size={24} className="fill-sky-400 text-white drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
+                </span>
+              )}
+            </div>
             
             {profileInfo.bio && (
-              <p className="text-sm text-gray-400 mt-2 max-w-md text-center leading-relaxed px-4">
-                {profileInfo.bio}
+              <p className="text-sm text-gray-400 mt-2 max-w-md max-h-12 overflow-hidden text-center leading-relaxed px-4 line-clamp-2">
+                {profileInfo.bio.slice(0, 120)}
               </p>
             )}
             

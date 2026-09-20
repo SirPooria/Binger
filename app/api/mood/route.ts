@@ -1,4 +1,22 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabaseServer';
+
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'برای استفاده از دستیار وارد شوید' }, { status: 401 });
+  }
+
+  const { data, error } = await supabase.rpc('get_mood_ai_status');
+  if (error) {
+    console.error('Mood AI status error:', error);
+    return NextResponse.json({ error: 'وضعیت سهمیه در دسترس نیست' }, { status: 500 });
+  }
+
+  return NextResponse.json(data);
+}
 
 export async function POST(req: Request) {
   try {
@@ -11,6 +29,25 @@ export async function POST(req: Request) {
     const apiKey = process.env.GROQ_API_KEY?.trim();
     if (!apiKey) {
       return NextResponse.json({ error: 'کلید Groq تنظیم نشده است' }, { status: 500 });
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'برای استفاده از دستیار وارد شوید' }, { status: 401 });
+    }
+
+    const { data: quotaData, error: quotaError } = await supabase.rpc('consume_mood_ai_credit');
+    const quota = quotaData as { allowed: boolean; is_vip: boolean; remaining: number | null } | null;
+    if (quotaError) {
+      console.error('Mood AI quota error:', quotaError);
+      return NextResponse.json({ error: 'سهمیه دستیار در دسترس نیست' }, { status: 500 });
+    }
+    if (!quota?.allowed) {
+      return NextResponse.json({
+        error: 'سهمیه امروزت استفاده شده؛ برای گفت‌وگوی نامحدود به VIP ارتقا بده.',
+        remaining: 0,
+      }, { status: 429 });
     }
 
     // دستورالعمل تخصصی و سینمایی با الزام به ساختار json
@@ -80,7 +117,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       reply: parsed.reply || 'این چند تا گزینه دقیقاً متناسب با سلیقه و مودِ الانتن:',
-      recommended_titles: parsed.recommended_titles || []
+      recommended_titles: parsed.recommended_titles || [],
+      isVip: quota.is_vip,
+      remaining: quota.remaining,
     });
 
   } catch (error: any) {
