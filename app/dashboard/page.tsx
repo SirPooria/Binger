@@ -1,519 +1,760 @@
 "use client";
 
-import React, { useEffect, useState, useRef, Suspense } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import CinematicIdentityCard from '@/app/dashboard/components/CinematicIdentityCard';
+import { getShowDetails, getSeasonDetails, getImageUrl } from '@/lib/tmdbClient';
+import { useRouter } from 'next/navigation';
 import { 
-  getTrendingShows, getImageUrl, getBackdropUrl, 
-  getShowDetails, getIranianShows, getNewestIranianShows,
-  getNewestGlobal, getRecommendations
-} from '@/lib/tmdbClient';
-import { 
-  AlertTriangle, Plus, Info, Check, Bookmark, 
-  Activity, ChevronLeft, ChevronRight, Twitter, Instagram, Sparkles,
-  Trash2, ArrowLeft, Flame, Star
+  Loader2, 
+  Calendar as CalIcon, 
+  Clock, 
+  CheckCircle, 
+  Check, 
+  Filter, 
+  PlayCircle, 
+  AlertCircle, 
+  Flame, 
+  ChevronUp 
 } from 'lucide-react';
+import EpisodeModal from './components/EpisodeModal';
 
-// --- SKELETON LOADER ---
-const DashboardSkeleton = () => (
-    <div className="w-full min-h-screen bg-[#050505] p-6 space-y-10 animate-pulse">
-     <div className="w-full h-[30vh] bg-white/5 rounded-3xl relative overflow-hidden" />
-     {[1, 2].map((i) => (
-         <div key={i} className="space-y-4">
-             <div className="w-48 h-6 bg-white/10 rounded-lg"></div>
-             <div className="flex gap-4 overflow-hidden">
-               {[1, 2, 3, 4, 5].map((j) => (
-                     <div key={j} className="w-40 h-60 bg-white/5 rounded-2xl shrink-0"></div>
-                 ))}
-             </div>
-         </div>
-     ))}
-  </div>
-);
-
-export default function Dashboard() {
-  return (
-    <Suspense fallback={<DashboardSkeleton />}>
-       <DashboardContent />
-    </Suspense>
-  );
-}
-
-function DashboardContent() {
-  const supabase = createClient();
+export default function DashboardMainPage() {
   const router = useRouter();
+  const supabase = createClient() as any;
+
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
-  
-  // States برای مدیریت دیتا و Onboarding
-  const [watchlistIds, setWatchlistIds] = useState<Set<number>>(new Set());
-  const [watchedIds, setWatchedIds] = useState<number[]>([]);
-  const [allShowIds, setAllShowIds] = useState<number[]>([]);
-  
-  const [myFeed, setMyFeed] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any>({});
-  const [aiRecs, setAiRecs] = useState<any[]>([]);
-  const [aiSourceShow, setAiSourceShow] = useState<string | null>(null); 
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
-  // --- Main Data Logic ---
-  useEffect(() => {
-    const initData = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { 
-            router.replace('/login'); 
-            return; 
+  // سوییچ بین حالت ترکر (ادامه تماشا) و تقویم پخش
+  const [isCalendarMode, setIsCalendarMode] = useState<boolean>(false);
+
+  // فیلتر تقویم: همه سریال‌ها / فقط سریال‌های تماشا شده
+  const [calendarFilter, setCalendarFilter] = useState<'all_my' | 'watched_only'>('all_my');
+  const [showFilterDropdown, setShowFilterDropdown] = useState<boolean>(false);
+
+  // بازه روزهای گذشته برای تقویم
+  const [pastDaysLimit, setPastDaysLimit] = useState<number>(7);
+
+  // دیتای سریال‌ها و قسمت‌های دیده شده
+  const [trackedShows, setTrackedShows] = useState<any[]>([]);
+  const [watchedRecords, setWatchedRecords] = useState<any[]>([]);
+  const [seasonEpisodesMap, setSeasonEpisodesMap] = useState<Record<string, any[]>>({});
+
+  // انیمیشن خروج کارت هنگام ثبت تماشا
+  const [animatingCardId, setAnimatingCardId] = useState<number | null>(null);
+
+  // مودال جزئیات قسمت
+  const [selectedEpData, setSelectedEpData] = useState<any>(null);
+
+  // ۱. واکشی اطلاعات پایه کاربر
+  const loadUserData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = '/login';
+        return;
+      }
+      setCurrentUser(user);
+
+      // خواندن واچ‌لیست
+      const { data: watchlistData } = await supabase
+        .from('watchlist')
+        .select('show_id')
+        .eq('user_id', user.id);
+
+      // خواندن تماشا شده‌ها
+      const allWatched: any[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('watched')
+          .select('show_id, episode_id')
+          .eq('user_id', user.id)
+          .range(page * 1000, (page + 1) * 1000 - 1);
+
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allWatched.push(...data);
+          hasMore = data.length === 1000;
+          page++;
         }
-        setUser(user);
+      }
 
-       // ۱. دریافت دیتای کاربر از دیتابیس
-        const { data: wList } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
+      setWatchedRecords(allWatched);
 
-        // دریافت نامحدود برای محاسبه دقیق ادامه تماشا
-        let allWatchedRows: any[] = [];
-        let page = 0;
-        let hasMore = true;
+      const watchedShowIds = new Set<number>(allWatched.map(w => Number(w.show_id)));
+      const watchlistShowIds = new Set<number>((watchlistData || []).map((w: any) => Number(w.show_id)));
+      const allShowIds = Array.from(new Set([...watchedShowIds, ...watchlistShowIds]));
 
-        while (hasMore) {
-          const { data } = await supabase
-            .from('watched')
-            .select('show_id')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .range(page * 1000, (page + 1) * 1000 - 1);
+      // دریافت مشخصات سریال‌ها از TMDB
+      const showsDetails: any[] = [];
+      const batchSize = 6;
+      for (let i = 0; i < allShowIds.length; i += batchSize) {
+        const chunk = allShowIds.slice(i, i + batchSize);
+        const chunkData = await Promise.all(
+          chunk.map(async (id) => {
+            const show = await getShowDetails(String(id));
+            return show ? { ...show, hasWatched: watchedShowIds.has(Number(id)) } : null;
+          })
+        );
+        showsDetails.push(...chunkData.filter(Boolean));
+      }
 
-          if (!data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allWatchedRows = [...allWatchedRows, ...data];
-            if (data.length < 1000) {
-              hasMore = false;
-            } else {
-              page++;
+      setTrackedShows(showsDetails);
+
+      // واکشی فصل‌های جاری و فصول جدید
+      const seasonCache: Record<string, any[]> = {};
+      await Promise.all(
+        showsDetails.map(async (show) => {
+          const showWatchedCount = allWatched.filter(w => Number(w.show_id) === Number(show.id)).length;
+          const validSeasons = (show.seasons || [])
+            .filter((s: any) => s && s.season_number > 0)
+            .sort((a: any, b: any) => a.season_number - b.season_number);
+
+          let cumulative = 0;
+          let targetSeason = 1;
+          for (const s of validSeasons) {
+            const count = s.episode_count || 0;
+            if (showWatchedCount < cumulative + count) {
+              targetSeason = s.season_number;
+              break;
             }
+            cumulative += count;
+          }
+
+          const seasonsToFetch = new Set<number>();
+          seasonsToFetch.add(targetSeason);
+          if (show.next_episode_to_air?.season_number) {
+            seasonsToFetch.add(show.next_episode_to_air.season_number);
+          }
+          if (show.last_episode_to_air?.season_number) {
+            seasonsToFetch.add(show.last_episode_to_air.season_number);
+          }
+
+          await Promise.all(
+            Array.from(seasonsToFetch).map(async (sNum) => {
+              try {
+                const sData = await getSeasonDetails(String(show.id), sNum);
+                if (sData?.episodes) {
+                  seasonCache[`${show.id}_${sNum}`] = sData.episodes;
+                }
+              } catch {}
+            })
+          );
+        })
+      );
+
+      setSeasonEpisodesMap(seasonCache);
+      setLoading(false);
+    } catch (err) {
+      console.error("Error loading tracker data:", err);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  // دانلود خودکار فصل‌های بعدی به محض تغییر وضعیت تماشا
+  useEffect(() => {
+    if (!trackedShows.length) return;
+    trackedShows.forEach(async (show) => {
+      const showWatched = watchedRecords.filter(w => Number(w.show_id) === Number(show.id));
+      const validSeasons = (show.seasons || [])
+        .filter((s: any) => s && s.season_number > 0)
+        .sort((a: any, b: any) => a.season_number - b.season_number);
+
+      let cumulative = 0;
+      let targetSeason = 1;
+      for (const s of validSeasons) {
+        const count = s.episode_count || 0;
+        if (showWatched < cumulative + count) {
+          targetSeason = s.season_number;
+          break;
+        }
+        cumulative += count;
+      }
+
+      const cacheKey = `${show.id}_${targetSeason}`;
+      if (!seasonEpisodesMap[cacheKey]) {
+        try {
+          const sData = await getSeasonDetails(String(show.id), targetSeason);
+          if (sData?.episodes) {
+            setSeasonEpisodesMap(prev => ({ ...prev, [cacheKey]: sData.episodes }));
+          }
+        } catch {}
+      }
+    });
+  }, [watchedRecords, trackedShows]);
+
+  // ثبت یا حذف تماشا در سوپابیس
+  const handleToggleWatched = async (
+    e: React.MouseEvent,
+    showId: number,
+    episodeId: number,
+    isAlreadyWatched: boolean
+  ) => {
+    e.stopPropagation();
+    if (!currentUser || !episodeId) return;
+
+    if (isAlreadyWatched) {
+      const { error } = await supabase
+        .from('watched')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('show_id', Number(showId))
+        .eq('episode_id', Number(episodeId));
+
+      if (!error) {
+        setWatchedRecords(prev => prev.filter(w => Number(w.episode_id) !== Number(episodeId)));
+      }
+    } else {
+      setAnimatingCardId(showId);
+
+      setTimeout(async () => {
+        const { error } = await supabase
+          .from('watched')
+          .upsert([{
+            user_id: currentUser.id,
+            show_id: Number(showId),
+            episode_id: Number(episodeId)
+          }], { onConflict: 'user_id, episode_id' });
+
+        if (!error) {
+          setWatchedRecords(prev => [...prev, { show_id: Number(showId), episode_id: Number(episodeId) }]);
+        }
+        setAnimatingCardId(null);
+      }, 300);
+    }
+  };
+
+  // ۲. لیست ادامه تماشا (Watch Next)
+  const watchNextList = useMemo(() => {
+    const list: any[] = [];
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    trackedShows.forEach(show => {
+      if (!show) return;
+
+      const showWatched = watchedRecords.filter(w => Number(w.show_id) === Number(show.id));
+      const validSeasons = (show.seasons || [])
+        .filter((s: any) => s && s.season_number > 0)
+        .sort((a: any, b: any) => a.season_number - b.season_number);
+
+      let totalEpisodesCount = 0;
+      validSeasons.forEach((s: any) => {
+        totalEpisodesCount += (s.episode_count || 0);
+      });
+
+      let cumulative = 0;
+      let targetSeason = 1;
+      let targetEpisodeNum = 1;
+      let isCompleted = false;
+
+      if (showWatched.length >= totalEpisodesCount && totalEpisodesCount > 0) {
+        isCompleted = true;
+      } else {
+        for (const s of validSeasons) {
+          const count = s.episode_count || 0;
+          if (showWatched.length < cumulative + count) {
+            targetSeason = s.season_number;
+            targetEpisodeNum = showWatched.length - cumulative + 1;
+            break;
+          }
+          cumulative += count;
+        }
+      }
+
+      if (!isCompleted) {
+        const seasonEps = seasonEpisodesMap[`${show.id}_${targetSeason}`] || [];
+        const epData = seasonEps.find((e: any) => e.episode_number === targetEpisodeNum);
+
+        let finalEpId = epData?.id;
+        let epTitle = epData?.name || `قسمت ${targetEpisodeNum}`;
+        let epRuntime = epData?.runtime || show.episode_run_time?.[0] || 45;
+        let epAirDate = epData?.air_date;
+
+        if (!finalEpId) {
+          if (show.next_episode_to_air && show.next_episode_to_air.season_number === targetSeason && show.next_episode_to_air.episode_number === targetEpisodeNum) {
+            finalEpId = show.next_episode_to_air.id;
+            epTitle = show.next_episode_to_air.name || epTitle;
+            epAirDate = show.next_episode_to_air.air_date;
+          } else if (show.last_episode_to_air && show.last_episode_to_air.season_number === targetSeason && show.last_episode_to_air.episode_number === targetEpisodeNum) {
+            finalEpId = show.last_episode_to_air.id;
+            epTitle = show.last_episode_to_air.name || epTitle;
+            epAirDate = show.last_episode_to_air.air_date;
           }
         }
 
-        const watched = allWatchedRows;
+        const targetSeasonInfo = validSeasons.find((s: any) => s.season_number === targetSeason);
+        const seasonAlreadyAired = targetSeasonInfo?.air_date ? new Date(targetSeasonInfo.air_date) <= now : false;
 
-        const wIds = wList?.map((i: any) => i.show_id) || [];
-        const wEdIds = watched?.map((i: any) => i.show_id) || [];
-        
-        // تفکیک آیدی‌ها برای منطق‌های مختلف
-        const uniqueWatchedIds = Array.from(new Set(wEdIds));
-        const allUserShowIds = Array.from(new Set([...wIds, ...wEdIds]));
-        const allUserShowIdsSet = new Set(allUserShowIds); 
-        
-        // ذخیره استیت‌ها برای Onboarding Steps
-        setWatchlistIds(new Set(wIds));
-        setWatchedIds(uniqueWatchedIds);
-        setAllShowIds(allUserShowIds);
+        let isReleased = false;
+        let countdownBadge = "پخش‌نشده";
 
-        // ۲. منطق "ادامه تماشا"
-        if (uniqueWatchedIds.length > 0) {
-            const recentWatchedIds = uniqueWatchedIds.reverse().slice(0, 20);
-            
-            const myShowsRaw = await Promise.all(
-                recentWatchedIds.map(id => getShowDetails(String(id)).catch(() => null))
-            );
-            
-            const validShows = myShowsRaw.filter(s => s !== null);
-            const continueWatchingShows: any[] = [];
+        if (epAirDate) {
+          const airDateObj = new Date(epAirDate);
+          airDateObj.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-            validShows.forEach(show => {
-                const totalReleasedEps = show.seasons?.reduce((sum: number, season: any) => {
-                    if (season.season_number === 0) return sum;
-                    if (season.air_date && new Date(season.air_date) <= new Date()) {
-                        return sum + season.episode_count;
-                    }
-                    return sum;
-                }, 0) || 0;
-                
-                let watchedCount = wEdIds.filter((id: number) => id === show.id).length;
-                watchedCount = Math.min(watchedCount, totalReleasedEps);
-                
-                const percentage = totalReleasedEps > 0 ? Math.round((watchedCount / totalReleasedEps) * 100) : 0;
-                const isCompleted = percentage >= 100 && totalReleasedEps > 0;
-                const isEnded = show.status === 'Ended' || show.status === 'Canceled';
-
-                if (!(isCompleted && isEnded)) {
-                    continueWatchingShows.push(show);
-                }
-            });
-
-            setMyFeed(continueWatchingShows.slice(0, 10));
-
-            // ۳. منطق سیستم پیشنهاد دهنده هوشمند
-            const randomSeedId = uniqueWatchedIds[Math.floor(Math.random() * uniqueWatchedIds.length)];
-            
-            const [seedDetails, recs] = await Promise.all([
-                getShowDetails(String(randomSeedId)),
-                getRecommendations(randomSeedId)
-            ]);
-
-            if (recs && recs.length > 0) {
-                const filteredRecs = recs.filter((show: any) => !allUserShowIdsSet.has(show.id));
-                
-                if (filteredRecs.length > 0) {
-                    setAiRecs(filteredRecs);
-                    setAiSourceShow(seedDetails?.name || "سلیقه شما");
-                } else {
-                    setAiRecs([]);
-                }
-            }
+          if (diffDays <= 0) {
+            isReleased = true;
+          } else if (diffDays === 1) {
+            countdownBadge = "پخش: فردا";
+          } else if (diffDays <= 7) {
+            countdownBadge = `پخش: ${diffDays} روز دیگر`;
+          } else {
+            countdownBadge = `پخش: ${diffDays} روز دیگر`;
+          }
+        } else if (seasonAlreadyAired) {
+          isReleased = true;
         }
 
-        // ۴. دریافت دسته‌بندی‌های عمومی
-        const fetchSafely = async (fn: () => Promise<any>, fallback: any[]) => {
-            try { return await fn(); } catch (e) { return fallback; }
-        };
-
-        const [trend, global, popIr, newIr] = await Promise.all([
-            fetchSafely(getTrendingShows, []),
-            fetchSafely(getNewestGlobal, []),
-            fetchSafely(getIranianShows, []),
-            fetchSafely(getNewestIranianShows, [])
-        ]);
-
-        setCategories({
-            newIranian: newIr || [],
-            popularIranian: popIr || [],
-            trending: trend ? trend.slice(0, 10) : [],
-            newGlobal: global || [],
+        list.push({
+          show,
+          seasonNumber: targetSeason,
+          episodeNumber: targetEpisodeNum,
+          episodeId: finalEpId,
+          episodeTitle: epTitle,
+          runtime: epRuntime,
+          isReleased,
+          airDate: epAirDate,
+          countdownBadge,
+          watchedCount: showWatched.length,
+          totalEpisodes: totalEpisodesCount || show.number_of_episodes || 0,
         });
-      } catch (err: any) {
-          console.error(err);
-          setErrorMsg("خطا در بارگذاری.");
-      } finally {
-          setLoading(false);
       }
-    };
-    initData();
-  }, []);
+    });
 
-  const toggleWatchlist = async (showId: number) => {
-      const isAdded = watchlistIds.has(showId);
-      setWatchlistIds(prev => {
-          const next = new Set(prev);
-          if (isAdded) next.delete(showId);
-          else next.add(showId);
-          return next;
+    // آماده تماشا اول، منتظر پخش در انتها
+    list.sort((a, b) => {
+      if (a.isReleased && !b.isReleased) return -1;
+      if (!a.isReleased && b.isReleased) return 1;
+      return 0;
+    });
+
+    return list;
+  }, [trackedShows, watchedRecords, seasonEpisodesMap]);
+
+  // ۳. تقویم پیوسته بدون اسکرول مزاحم
+  const calendarGroups = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const allEpisodes: any[] = [];
+    const addedKeys = new Set<string>();
+
+    trackedShows.forEach(show => {
+      if (!show) return;
+
+      if (calendarFilter === 'watched_only' && !show.hasWatched) {
+        return;
+      }
+
+      const validSeasons = (show.seasons || []).filter((s: any) => s && s.season_number > 0);
+      validSeasons.forEach((season: any) => {
+        const seasonEps = seasonEpisodesMap[`${show.id}_${season.season_number}`] || [];
+        seasonEps.forEach((ep: any) => {
+          if (!ep || !ep.air_date) return;
+          const key = `${show.id}_${ep.id}`;
+          if (addedKeys.has(key)) return;
+
+          const airDate = new Date(ep.air_date);
+          airDate.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (diffDays >= -pastDaysLimit && diffDays <= 365) {
+            addedKeys.add(key);
+            allEpisodes.push({
+              show,
+              episode: ep,
+              airDate,
+              diffDays
+            });
+          }
+        });
       });
-      setToastMsg(isAdded ? "حذف شد 🗑️" : "اضافه شد ✅");
-      setTimeout(() => setToastMsg(null), 3000);
-      
-      if (user) {
-          if (isAdded) await supabase.from('watchlist').delete().eq('user_id', user.id).eq('show_id', showId);
-          else await supabase.from('watchlist').insert([{ user_id: user.id, show_id: showId }] as any);
-      }
-  };
 
-  if (loading) return <DashboardSkeleton />;
-    if (errorMsg) return <div className="h-full flex flex-col items-center justify-center text-red-500 gap-4"><AlertTriangle size={48} /><p>{errorMsg}</p></div>;
+      if (show.next_episode_to_air && show.next_episode_to_air.air_date) {
+        const ep = show.next_episode_to_air;
+        const key = `${show.id}_${ep.id}`;
+        if (!addedKeys.has(key)) {
+          const airDate = new Date(ep.air_date);
+          airDate.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays >= -pastDaysLimit && diffDays <= 365) {
+            addedKeys.add(key);
+            allEpisodes.push({ show, episode: ep, airDate, diffDays });
+          }
+        }
+      }
+    });
+
+    allEpisodes.sort((a, b) => a.airDate.getTime() - b.airDate.getTime());
+
+    const groups: { [key: string]: any[] } = {};
+
+    allEpisodes.forEach(item => {
+      const { diffDays, airDate } = item;
+      let label = "";
+      let badge = "";
+
+      if (diffDays < -1) {
+        label = airDate.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' });
+        badge = `${Math.abs(diffDays)} روز قبل`;
+      } else if (diffDays === -1) {
+        label = "دیروز (Yesterday)";
+        badge = "دیروز";
+      } else if (diffDays === 0) {
+        label = "امروز (Today)";
+        badge = "امروز! 🔥";
+      } else if (diffDays === 1) {
+        label = "فردا (Tomorrow)";
+        badge = "۱ روز دیگر";
+      } else if (diffDays <= 7) {
+        const dayName = airDate.toLocaleDateString('fa-IR', { weekday: 'long' });
+        label = dayName;
+        badge = `${diffDays} روز دیگر`;
+      } else {
+        label = "در آینده (Later)";
+        badge = `${diffDays} روز دیگر`;
+      }
+
+      if (!groups[label]) groups[label] = [];
+      groups[label].push({ ...item, badge });
+    });
+
+    return groups;
+  }, [trackedShows, calendarFilter, seasonEpisodesMap, pastDaysLimit]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex flex-col justify-center items-center gap-3 text-[#ccff00]">
+        <Loader2 className="animate-spin" size={42} />
+        <span className="text-sm font-medium text-gray-400">در حال بارگذاری Binger...</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-in fade-in duration-700 relative w-full overflow-hidden flex flex-col min-h-screen bg-[#050505]">
-        
-        {toastMsg && (
-            <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[200] bg-[#ccff00] text-black px-6 py-3 rounded-full font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5">
-                <Info size={20} /> {toastMsg}
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-28">
+      
+      {/* مودال اصلی جزئیات قسمت */}
+      {selectedEpData && (
+        <EpisodeModal 
+          showId={selectedEpData.showId}
+          seasonNum={selectedEpData.season}
+          episodeNum={selectedEpData.number}
+          onClose={() => setSelectedEpData(null)}
+          onWatchedChange={() => loadUserData()}
+        />
+      )}
+
+      {/* هدر فیکس و شیک بالای داشبورد اصلی */}
+      <header className="sticky top-0 z-50 bg-[#050505]/95 backdrop-blur-md border-b border-white/10 px-4 md:px-8 py-3.5 shadow-2xl">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          
+          <div className="flex items-center gap-3">
+            {isCalendarMode ? (
+              <div>
+                <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2">
+                  <CalIcon size={20} className="text-[#ccff00]" />
+                  تقویم پخش
+                </h1>
+                <p className="text-[11px] text-gray-400">از دیروز و امروز تا آینده</p>
+              </div>
+            ) : (
+              <div>
+                <h1 className="text-lg md:text-xl font-black text-white flex items-center gap-2">
+                  <PlayCircle size={22} className="text-[#ccff00]" />
+                  ادامه تماشا
+                </h1>
+                <p className="text-[11px] text-gray-400">قسمت‌های بعدی آماده برای دیدن</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 relative">
+            
+            {/* فیلتر در حالت تقویم */}
+            {isCalendarMode && (
+              <>
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-all cursor-pointer"
+                  title="فیلتر تقویم"
+                >
+                  <Filter size={17} />
+                </button>
+
+                {showFilterDropdown && (
+                  <div className="absolute left-0 top-12 w-56 bg-[#141414] border border-white/15 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
+                    <span className="text-xs text-gray-400 px-3 py-1.5 font-bold block">نمایش سریال‌ها:</span>
+                    <button
+                      onClick={() => { setCalendarFilter('all_my'); setShowFilterDropdown(false); }}
+                      className={`w-full text-right px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        calendarFilter === 'all_my' ? 'bg-[#ccff00] text-black' : 'text-gray-300 hover:bg-white/5'
+                      }`}
+                    >
+                      همه سریال‌های من
+                    </button>
+                    <button
+                      onClick={() => { setCalendarFilter('watched_only'); setShowFilterDropdown(false); }}
+                      className={`w-full text-right px-3 py-2 rounded-xl text-xs font-bold transition-all mt-1 cursor-pointer ${
+                        calendarFilter === 'watched_only' ? 'bg-[#ccff00] text-black' : 'text-gray-300 hover:bg-white/5'
+                      }`}
+                    >
+                      فقط سریال‌هایی که تماشا کردم
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* سوییچ تقویم */}
+            <button
+              onClick={() => setIsCalendarMode(!isCalendarMode)}
+              className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+                isCalendarMode 
+                  ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.3)]' 
+                  : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10 hover:text-white'
+              }`}
+              title={isCalendarMode ? "بازگشت به ادامه تماشا" : "مشاهده تقویم پخش"}
+            >
+              <CalIcon size={17} />
+            </button>
+
+          </div>
+        </div>
+      </header>
+
+      {/* بدنه محتوا */}
+      <main className="max-w-4xl mx-auto px-4 md:px-8 mt-5">
+
+        {/* ۱. حالت تقویم پخش */}
+        {isCalendarMode ? (
+          <div className="space-y-6">
+
+            {/* دکمه سبک برای مشاهده تاریخ‌های قدیمی‌تر در صورت نیاز */}
+            <div className="text-center pt-1 pb-2">
+              <button
+                onClick={() => setPastDaysLimit(prev => prev + 30)}
+                className="text-xs text-gray-500 hover:text-[#ccff00] transition-colors cursor-pointer inline-flex items-center gap-1.5 py-1 px-3 rounded-full hover:bg-white/5 border border-transparent hover:border-white/10"
+              >
+                <ChevronUp size={14} />
+                <span>مشاهده تاریخ‌های قدیمی‌تر در گذشته</span>
+              </button>
             </div>
+
+            {Object.keys(calendarGroups).length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center text-gray-500 gap-3 bg-white/5 rounded-3xl border border-white/5 border-dashed">
+                <AlertCircle size={44} strokeWidth={1.5} />
+                <p className="text-sm font-medium">قسمتی برای نمایش در این بازه پیدا نشد.</p>
+              </div>
+            ) : (
+              Object.entries(calendarGroups).map(([groupTitle, items]) => {
+                const isToday = groupTitle.includes("امروز");
+                const isYesterday = groupTitle.includes("دیروز");
+                const isFuture = groupTitle.includes("فردا") || groupTitle.includes("آینده") || items[0]?.diffDays > 0;
+
+                return (
+                  <div 
+                    key={groupTitle} 
+                    className={`space-y-2.5 ${
+                      isToday 
+                        ? 'bg-[#ccff00]/[0.03] p-3.5 rounded-3xl border border-[#ccff00]/25 shadow-[0_0_25px_rgba(204,255,0,0.06)]' 
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between border-b border-white/10 pb-1.5 px-1">
+                      <h2 className={`text-xs md:text-sm font-black flex items-center gap-2 ${
+                        isToday ? 'text-[#ccff00]' : isYesterday ? 'text-gray-300' : isFuture ? 'text-white' : 'text-gray-500'
+                      }`}>
+                        {isToday ? <Flame size={16} className="text-[#ccff00]" /> : <Clock size={14} className={isFuture ? 'text-[#ccff00]' : 'text-gray-500'} />}
+                        {groupTitle}
+                      </h2>
+                      <span className="text-[11px] text-gray-500 font-mono">
+                        {items.length} قسمت
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {items.map((entry: any) => {
+                        const { show, episode, badge, diffDays } = entry;
+                        const isWatched = watchedRecords.some(w => Number(w.episode_id) === Number(episode.id));
+                        const isAired = diffDays <= 0;
+
+                        return (
+                          <div
+                            key={`${show.id}-${episode.id}`}
+                            onClick={() => setSelectedEpData({
+                              showId: show.id,
+                              season: episode.season_number,
+                              number: episode.episode_number
+                            })}
+                            className={`group flex items-center justify-between p-2.5 md:p-3 rounded-2xl border transition-all cursor-pointer ${
+                              isWatched
+                                ? 'bg-[#0a0a0a] border-white/5 opacity-50 hover:opacity-80' 
+                                : isAired
+                                ? 'bg-[#181818] border-white/10 hover:border-[#ccff00]/50 shadow-md' 
+                                : 'bg-[#121212] border-white/5 hover:border-white/15'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className="w-12 h-16 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-sm">
+                                <img src={getImageUrl(show.poster_path)} alt={show.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              </div>
+
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-sm font-black truncate transition-colors ${
+                                    isWatched ? 'text-gray-400' : 'text-white group-hover:text-[#ccff00]'
+                                  }`}>
+                                    {show.name}
+                                  </span>
+                                  {isWatched && (
+                                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded">دیده شده</span>
+                                  )}
+                                </div>
+
+                                <span className="text-xs font-mono text-gray-400 mt-0.5 ltr text-right">
+                                  S{String(episode.season_number).padStart(2, '0')} E{String(episode.episode_number).padStart(2, '0')}
+                                </span>
+                                <span className="text-xs text-gray-300 truncate mt-0.5 font-medium">
+                                  {episode.name || `قسمت ${episode.episode_number}`}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${
+                                diffDays === 0 
+                                  ? 'bg-[#ccff00] text-black font-black' 
+                                  : diffDays > 0 
+                                  ? 'bg-white/10 text-white' 
+                                  : 'bg-white/5 text-gray-500'
+                              }`}>
+                                {badge}
+                              </span>
+
+                              {isAired && (
+                                <button
+                                  onClick={(e) => handleToggleWatched(e, show.id, episode.id, isWatched)}
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
+                                    isWatched 
+                                      ? 'bg-emerald-500 border-emerald-500 text-black' 
+                                      : 'border-white/20 text-gray-500 hover:border-[#ccff00] hover:text-[#ccff00]'
+                                  }`}
+                                  title={isWatched ? "دیده‌شده" : "ثبت دیدن"}
+                                >
+                                  <Check size={14} strokeWidth={3} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          /* ۲. حالت ادامه تماشا */
+          <div className="space-y-4">
+            {watchNextList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center text-gray-500 gap-3 bg-white/5 rounded-3xl border border-white/5 border-dashed">
+                <CheckCircle size={48} className="text-emerald-500" strokeWidth={1.5} />
+                <p className="text-base font-bold text-gray-300">عالیه! همه سریال‌هات به‌روز هستن.</p>
+                <p className="text-xs text-gray-500">قسمت دیده‌نشده‌ای برای پخش فعلی باقی نمانده است.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {watchNextList.map((item: any) => {
+                  const { show, seasonNumber, episodeNumber, episodeId, episodeTitle, runtime, isReleased, countdownBadge, watchedCount, totalEpisodes } = item;
+                  const isCardLeaving = animatingCardId === show.id;
+                  
+                  return (
+                    <div
+                      key={`next-${show.id}`}
+                      onClick={() => setSelectedEpData({
+                        showId: show.id,
+                        season: seasonNumber,
+                        number: episodeNumber
+                      })}
+                      className={`group flex items-center justify-between p-3.5 rounded-2xl bg-[#141414] hover:bg-[#1a1a1a] border border-white/5 hover:border-[#ccff00]/40 transition-all duration-300 cursor-pointer shadow-lg ${
+                        isCardLeaving 
+                          ? '-translate-x-full opacity-0 scale-90 pointer-events-none' 
+                          : 'translate-x-0 opacity-100 scale-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-14 h-20 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-md">
+                          <img 
+                            src={getImageUrl(show.poster_path)} 
+                            alt={show.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        </div>
+
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-base font-black text-white truncate group-hover:text-[#ccff00] transition-colors">
+                            {show.name}
+                          </span>
+
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-mono font-bold text-[#ccff00] ltr">
+                              S{String(seasonNumber).padStart(2, '0')} E{String(episodeNumber).padStart(2, '0')}
+                            </span>
+                            <span className="text-gray-600 text-xs">•</span>
+                            <span className="text-xs text-gray-400 font-mono">
+                              {watchedCount}/{totalEpisodes}
+                            </span>
+                            <span className="text-gray-600 text-xs">•</span>
+                            <span className="text-xs text-gray-400">
+                              {runtime} دقیقه
+                            </span>
+                          </div>
+
+                          <span className="text-xs text-gray-300 font-medium truncate mt-1.5">
+                            {episodeTitle}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* دکمه تیک تماشا یا برچسب زمان باقیمانده */}
+                      {!isReleased ? (
+                        <div 
+                          className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1.5 shrink-0 ml-1 select-none"
+                          title="هنوز پخش نشده است"
+                        >
+                          <Clock size={14} />
+                          <span>{countdownBadge}</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => handleToggleWatched(e, show.id, episodeId, false)}
+                          className="w-11 h-11 rounded-full flex items-center justify-center border border-white/20 text-gray-400 hover:bg-[#ccff00] hover:text-black hover:border-[#ccff00] transition-all cursor-pointer shrink-0 ml-1 shadow-md"
+                          title="دیدم (ثبت و رفتن به قسمت بعد)"
+                        >
+                          <Check size={18} strokeWidth={2.5} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
 
-        <div className="relative z-10 px-4 md:px-8 pb-10 space-y-12 md:space-y-16 flex-1">
-            
-            {/* 1. ONBOARDING GAMIFICATION (جایگزین اسلایدر) */}
-            <OnboardingSteps 
-                wIds={Array.from(watchlistIds)} 
-                wEdIds={watchedIds} 
-                allUserShowIds={allShowIds} 
-                router={router} 
-            />
-            <CinematicHero 
-                recommendedShow={aiRecs[0] || (categories.trending && categories.trending[0])} 
-                router={router} 
-            />
-            {myFeed.length > 0 && (
-                <div className="relative animate-in slide-in-from-bottom-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Activity className="text-[#ccff00] animate-pulse" size={24} />
-                        <h2 className="text-lg md:text-2xl font-black text-white">ادامه تماشا</h2>
-                    </div>
-                    <CarouselSection items={myFeed} watchlistIds={watchlistIds} router={router} onToggle={toggleWatchlist} />
-                </div>
-            )}
+      </main>
 
-            {/* 3. هوش مصنوعی و پیشنهادهای هوشمند */}
-            {aiRecs.length > 0 && (
-                <div className="relative bg-gradient-to-r from-[#ccff00]/5 to-transparent border border-[#ccff00]/10 rounded-3xl p-6 md:p-8 animate-in slide-in-from-bottom-6">
-                    <div className="flex items-center gap-2 mb-6">
-                        <Sparkles size={24} className="text-[#ccff00]" />
-                        <h2 className="text-lg md:text-2xl font-black text-white">
-                             چون <span className="text-[#ccff00] underline decoration-wavy underline-offset-4">{aiSourceShow}</span> رو دیدی:
-                        </h2>
-                    </div>
-                    <CarouselSection items={aiRecs} watchlistIds={watchlistIds} router={router} onToggle={toggleWatchlist} />
-                </div>
-            )}
-            
-            <CarouselSection title="تازه‌های نمایش خانگی ایران" items={categories.newIranian} watchlistIds={watchlistIds} router={router} onToggle={toggleWatchlist} categoryId="new-iranian" />
-            <CarouselSection title="پرطرفدارترین‌های ایرانی" items={categories.popularIranian} watchlistIds={watchlistIds} router={router} onToggle={toggleWatchlist} categoryId="pop-iranian" />
-            
-            <div className="bg-white/5 p-6 rounded-3xl border border-white/5 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 blur-[50px] rounded-full"></div>
-                <div className="flex items-center gap-2 mb-4 relative z-10">
-                    <Flame className="text-red-500 fill-red-500" />
-                    <h2 className="text-xl font-black text-white">ترندهای جهانی</h2>
-                </div>
-                <CarouselSection items={categories.trending} watchlistIds={watchlistIds} router={router} onToggle={toggleWatchlist} categoryId="trending" />
-            </div>
-
-            <CarouselSection title="جدیدترین‌های دنیا" items={categories.newGlobal} watchlistIds={watchlistIds} router={router} onToggle={toggleWatchlist} categoryId="new-global" />
-        </div>
-
-        <DashboardFooter />
     </div>
   );
-}
-
-// --- COMPONENTS ---
-
-// 1. ONBOARDING STEPS COMPONENT
-function OnboardingSteps({ wIds, wEdIds, allUserShowIds, router }: any) {
-    const steps = [
-        { 
-            id: 1, 
-            title: 'شروع مسیر: افزودن به لیست انتظار', 
-            desc: 'یک سریال که دوست داری ببینی رو پیدا کن و دکمه + رو بزن.',
-            completed: wIds.length > 0 
-        },
-        { 
-            id: 2, 
-            title: 'اولین تیکِ تماشا!', 
-            desc: 'وارد صفحه یک سریال شو و تیک یکی از قسمت‌هایی که دیدی رو بزن.',
-            completed: wEdIds.length > 0 
-        },
-        { 
-            id: 3, 
-            title: 'شکل‌گیری سلیقه', 
-            desc: 'حداقل ۵ سریال به بینجر اضافه کن تا پیشنهادهای هوشمندت فعال بشن.',
-            completed: allUserShowIds.length >= 5 
-        }
-    ];
-
-    const completedCount = steps.filter(s => s.completed).length;
-    const progress = Math.round((completedCount / steps.length) * 100);
-
-    if (progress === 100) return null;
-
-    return (
-        <div className="bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 relative overflow-hidden animate-in fade-in duration-500 shadow-2xl">
-            <div className="absolute -top-20 -left-20 w-64 h-64 bg-[#ccff00]/10 blur-[80px] rounded-full pointer-events-none"></div>
-
-            <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start md:items-center">
-                <div className="flex flex-col items-center justify-center shrink-0 w-full md:w-auto">
-                    <div className="relative w-24 h-24 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90">
-                            <circle cx="48" cy="48" r="44" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-white/10" />
-                            <circle 
-                                cx="48" cy="48" r="44" stroke="currentColor" strokeWidth="6" fill="transparent" 
-                                strokeDasharray={276} strokeDashoffset={276 - (276 * progress) / 100}
-                                className="text-[#ccff00] transition-all duration-1000 ease-out" 
-                            />
-                        </svg>
-                        <div className="absolute text-xl font-black text-white">{progress}%</div>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-3 font-bold">راه‌اندازی بینجر</p>
-                </div>
-
-                <div className="flex-1 w-full space-y-4">
-                    <h2 className="text-xl font-black text-white mb-4">برای تجربه بهتر، این مراحل رو طی کن:</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {steps.map((step) => (
-                            <div key={step.id} className={`flex md:flex-col items-center md:items-start gap-4 md:gap-3 p-4 rounded-xl border transition-all ${step.completed ? 'bg-[#ccff00]/10 border-[#ccff00]/30' : 'bg-white/5 border-white/5'}`}>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${step.completed ? 'bg-[#ccff00] text-black' : 'bg-white/10 text-gray-400'}`}>
-                                    {step.completed ? <Check size={16} strokeWidth={3} /> : <span className="text-sm font-bold">{step.id}</span>}
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className={`text-sm font-bold ${step.completed ? 'text-[#ccff00]' : 'text-white'}`}>{step.title}</h3>
-                                    <p className="text-xs text-gray-400 mt-1 hidden md:block">{step.desc}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// 2. CAROUSEL SECTION
-function CarouselSection({ title, items, router, watchlistIds, onToggle, categoryId }: any) {
-    const rowRef = useRef<HTMLDivElement>(null);
-    const [isDragging, setIsDragging] = useState(false);
-    const [startX, setStartX] = useState(0);
-    const [scrollLeft, setScrollLeft] = useState(0);
-
-    if (!items || items.length === 0) return null;
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (!rowRef.current) return;
-        setIsDragging(true);
-        setStartX(e.pageX - rowRef.current.offsetLeft);
-        setScrollLeft(rowRef.current.scrollLeft);
-    };
-    const handleMouseLeave = () => setIsDragging(false);
-    const handleMouseUp = () => setIsDragging(false);
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDragging || !rowRef.current) return;
-        e.preventDefault();
-        const x = e.pageX - rowRef.current.offsetLeft;
-        const walk = (x - startX) * 2;
-        rowRef.current.scrollLeft = scrollLeft - walk;
-    };
-    return (
-        <div className="space-y-4 group/section relative z-0">
-            {title && (
-                <div className="flex items-center justify-between px-2 mr-2 border-r-4 border-[#ccff00] relative z-20">
-                    <h2 className="text-lg md:text-xl font-black text-white/90 cursor-default">{title}</h2>
-                    {categoryId && (
-                        <button 
-                            onClick={() => router.push(`/dashboard/category/${categoryId}`)}
-                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#ccff00] transition-colors cursor-pointer px-2 py-1 z-30 pointer-events-auto"
-                        >
-                            <span>مشاهده همه</span>
-                            <ArrowLeft size={14} />
-                        </button>
-                    )}
-                </div>
-            )}
-            
-            <div className="relative group">
-                {!isDragging && (
-                    <>
-                        <button 
-                            onClick={() => rowRef.current?.scrollBy({ left: -300, behavior: 'smooth' })}
-                            className="absolute -left-6 top-1/2 -translate-y-1/2 bg-black/80 hover:bg-[#ccff00] hover:text-black text-white p-3 rounded-full border border-white/10 z-50 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl active:scale-90"
-                        >
-                             <ChevronLeft size={20} />
-                        </button>
-                        <button 
-                            onClick={() => rowRef.current?.scrollBy({ left: 300, behavior: 'smooth' })}
-                            className="absolute -right-6 top-1/2 -translate-y-1/2 bg-black/80 hover:bg-[#ccff00] hover:text-black text-white p-3 rounded-full border border-white/10 z-50 hidden md:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl active:scale-90"
-                        >
-                            <ChevronRight size={20} />
-                        </button>
-                    </>
-                )}
-
-                <div 
-                    ref={rowRef} 
-                    className={`flex gap-4 overflow-x-auto px-4 py-8 -my-8 no-scrollbar scroll-smooth cursor-grab relative z-10 ${isDragging ? 'cursor-grabbing snap-none' : 'snap-x'}`}
-                    onMouseDown={handleMouseDown}
-                    onMouseLeave={handleMouseLeave}
-                    onMouseUp={handleMouseUp}
-                    onMouseMove={handleMouseMove}
-                >
-                    {items.map((show: any) => (
-                        <div key={show.id} className="snap-center shrink-0 w-[130px] md:w-[160px] pointer-events-auto">
-                            <ShowCard 
-                                show={show} 
-                                isAdded={watchlistIds.has(show.id)} 
-                                onClick={() => !isDragging && router.push(`/dashboard/tv/${show.id}`)} 
-                                onToggle={() => onToggle(show.id)} 
-                            />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// 3. SHOW CARD
-function ShowCard({ show, isAdded, onClick, onToggle }: any) {
-    return (
-        <div onClick={onClick} className="group relative aspect-[2/3] bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer border border-white/5 hover:border-[#ccff00]/50 transition-all duration-500 hover:scale-105 hover:shadow-[0_0_30px_rgba(204,255,0,0.15)] hover:z-30">
-            <img 
-                src={getImageUrl(show.poster_path)} 
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                loading="lazy"
-                alt={show.name}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-[#000000]/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity"></div>
-            
-            <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className={`absolute top-2 left-2 p-2 rounded-full backdrop-blur-md transition-all z-10 cursor-pointer shadow-lg hover:scale-110 active:scale-90 ${isAdded ? 'bg-[#ccff00] text-black' : 'bg-black/40 text-white hover:bg-white hover:text-black'}`}>
-                {isAdded ? <Bookmark size={14} fill="black" /> : <Plus size={14} />}
-            </button>
-            
-            <div className="absolute bottom-0 p-3 w-full translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-                <h3 className="text-xs md:text-sm font-bold text-white line-clamp-1 text-right drop-shadow-md">{show.name}</h3>
-                
-                {show.vote_average > 0 && (
-                    <div className="flex justify-end items-center mt-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[10px] text-[#ccff00] flex items-center gap-0.5 bg-black/50 px-1.5 py-0.5 rounded border border-white/20 font-bold">
-                            <Star size={8} fill="#ccff00" /> {show.vote_average?.toFixed(1)}
-                        </span>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// 4. CINEMATIC DNA & MAGIC TICKET HERO
-function CinematicHero({ recommendedShow, router }: any) {
-    
-    // استخراج دیتای سریال برای بلیت طلایی
-    const showImage = getBackdropUrl(recommendedShow?.backdrop_path || recommendedShow?.poster_path);
-    const originalName = recommendedShow?.original_name || recommendedShow?.name || "The Last of Us";
-    const rating = recommendedShow?.vote_average ? recommendedShow.vote_average.toFixed(1) : "N/A";
-    const genres = recommendedShow?.genres?.map((g: any) => g.name).join(' • ') || "درام • هیجان‌انگیز";
-
-    return (
-        <div className="mb-12 animate-in slide-in-from-bottom-8 duration-700">
-            {/* --- بخش DNA سینمایی --- */}
-            <CinematicIdentityCard/>
-        </div>
-    );
-}
-
-function DashboardFooter() {
-    return (
-        <footer className="mt-20 border-t border-white/5 bg-[#080808] relative z-10">
-            <div className="max-w-7xl mx-auto px-6 py-12">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-                    <div className="col-span-1 md:col-span-2 space-y-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-[#ccff00] rounded-lg flex items-center justify-center text-black font-black">B</div>
-                            <span className="text-xl font-black text-white">Binger</span>
-                        </div>
-                        <p className="text-gray-400 text-xs leading-relaxed max-w-sm text-justify">
-                            بینجر پلتفرم هوشمند مدیریت و کشف سریال است. با بینجر همیشه می‌دونی چی ببینی و تا کجا دیدی.
-                        </p>
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-white mb-4">دسترسی سریع</h4>
-                        <ul className="space-y-2 text-sm text-gray-400">
-                            <li><a href="#" className="hover:text-[#ccff00]">تازه ترین ها</a></li>
-                            <li><a href="#" className="hover:text-[#ccff00]">برترین های IMDB</a></li>
-                        </ul>
-                    </div>
-                    <div>
-                        <h4 className="font-bold text-white mb-4">ما را دنبال کنید</h4>
-                        <div className="flex gap-4">
-                            <a href="#" className="p-2 bg-white/5 rounded-full hover:bg-[#ccff00] hover:text-black transition-all"><Twitter size={18} /></a>
-                            <a href="#" className="p-2 bg-white/5 rounded-full hover:bg-[#ccff00] hover:text-black transition-all"><Instagram size={18} /></a>
-                        </div>
-                    </div>
-                </div>
-                <div className="border-t border-white/5 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <p className="text-xs text-gray-500">© ۲۰۲۶ تمامی حقوق برای <span className="text-[#ccff00]">Binger</span> محفوظ است.</p>
-                </div>
-            </div>
-        </footer>
-    );
 }
