@@ -45,11 +45,11 @@ export default function LoginPage() {
       if (error) throw error;
       
       setStep(2);
-      setMessage('شماره تایید شد؛ کد ۶ رقمی تستی خود را وارد کنید.');
+      setMessage('شماره تایید شد؛ کد ۶ رقمی  خود را وارد کنید.');
     } catch (error: any) {
       setIsError(true);
       if (error.message?.includes('Twilio') || error.message?.includes('provider')) {
-        setMessage('شماره با فرمت تستی سوپابیس همخوانی ندارد. لطفاً شماره را بررسی کنید.');
+        setMessage('شماره با فرمت بینجر همخوانی ندارد. لطفاً شماره را بررسی کنید.');
       } else {
         setMessage(error.message || 'خطا در ارسال کد.');
       }
@@ -139,7 +139,7 @@ export default function LoginPage() {
           {step === 2 && (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
-                <label className="text-xs text-gray-400 mr-2 mb-1 block">کد تایید تستی</label>
+                <label className="text-xs text-gray-400 mr-2 mb-1 block">کد تایید </label>
                 <input 
                   type="text" 
                   required

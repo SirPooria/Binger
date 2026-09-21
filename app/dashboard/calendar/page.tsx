@@ -1,337 +1,770 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
-import { getShowDetails, getImageUrl, getGlobalAiringShows, getBackdropUrl } from '@/lib/tmdbClient';
+import { getShowDetails, getSeasonDetails, getImageUrl } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
-import { Loader2, Calendar as CalIcon, ArrowRight, Clock, Zap, AlertCircle, CheckCircle, PlayCircle } from 'lucide-react';
+import { 
+  Loader2, 
+  Calendar as CalIcon, 
+  ArrowRight, 
+  Clock, 
+  CheckCircle, 
+  Check, 
+  Filter, 
+  PlayCircle,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Flame
+} from 'lucide-react';
 import EpisodeModal from '../components/EpisodeModal';
 
-const CALENDAR_CACHE_TTL = 10 * 60 * 1000;
-const getCalendarCacheKey = (userId: string) => `binger-calendar-cache:${userId}`;
-
-const readCalendarCache = (userId: string) => {
-    try {
-        const raw = sessionStorage.getItem(getCalendarCacheKey(userId));
-        if (!raw) return null;
-        const cached = JSON.parse(raw);
-        return Date.now() - cached.cachedAt < CALENDAR_CACHE_TTL ? cached : null;
-    } catch {
-        return null;
-    }
-};
-
-const writeCalendarCache = (userId: string, myEpisodes: any[], globalEpisodes: any[]) => {
-    try {
-        sessionStorage.setItem(getCalendarCacheKey(userId), JSON.stringify({
-            cachedAt: Date.now(),
-            myEpisodes,
-            globalEpisodes,
-        }));
-    } catch {
-        // The calendar still works if sessionStorage is unavailable or full.
-    }
-};
-
-export default function CalendarPage() {
+export default function TrackerMainPage() {
   const router = useRouter();
   const supabase = createClient() as any;
-  
+
   const [loading, setLoading] = useState(true);
-  const [myEpisodes, setMyEpisodes] = useState<any[]>([]);
-  const [globalEpisodes, setGlobalEpisodes] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // حالت فعال: تقویم پخش یا ادامه تماشا
+  const [isCalendarMode, setIsCalendarMode] = useState<boolean>(false);
+
+  // فیلتر در حالت تقویم: همه سریال‌های من / فقط سریال‌هایی که تماشا کردم
+  const [calendarFilter, setCalendarFilter] = useState<'all_my' | 'watched_only'>('all_my');
+
+  // باز یا بسته بودن بخش روزهای گذشته در تقویم
+  const [showPastDays, setShowPastDays] = useState<boolean>(false);
+
+  // منوی بازشوی فیلتر
+  const [showFilterDropdown, setShowFilterDropdown] = useState<boolean>(false);
+
+  // دیتای سریال‌ها و رکوردهای تماشا شده از دیتابیس
+  const [trackedShows, setTrackedShows] = useState<any[]>([]);
+  const [watchedRecords, setWatchedRecords] = useState<any[]>([]);
+
+  // کش برای جزئیات قسمت‌های فصل‌های جاری جهت دریافت episode_id
+  const [seasonEpisodesMap, setSeasonEpisodesMap] = useState<Record<string, any[]>>({});
+
+  // کارت در حال انیمیشن خروج (برای افکت روان رفتن به قسمت بعد)
+  const [animatingCardId, setAnimatingCardId] = useState<number | null>(null);
+
+  // مودال جزئیات قسمت
   const [selectedEpData, setSelectedEpData] = useState<any>(null);
-  
-  // State جدید برای مدیریت تب‌های فعال (پیش‌فرض: سریال‌های من)
-  const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine');
 
-  useEffect(() => {
-    const fetchCalendar = async () => {
+  // ۱. واکشی اطلاعات واقعی کاربر از دیتابیس
+  const loadUserData = async () => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { window.location.href = '/login'; return; }
+      if (!user) {
+        window.location.href = '/login';
+        return;
+      }
+      setCurrentUser(user);
 
-            const cachedCalendar = readCalendarCache(user.id);
-            if (cachedCalendar) {
-                setMyEpisodes(cachedCalendar.myEpisodes || []);
-                setGlobalEpisodes(cachedCalendar.globalEpisodes || []);
-                setLoading(false);
-                return;
-            }
+      // خواندن واچ‌لیست
+      const { data: watchlistData } = await supabase
+        .from('watchlist')
+        .select('show_id')
+        .eq('user_id', user.id);
 
-      const p2 = supabase.from('watchlist').select('show_id').eq('user_id', user.id);
-            const [lRes] = await Promise.all([p2]);
+      // خواندن دقیق رکوردهای جدول watched با ستون‌های واقعی (show_id و episode_id)
+      const allWatched: any[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('watched')
+          .select('show_id, episode_id')
+          .eq('user_id', user.id)
+          .range(page * 1000, (page + 1) * 1000 - 1);
 
-            // هر قسمت یک ردیف جدا دارد؛ بنابراین برای جلوگیری از سقف ۱۰۰۰ ردیف، همه watchedها را صفحه‌ای می‌خوانیم.
-            const watchedRows: any[] = [];
-            let watchedPage = 0;
-            let hasMoreWatched = true;
-            while (hasMoreWatched) {
-                const { data, error } = await supabase
-                    .from('watched')
-                    .select('show_id')
-                    .eq('user_id', user.id)
-                    .range(watchedPage * 1000, (watchedPage + 1) * 1000 - 1);
-
-                if (error || !data || data.length === 0) {
-                    hasMoreWatched = false;
-                } else {
-                    watchedRows.push(...data);
-                    hasMoreWatched = data.length === 1000;
-                    watchedPage++;
-                }
-            }
-
-        const watchedShowIds = new Set<number>();
-        const watchlistShowIds = new Set<number>();
-            watchedRows.forEach((i: any) => watchedShowIds.add(Number(i.show_id)));
-        lRes.data?.forEach((i: any) => watchlistShowIds.add(Number(i.show_id)));
-
-        const uniqueMyIds = Array.from(new Set([...watchedShowIds, ...watchlistShowIds]));
-
-      let myUpcoming: any[] = [];
-      if (uniqueMyIds.length > 0) {
-                const showsData: any[] = [];
-                const batchSize = 6;
-
-                // بررسی همه سریال‌های کاربر؛ محدود کردن به ۲۰ شناسه باعث حذف تصادفی سریال‌ها از تقویم می‌شد.
-                for (let index = 0; index < uniqueMyIds.length; index += batchSize) {
-                    const batch = uniqueMyIds.slice(index, index + batchSize);
-                    const batchData = await Promise.all(batch.map(async (id) => {
-                        for (let attempt = 0; attempt < 3; attempt++) {
-                            const show = await getShowDetails(String(id));
-                            if (show) return show;
-                        }
-                        return null;
-                    }));
-                    showsData.push(...batchData);
-                }
-        
-                const upcomingShows = showsData
-          .filter((s: any) => s && s.next_episode_to_air && new Date(s.next_episode_to_air.air_date) >= new Date())
-                myUpcoming = upcomingShows
-                    .filter((s: any) => watchedShowIds.has(Number(s.id)))
-                    .map((s: any) => ({ ...s, isMine: true, isWatchlist: false }));
-
-                const waitingUpcoming = upcomingShows
-                    .filter((s: any) => !watchedShowIds.has(Number(s.id)) && watchlistShowIds.has(Number(s.id)))
-                    .map((s: any) => ({ ...s, isMine: false, isWatchlist: true }));
-
-                const globalData = await getGlobalAiringShows();
-                const trending = globalData
-                    .filter((s: any) => !watchedShowIds.has(Number(s.id)) && !watchlistShowIds.has(Number(s.id)))
-                    .map((s: any) => ({ ...s, isMine: false, isWatchlist: false }));
-
-                const sortFn = (a: any, b: any) => new Date(a.next_episode_to_air.air_date).getTime() - new Date(b.next_episode_to_air.air_date).getTime();
-
-                setMyEpisodes(myUpcoming.sort(sortFn));
-                const nextGlobalEpisodes = [...waitingUpcoming.sort(sortFn), ...trending.sort(sortFn)];
-                setGlobalEpisodes(nextGlobalEpisodes);
-                writeCalendarCache(user.id, myUpcoming, nextGlobalEpisodes);
-                setLoading(false);
-                return;
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allWatched.push(...data);
+          hasMore = data.length === 1000;
+          page++;
+        }
       }
 
-      const globalData = await getGlobalAiringShows();
-      const trending = globalData
-                .filter((s: any) => !watchedShowIds.has(Number(s.id)) && !watchlistShowIds.has(Number(s.id)))
-                .map((s: any) => ({ ...s, isMine: false, isWatchlist: false }));
-      
-      const sortFn = (a: any, b: any) => new Date(a.next_episode_to_air.air_date).getTime() - new Date(b.next_episode_to_air.air_date).getTime();
+      setWatchedRecords(allWatched);
 
-      setMyEpisodes(myUpcoming.sort(sortFn));
-            const nextGlobalEpisodes = trending.sort(sortFn);
-            setGlobalEpisodes(nextGlobalEpisodes);
-            writeCalendarCache(user.id, myUpcoming, nextGlobalEpisodes);
+      const watchedShowIds = new Set<number>(allWatched.map(w => Number(w.show_id)));
+      const watchlistShowIds = new Set<number>((watchlistData || []).map((w: any) => Number(w.show_id)));
+      const allShowIds = Array.from(new Set([...watchedShowIds, ...watchlistShowIds]));
+
+      // دریافت مشخصات سریال‌ها از TMDB
+      const showsDetails: any[] = [];
+      const batchSize = 6;
+      for (let i = 0; i < allShowIds.length; i += batchSize) {
+        const chunk = allShowIds.slice(i, i + batchSize);
+        const chunkData = await Promise.all(
+          chunk.map(async (id) => {
+            const show = await getShowDetails(String(id));
+            return show ? { ...show, hasWatched: watchedShowIds.has(Number(id)) } : null;
+          })
+        );
+        showsDetails.push(...chunkData.filter(Boolean));
+      }
+
+      setTrackedShows(showsDetails);
+
+      // واکشی سریع فصل‌های جاری برای دسترسی به episode_id واقعی قسمت بعدی
+      const seasonCache: Record<string, any[]> = {};
+      await Promise.all(
+        showsDetails.map(async (show) => {
+          const showWatchedCount = allWatched.filter(w => Number(w.show_id) === Number(show.id)).length;
+          const validSeasons = (show.seasons || [])
+            .filter((s: any) => s && s.season_number > 0)
+            .sort((a: any, b: any) => a.season_number - b.season_number);
+
+          let cumulative = 0;
+          let targetSeason = 1;
+          for (const s of validSeasons) {
+            const count = s.episode_count || 0;
+            if (showWatchedCount < cumulative + count) {
+              targetSeason = s.season_number;
+              break;
+            }
+            cumulative += count;
+          }
+
+          try {
+            const sData = await getSeasonDetails(String(show.id), targetSeason);
+            if (sData?.episodes) {
+              seasonCache[`${show.id}_${targetSeason}`] = sData.episodes;
+            }
+          } catch {}
+        })
+      );
+
+      setSeasonEpisodesMap(seasonCache);
       setLoading(false);
-    };
+    } catch (err) {
+      console.error("Error loading tracker data:", err);
+      setLoading(false);
+    }
+  };
 
-    fetchCalendar();
+  useEffect(() => {
+    loadUserData();
   }, []);
 
-  const openModal = (item: any) => {
-    setSelectedEpData({
-        showId: item.id,
-        season: item.next_episode_to_air.season_number,
-        number: item.next_episode_to_air.episode_number
+  // هر وقت قسمتی تیک خورد، اگر فصل بعدی دانلود نشده بود، خودکار دانلودش کن
+  useEffect(() => {
+    if (!trackedShows.length) return;
+    trackedShows.forEach(async (show) => {
+      const showWatched = watchedRecords.filter(w => Number(w.show_id) === Number(show.id));
+      const validSeasons = (show.seasons || [])
+        .filter((s: any) => s && s.season_number > 0)
+        .sort((a: any, b: any) => a.season_number - b.season_number);
+
+      let cumulative = 0;
+      let targetSeason = 1;
+      for (const s of validSeasons) {
+        const count = s.episode_count || 0;
+        if (showWatched.length < cumulative + count) {
+          targetSeason = s.season_number;
+          break;
+        }
+        cumulative += count;
+      }
+
+      const cacheKey = `${show.id}_${targetSeason}`;
+      if (!seasonEpisodesMap[cacheKey]) {
+        try {
+          const sData = await getSeasonDetails(String(show.id), targetSeason);
+          if (sData?.episodes) {
+            setSeasonEpisodesMap(prev => ({ ...prev, [cacheKey]: sData.episodes }));
+          }
+        } catch {}
+      }
     });
+  }, [watchedRecords, trackedShows]);
+
+  // ثبت و حذف تماشا مستقیماً در دیتابیس Supabase با episode_id
+  const handleToggleWatched = async (
+    e: React.MouseEvent,
+    showId: number,
+    episodeId: number,
+    isAlreadyWatched: boolean
+  ) => {
+    e.stopPropagation();
+    if (!currentUser || !episodeId) return;
+
+    if (isAlreadyWatched) {
+      // حذف از جدول watched
+      const { error } = await supabase
+        .from('watched')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('show_id', Number(showId))
+        .eq('episode_id', Number(episodeId));
+
+      if (error) {
+        console.error("خطا در حذف از دیتابیس:", error);
+      } else {
+        setWatchedRecords(prev => prev.filter(w => Number(w.episode_id) !== Number(episodeId)));
+      }
+    } else {
+      // انیمیشن نرم خروج کارت
+      setAnimatingCardId(showId);
+
+      setTimeout(async () => {
+        // ثبت ۱۰۰٪ واقعی در جدول watched با ساختار اختصاصی پروژه Binger
+        const { error } = await supabase
+          .from('watched')
+          .upsert([{
+            user_id: currentUser.id,
+            show_id: Number(showId),
+            episode_id: Number(episodeId)
+          }], { onConflict: 'user_id, episode_id' });
+
+        if (error) {
+          console.error("خطا در ثبت در دیتابیس:", error);
+        } else {
+          setWatchedRecords(prev => [...prev, { show_id: Number(showId), episode_id: Number(episodeId) }]);
+        }
+        setAnimatingCardId(null);
+      }, 300);
+    }
   };
+
+// محاسبه دقیق قسمت بعدی آماده تماشا و فرستادن پخش‌نشده‌ها به انتهای لیست
+  const watchNextList = useMemo(() => {
+    const list: any[] = [];
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    trackedShows.forEach(show => {
+      if (!show) return;
+
+      const showWatched = watchedRecords.filter(w => Number(w.show_id) === Number(show.id));
+      const validSeasons = (show.seasons || [])
+        .filter((s: any) => s && s.season_number > 0)
+        .sort((a: any, b: any) => a.season_number - b.season_number);
+
+      let totalEpisodesCount = 0;
+      validSeasons.forEach((s: any) => {
+        totalEpisodesCount += (s.episode_count || 0);
+      });
+
+      let cumulative = 0;
+      let targetSeason = 1;
+      let targetEpisodeNum = 1;
+      let isCompleted = false;
+
+      if (showWatched.length >= totalEpisodesCount && totalEpisodesCount > 0) {
+        isCompleted = true;
+      } else {
+        for (const s of validSeasons) {
+          const count = s.episode_count || 0;
+          if (showWatched.length < cumulative + count) {
+            targetSeason = s.season_number;
+            targetEpisodeNum = showWatched.length - cumulative + 1;
+            break;
+          }
+          cumulative += count;
+        }
+      }
+
+      if (!isCompleted) {
+        const seasonEps = seasonEpisodesMap[`${show.id}_${targetSeason}`] || [];
+        const epData = seasonEps.find((e: any) => e.episode_number === targetEpisodeNum);
+
+        let finalEpId = epData?.id;
+        let epTitle = epData?.name || `قسمت ${targetEpisodeNum}`;
+        let epRuntime = epData?.runtime || show.episode_run_time?.[0] || 45;
+        let epAirDate = epData?.air_date;
+
+        if (!finalEpId) {
+          if (show.next_episode_to_air && show.next_episode_to_air.season_number === targetSeason && show.next_episode_to_air.episode_number === targetEpisodeNum) {
+            finalEpId = show.next_episode_to_air.id;
+            epTitle = show.next_episode_to_air.name || epTitle;
+            epAirDate = show.next_episode_to_air.air_date;
+          } else if (show.last_episode_to_air && show.last_episode_to_air.season_number === targetSeason && show.last_episode_to_air.episode_number === targetEpisodeNum) {
+            finalEpId = show.last_episode_to_air.id;
+            epTitle = show.last_episode_to_air.name || epTitle;
+            epAirDate = show.last_episode_to_air.air_date;
+          }
+        }
+
+        // بررسی اینکه آیا این فصل قبلاً پخش شده است یا نه
+        const targetSeasonInfo = validSeasons.find((s: any) => s.season_number === targetSeason);
+        const seasonAlreadyAired = targetSeasonInfo?.air_date ? new Date(targetSeasonInfo.air_date) <= now : false;
+
+        let isReleased = false;
+        let countdownBadge = "پخش‌نشده";
+
+        if (epAirDate) {
+          const airDateObj = new Date(epAirDate);
+          airDateObj.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (diffDays <= 0) {
+            isReleased = true;
+          } else if (diffDays === 1) {
+            countdownBadge = "پخش: فردا";
+          } else if (diffDays <= 7) {
+            countdownBadge = `پخش: ${diffDays} روز دیگر`;
+          } else {
+            countdownBadge = `پخش: ${airDateObj.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' })}`;
+          }
+        } else if (seasonAlreadyAired) {
+          isReleased = true;
+        }
+
+        list.push({
+          show,
+          seasonNumber: targetSeason,
+          episodeNumber: targetEpisodeNum,
+          episodeId: finalEpId,
+          episodeTitle: epTitle,
+          runtime: epRuntime,
+          isReleased,
+          airDate: epAirDate,
+          countdownBadge,
+          watchedCount: showWatched.length,
+          totalEpisodes: totalEpisodesCount || show.number_of_episodes || 0,
+        });
+      }
+    });
+
+    // مرتب‌سازی: سریال‌های آماده تماشا اول بیایند، و سریال‌های پخش‌نشده بروند پایین لیست
+    list.sort((a, b) => {
+      if (a.isReleased && !b.isReleased) return -1;
+      if (!a.isReleased && b.isReleased) return 1;
+      return 0;
+    });
+
+    return list;
+  }, [trackedShows, watchedRecords, seasonEpisodesMap]);
+
+  // ساخت دسته‌بندی تقویم از امروز به بعد
+// ریفرنس برای اسکرول اتوماتیک به بخش «امروز»
+  const todaySectionRef = useRef<HTMLDivElement>(null);
+
+  // دسته‌بندی پیوسته و هوشمند تقویم (گذشته در بالا، امروز در وسط، آینده در پایین)
+  const calendarData = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const allEpisodes: any[] = [];
+
+    trackedShows.forEach(show => {
+      if (!show) return;
+
+      if (calendarFilter === 'watched_only' && !show.hasWatched) {
+        return;
+      }
+
+      // ۱. قسمت بعدی که قراره پخش بشه (امروز یا آینده)
+      if (show.next_episode_to_air && show.next_episode_to_air.air_date) {
+        const airDate = new Date(show.next_episode_to_air.air_date);
+        airDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 365) {
+          allEpisodes.push({
+            show,
+            episode: show.next_episode_to_air,
+            airDate,
+            diffDays
+          });
+        }
+      }
+
+      // ۲. قسمت قبلی که پخش شده (گذشته)
+      if (show.last_episode_to_air && show.last_episode_to_air.air_date) {
+        const airDate = new Date(show.last_episode_to_air.air_date);
+        airDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) {
+          allEpisodes.push({
+            show,
+            episode: show.last_episode_to_air,
+            airDate,
+            diffDays
+          });
+        }
+      }
+    });
+
+    // مرتب‌سازی زمانی از قدیمی‌ترین گذشته تا دورترین آینده
+    allEpisodes.sort((a, b) => a.airDate.getTime() - b.airDate.getTime());
+
+    // گروه‌بندی دقیق طبق سناریوی خواسته شده
+    const groups: { [key: string]: any[] } = {};
+
+    allEpisodes.forEach(item => {
+      const { diffDays, airDate } = item;
+      let label = "";
+      let badge = "";
+
+      if (diffDays < 0) {
+        // بخش گذشته
+        const absDays = Math.abs(diffDays);
+        if (absDays === 1) {
+          label = "دیروز (Yesterday)";
+        } else if (absDays === 2) {
+          label = "۲ روز قبل";
+        } else if (absDays === 3) {
+          label = "۳ روز قبل";
+        } else if (absDays <= 7) {
+          label = "هفته گذشته";
+        } else {
+          label = airDate.toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        badge = `${absDays} روز قبل`;
+      } else if (diffDays === 0) {
+        // امروز
+        label = "امروز (Today)";
+        badge = "امروز! 🔥";
+      } else if (diffDays === 1) {
+        // فردا
+        label = "فردا (Tomorrow)";
+        badge = "۱ روز دیگر";
+      } else if (diffDays <= 7) {
+        // روزهای این هفته (دوشنبه، چهارشنبه، ...)
+        const dayName = airDate.toLocaleDateString('fa-IR', { weekday: 'long' });
+        label = dayName;
+        badge = `${diffDays} روز دیگر`;
+      } else {
+        // بعد از این هفته: در آینده
+        label = "در آینده (In the future)";
+        badge = `${diffDays} روز دیگر`;
+      }
+
+      if (!groups[label]) groups[label] = [];
+      groups[label].push({ ...item, badge });
+    });
+
+    return groups;
+  }, [trackedShows, calendarFilter]);
+
+  // اسکرول نرم به بخش «امروز» به محض باز شدن تقویم
+  useEffect(() => {
+    if (isCalendarMode && todaySectionRef.current) {
+      setTimeout(() => {
+        todaySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  }, [isCalendarMode]);
 
   if (loading) {
     return (
-        <div className="min-h-screen bg-[#050505] flex justify-center items-center text-[#ccff00]">
-            <Loader2 className="animate-spin" size={40} />
-        </div>
+      <div className="min-h-screen bg-[#050505] flex flex-col justify-center items-center gap-3 text-[#ccff00]">
+        <Loader2 className="animate-spin" size={42} />
+        <span className="text-sm font-medium text-gray-400">در حال چیدمان سریال‌های شما...</span>
+      </div>
     );
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-28">
       
-      {/* MODAL */}
+      {/* مودال اصلی جزئیات قسمت */}
       {selectedEpData && (
         <EpisodeModal 
-            showId={selectedEpData.showId}
-            seasonNum={selectedEpData.season}
-            episodeNum={selectedEpData.number}
-            onClose={() => setSelectedEpData(null)}
-            onWatchedChange={() => {}}
+          showId={selectedEpData.showId}
+          seasonNum={selectedEpData.season}
+          episodeNum={selectedEpData.number}
+          onClose={() => setSelectedEpData(null)}
+          onWatchedChange={() => loadUserData()}
         />
       )}
 
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-          <button onClick={() => router.back()} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all cursor-pointer">
-              <ArrowRight size={20} />
-          </button>
-          <div>
-              <h1 className="text-2xl md:text-3xl font-black flex items-center gap-2">
-                  <CalIcon className="text-[#ccff00]" />
-                  تقویم پخش
-              </h1>
-              <p className="text-xs text-gray-400 mt-1">برنامه زمانی پخش سریال‌های شما و جهان</p>
+      {/* هدر بالایی */}
+      <header className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-md border-b border-white/5 px-4 md:px-8 py-4">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => router.back()} 
+              className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-gray-400 hover:text-white"
+            >
+              <ArrowRight size={18} />
+            </button>
+
+            {isCalendarMode ? (
+              <div>
+                <h1 className="text-xl md:text-2xl font-black text-white flex items-center gap-2">
+                  <CalIcon size={22} className="text-[#ccff00]" />
+                  تقویم پخش سریال‌ها
+                </h1>
+                <p className="text-xs text-gray-400 mt-0.5">برنامه زمانی پخش تا ۳۶۵ روز آینده</p>
+              </div>
+            ) : (
+              <div>
+                <h1 className="text-xl md:text-2xl font-black text-white flex items-center gap-2">
+                  <PlayCircle size={24} className="text-[#ccff00]" />
+                  ادامه تماشا
+                </h1>
+                <p className="text-xs text-gray-400 mt-0.5">قسمت‌های بعدی آماده برای دیدن</p>
+              </div>
+            )}
           </div>
-      </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex gap-6 mb-8 border-b border-white/10 px-2 max-w-5xl mx-auto">
-          <button
-              onClick={() => setActiveTab('mine')}
-              className={`pb-3 flex items-center gap-2 border-b-2 transition-all ${
-                  activeTab === 'mine'
-                      ? 'border-[#ccff00] text-[#ccff00] font-bold'
-                      : 'border-transparent text-gray-400 hover:text-white'
-              }`}
-          >
-              <CheckCircle size={18} className={activeTab === 'mine' ? 'text-[#ccff00]' : 'text-gray-500'} />
-              سریال‌های من
-          </button>
-          <button
-              onClick={() => setActiveTab('all')}
-              className={`pb-3 flex items-center gap-2 border-b-2 transition-all ${
-                  activeTab === 'all'
-                      ? 'border-red-500 text-red-500 font-bold'
-                      : 'border-transparent text-gray-400 hover:text-white'
-              }`}
-          >
-              <Zap size={18} className={activeTab === 'all' ? 'text-red-500 fill-red-500' : 'text-gray-500'} />
-              همه سریال‌ها
-          </button>
-      </div>
+          <div className="flex items-center gap-2 relative">
+            
+            {/* فیلتر اختصاصی در تقویم */}
+            {isCalendarMode && (
+              <>
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-all cursor-pointer"
+                  title="فیلتر تقویم"
+                >
+                  <Filter size={18} />
+                </button>
 
-      <div className="max-w-5xl mx-auto space-y-12">
-          {/* Tab Content: My Episodes */}
-          {activeTab === 'mine' && (
-              <section className="animate-in fade-in zoom-in-95 duration-300">
-                  {myEpisodes.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-                          {myEpisodes.map((item) => (
-                              <LandscapeCard key={item.id} item={item} onClick={() => openModal(item)} isMine={true} />
-                          ))}
-                      </div>
-                  ) : (
-                      <div className="flex flex-col items-center justify-center mt-10 text-gray-500 gap-4 text-center bg-white/5 p-10 rounded-3xl border border-white/5 border-dashed">
-                          <AlertCircle size={64} strokeWidth={1} />
-                          <p className="text-lg">سریال‌های شما در حال حاضر قسمت جدیدی ندارند!</p>
-                          <button 
-                              onClick={() => setActiveTab('all')}
-                              className="bg-[#ccff00] text-black px-6 py-2 rounded-xl font-bold hover:bg-[#b3e600] transition-colors mt-4 cursor-pointer"
+                {showFilterDropdown && (
+                  <div className="absolute left-0 top-12 w-56 bg-[#141414] border border-white/15 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
+                    <span className="text-xs text-gray-400 px-3 py-1.5 font-bold block">نمایش تقویم:</span>
+                    <button
+                      onClick={() => { setCalendarFilter('all_my'); setShowFilterDropdown(false); }}
+                      className={`w-full text-right px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        calendarFilter === 'all_my' ? 'bg-[#ccff00] text-black' : 'text-gray-300 hover:bg-white/5'
+                      }`}
+                    >
+                      همه سریال‌های من
+                    </button>
+                    <button
+                      onClick={() => { setCalendarFilter('watched_only'); setShowFilterDropdown(false); }}
+                      className={`w-full text-right px-3 py-2 rounded-xl text-xs font-bold transition-all mt-1 cursor-pointer ${
+                        calendarFilter === 'watched_only' ? 'bg-[#ccff00] text-black' : 'text-gray-300 hover:bg-white/5'
+                      }`}
+                    >
+                      فقط سریال‌هایی که تماشا کردم
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* سوییچ تقویم */}
+            <button
+              onClick={() => setIsCalendarMode(!isCalendarMode)}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
+                isCalendarMode 
+                  ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.3)]' 
+                  : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10 hover:text-white'
+              }`}
+              title={isCalendarMode ? "بازگشت به ادامه تماشا" : "مشاهده تقویم پخش"}
+            >
+              <CalIcon size={18} />
+            </button>
+
+          </div>
+        </div>
+      </header>
+
+      {/* بدنه محتوا */}
+      <main className="max-w-4xl mx-auto px-4 md:px-8 mt-6">
+
+        {/* ۱. تقویم پخش */}
+        {/* ۱. تقویم پخش یکپارچه (گذشته در بالا، امروز در وسط با فوکوس خودکار، آینده در پایین) */}
+        {isCalendarMode ? (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            {Object.keys(calendarData).length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500 gap-3 bg-white/5 rounded-3xl border border-white/5 border-dashed">
+                <AlertCircle size={44} strokeWidth={1.5} />
+                <p className="text-sm font-medium">هیچ قسمتی برای پخش در سریال‌های شما یافت نشد.</p>
+              </div>
+            ) : (
+              Object.entries(calendarData).map(([groupTitle, items]) => {
+                const isToday = groupTitle.includes("امروز");
+                const isPast = groupTitle.includes("قبل") || groupTitle.includes("دیروز") || groupTitle.includes("هفته گذشته") || groupTitle.includes("۱۴") || groupTitle.includes("۱۳");
+
+                return (
+                  <div 
+                    key={groupTitle} 
+                    ref={isToday ? todaySectionRef : null}
+                    className={`space-y-3 scroll-mt-24 ${isToday ? 'bg-[#ccff00]/[0.03] p-4 rounded-3xl border border-[#ccff00]/20 shadow-[0_0_20px_rgba(204,255,0,0.05)]' : ''}`}
+                  >
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                      <h2 className={`text-sm font-black flex items-center gap-2 ${
+                        isToday 
+                          ? 'text-[#ccff00]' 
+                          : isPast 
+                          ? 'text-gray-400' 
+                          : 'text-white'
+                      }`}>
+                        {isToday ? <Flame size={18} className="text-[#ccff00]" /> : <Clock size={16} className={isPast ? 'text-gray-500' : 'text-[#ccff00]'} />}
+                        {groupTitle}
+                      </h2>
+                      <span className="text-xs text-gray-500 font-mono">
+                        {items.length} قسمت
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {items.map((entry: any) => {
+                        const { show, episode, badge, diffDays } = entry;
+                        const isWatched = watchedRecords.some(w => Number(w.episode_id) === Number(episode.id));
+
+                        return (
+                          <div
+                            key={`${show.id}-${episode.id}`}
+                            onClick={() => setSelectedEpData({
+                              showId: show.id,
+                              season: episode.season_number,
+                              number: episode.episode_number
+                            })}
+                            className={`group flex items-center justify-between p-3 rounded-2xl bg-[#121212] hover:bg-[#181818] border transition-all cursor-pointer shadow-md ${
+                              diffDays === 0 
+                                ? 'border-[#ccff00]/40' 
+                                : isPast 
+                                ? 'border-white/5 opacity-80 hover:opacity-100' 
+                                : 'border-white/5 hover:border-white/20'
+                            }`}
                           >
-                              جستجو در سریال‌های جهانی
-                          </button>
-                      </div>
-                  )}
-              </section>
-          )}
+                            <div className="flex items-center gap-3.5 min-w-0">
+                              <div className="w-12 h-16 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10">
+                                <img src={getImageUrl(show.poster_path)} alt={show.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              </div>
 
-          {/* Tab Content: All Episodes */}
-          {activeTab === 'all' && (
-              <section className="animate-in fade-in zoom-in-95 duration-300">
-                  {globalEpisodes.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {globalEpisodes.map((item) => (
-                              <LandscapeCard key={item.id} item={item} onClick={() => openModal(item)} isMine={false} isWatchlist={item.isWatchlist} />
-                          ))}
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-black text-white truncate group-hover:text-[#ccff00] transition-colors">
+                                  {show.name}
+                                </span>
+                                <span className="text-xs font-mono text-gray-400 mt-0.5 ltr text-right">
+                                  S{String(episode.season_number).padStart(2, '0')} E{String(episode.episode_number).padStart(2, '0')}
+                                </span>
+                                <span className="text-xs text-gray-300 truncate mt-0.5 font-medium">
+                                  {episode.name || `قسمت ${episode.episode_number}`}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${
+                                diffDays === 0 
+                                  ? 'bg-[#ccff00] text-black font-black' 
+                                  : isPast 
+                                  ? 'bg-white/5 text-gray-500' 
+                                  : 'bg-white/10 text-white'
+                              }`}>
+                                {badge}
+                              </span>
+
+                              {/* دکمه تیک فقط برای قسمت‌های پخش‌شده و امروز فعال است */}
+                              {diffDays <= 0 && (
+                                <button
+                                  onClick={(e) => handleToggleWatched(e, show.id, episode.id, isWatched)}
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
+                                    isWatched 
+                                      ? 'bg-emerald-500 border-emerald-500 text-black' 
+                                      : 'border-white/20 text-gray-500 hover:border-[#ccff00] hover:text-[#ccff00]'
+                                  }`}
+                                  title={isWatched ? "علامت‌گذاری به عنوان دیده نشده" : "دیدم"}
+                                >
+                                  <Check size={14} strokeWidth={3} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          /* ۲. ادامه تماشا با ثبت واقعی در دیتابیس و انیمیشن جذاب */
+          <div className="space-y-4 animate-in fade-in duration-300">
+            {watchNextList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center text-gray-500 gap-3 bg-white/5 rounded-3xl border border-white/5 border-dashed">
+                <CheckCircle size={48} className="text-emerald-500" strokeWidth={1.5} />
+                <p className="text-base font-bold text-gray-300">عالیه! همه سریال‌هات به‌روز هستن.</p>
+                <p className="text-xs text-gray-500">قسمت دیده‌نشده‌ای در لیست شما باقی نمانده است.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {watchNextList.map((item: any) => {
+                  const { show, seasonNumber, episodeNumber, episodeId, episodeTitle, runtime, watchedCount, totalEpisodes } = item;
+                  const isCardLeaving = animatingCardId === show.id;
+                  
+                  return (
+                    <div
+                      key={`next-${show.id}`}
+                      onClick={() => setSelectedEpData({
+                        showId: show.id,
+                        season: seasonNumber,
+                        number: episodeNumber
+                      })}
+                      className={`group flex items-center justify-between p-3.5 rounded-2xl bg-[#141414] hover:bg-[#1a1a1a] border border-white/5 hover:border-[#ccff00]/40 transition-all duration-300 cursor-pointer shadow-lg ${
+                        isCardLeaving 
+                          ? '-translate-x-full opacity-0 scale-90 pointer-events-none' 
+                          : 'translate-x-0 opacity-100 scale-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-14 h-20 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-md">
+                          <img 
+                            src={getImageUrl(show.poster_path)} 
+                            alt={show.name} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        </div>
+
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-base font-black text-white truncate group-hover:text-[#ccff00] transition-colors">
+                            {show.name}
+                          </span>
+
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-mono font-bold text-[#ccff00] ltr">
+                              S{String(seasonNumber).padStart(2, '0')} E{String(episodeNumber).padStart(2, '0')}
+                            </span>
+                            <span className="text-gray-600 text-xs">•</span>
+                            <span className="text-xs text-gray-400 font-mono">
+                              {watchedCount}/{totalEpisodes}
+                            </span>
+                            <span className="text-gray-600 text-xs">•</span>
+                            <span className="text-xs text-gray-400">
+                              {runtime} دقیقه
+                            </span>
+                          </div>
+
+                          <span className="text-xs text-gray-300 font-medium truncate mt-1.5">
+                            {episodeTitle}
+                          </span>
+                        </div>
                       </div>
-                  ) : (
-                      <div className="flex flex-col items-center justify-center mt-10 text-gray-500 gap-4 text-center bg-white/5 p-10 rounded-3xl border border-white/5 border-dashed">
-                          <AlertCircle size={64} strokeWidth={1} />
-                          <p className="text-lg">در حال حاضر سریال جدیدی در جهان در حال پخش نیست!</p>
-                      </div>
-                  )}
-              </section>
-          )}
-      </div>
+
+                      {/* دکمه تیک تماشا یا نمایش زمان باقیمانده تا پخش */}
+                      {!item.isReleased ? (
+                        <div 
+                          className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1.5 shrink-0 ml-1 select-none"
+                          title={item.airDate ? `تاریخ پخش: ${item.airDate}` : 'هنوز پخش نشده است'}
+                        >
+                          <Clock size={14} />
+                          <span>{item.countdownBadge}</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => handleToggleWatched(e, show.id, episodeId, false)}
+                          className="w-11 h-11 rounded-full flex items-center justify-center border border-white/20 text-gray-400 hover:bg-[#ccff00] hover:text-black hover:border-[#ccff00] transition-all cursor-pointer shrink-0 ml-1"
+                          title="دیدم (ثبت در دیتابیس و رفتن به قسمت بعد)"
+                        >
+                          <Check size={18} strokeWidth={2.5} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+      </main>
 
     </div>
   );
 }
-
-// --- کامپوننت کارت افقی (Landscape) بدون تغییر باقی می‌ماند ---
-const LandscapeCard = ({ item, onClick, isMine, isWatchlist }: any) => {
-    const ep = item.next_episode_to_air;
-    
-    // محاسبه زمان باقی‌مانده (فقط بر اساس روز)
-    const getDaysLeft = (dateString: string) => {
-        const date = new Date(dateString);
-        const today = new Date();
-        
-        // صفر کردن ساعت‌ها برای اینکه اختلاف دقیقاً به روز محاسبه بشه
-        date.setHours(0, 0, 0, 0);
-        today.setHours(0, 0, 0, 0);
-        
-        const diffTime = date.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        
-        if (diffDays === 0) return { text: "پخش: امروز! 🔥", color: "bg-[#ccff00] text-black" };
-        if (diffDays === 1) return { text: "پخش: فردا", color: "bg-white text-black" };
-        
-        // حالا برای هر بازه زمانی بیشتر از ۱ روز، فقط عدد رو نشون میده
-        return { text: `${diffDays} روز دیگر`, color: "bg-white/20 text-white" };
-    };
-
-    const status = getDaysLeft(ep.air_date);
-
-    return (
-        <div 
-            onClick={onClick}
-            className={`group relative aspect-video w-full rounded-2xl overflow-hidden cursor-pointer border transition-all duration-300 hover:scale-[1.02] shadow-xl ${isMine ? 'border-[#ccff00]/30 hover:border-[#ccff00]' : 'border-white/5 hover:border-white/20'}`}
-        >
-            <img 
-                src={getBackdropUrl(item.backdrop_path || item.poster_path)} 
-                alt={item.name} 
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-            />
-            
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-90 group-hover:opacity-80 transition-opacity"></div>
-
-            <div className={`absolute top-3 right-3 px-3 py-1.5 rounded-lg text-xs font-bold shadow-lg flex items-center gap-1 ${status.color}`}>
-                <Clock size={12} /> {status.text}
-            </div>
-
-            {isWatchlist && (
-                <div className="absolute top-3 left-3 px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-500 text-white shadow-lg">
-                    در لیست انتظار شما
-                </div>
-            )}
-
-            <div className="absolute bottom-0 left-0 w-full p-4 md:p-5">
-                <h3 className="text-lg md:text-xl font-black text-white leading-tight mb-1 drop-shadow-md group-hover:text-[#ccff00] transition-colors line-clamp-1">{item.name}</h3>
-                
-                <div className="flex justify-between items-end">
-                    <div className="flex flex-col">
-                        <span className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                            {ep.name || `Episode ${ep.episode_number}`}
-                        </span>
-                        <span className="text-xs text-gray-400 ltr text-right font-mono mt-0.5">
-                            S{ep.season_number} | E{ep.episode_number}
-                        </span>
-                    </div>
-
-                    <div className="bg-white/10 p-2 rounded-full backdrop-blur-md group-hover:bg-[#ccff00] group-hover:text-black transition-colors">
-                        <PlayCircle size={20} />
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
