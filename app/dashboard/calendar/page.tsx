@@ -110,7 +110,7 @@ export default function TrackerMainPage() {
 
       setTrackedShows(showsDetails);
 
-      // واکشی سریع فصل‌های جاری برای دسترسی به episode_id واقعی قسمت بعدی
+      // واکشی فصل‌های جاری و پیش‌رو برای دسترسی به همه قسمت‌های آینده
       const seasonCache: Record<string, any[]> = {};
       await Promise.all(
         showsDetails.map(async (show) => {
@@ -130,12 +130,26 @@ export default function TrackerMainPage() {
             cumulative += count;
           }
 
-          try {
-            const sData = await getSeasonDetails(String(show.id), targetSeason);
-            if (sData?.episodes) {
-              seasonCache[`${show.id}_${targetSeason}`] = sData.episodes;
-            }
-          } catch {}
+          // دانلود تمام فصل‌هایی که قسمت پیش‌رو یا جاری دارند
+          const seasonsToFetch = new Set<number>();
+          seasonsToFetch.add(targetSeason);
+          if (show.next_episode_to_air?.season_number) {
+            seasonsToFetch.add(show.next_episode_to_air.season_number);
+          }
+          if (show.last_episode_to_air?.season_number) {
+            seasonsToFetch.add(show.last_episode_to_air.season_number);
+          }
+
+          await Promise.all(
+            Array.from(seasonsToFetch).map(async (sNum) => {
+              try {
+                const sData = await getSeasonDetails(String(show.id), sNum);
+                if (sData?.episodes) {
+                  seasonCache[`${show.id}_${sNum}`] = sData.episodes;
+                }
+              } catch {}
+            })
+          );
         })
       );
 
@@ -341,16 +355,16 @@ export default function TrackerMainPage() {
     return list;
   }, [trackedShows, watchedRecords, seasonEpisodesMap]);
 
-  // ساخت دسته‌بندی تقویم از امروز به بعد
-// ریفرنس برای اسکرول اتوماتیک به بخش «امروز»
-  const todaySectionRef = useRef<HTMLDivElement>(null);
+// ریفرنس برای اسکرول به امروز یا اولین تاریخ آینده
+  const firstUpcomingRef = useRef<HTMLDivElement>(null);
 
-  // دسته‌بندی پیوسته و هوشمند تقویم (گذشته در بالا، امروز در وسط، آینده در پایین)
-  const calendarData = useMemo(() => {
+  // دسته‌بندی تقویم: نمایش تمام قسمت‌های آینده + اسکرول هوشمند به تاریخ حال
+  const { groups: calendarGroups, firstUpcomingKey } = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
     const allEpisodes: any[] = [];
+    const addedKeys = new Set<string>();
 
     trackedShows.forEach(show => {
       if (!show) return;
@@ -359,44 +373,53 @@ export default function TrackerMainPage() {
         return;
       }
 
-      // ۱. قسمت بعدی که قراره پخش بشه (امروز یا آینده)
+      // خواندن تمام قسمت‌های فصل‌های لود شده (برای نمایش قسمت ۴، ۵، ۶ و بعدی‌ها)
+      const validSeasons = (show.seasons || []).filter((s: any) => s && s.season_number > 0);
+      validSeasons.forEach((season: any) => {
+        const seasonEps = seasonEpisodesMap[`${show.id}_${season.season_number}`] || [];
+        seasonEps.forEach((ep: any) => {
+          if (!ep || !ep.air_date) return;
+          const key = `${show.id}_${ep.id}`;
+          if (addedKeys.has(key)) return;
+
+          const airDate = new Date(ep.air_date);
+          airDate.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+          // فقط تا ۳۶۵ روز آینده و تاریخ‌های گذشته
+          if (diffDays <= 365) {
+            addedKeys.add(key);
+            allEpisodes.push({
+              show,
+              episode: ep,
+              airDate,
+              diffDays
+            });
+          }
+        });
+      });
+
+      // اگر قسمتی در next_episode_to_air بود و هنوز در لیست نیامده
       if (show.next_episode_to_air && show.next_episode_to_air.air_date) {
-        const airDate = new Date(show.next_episode_to_air.air_date);
-        airDate.setHours(0, 0, 0, 0);
-        const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (diffDays <= 365) {
-          allEpisodes.push({
-            show,
-            episode: show.next_episode_to_air,
-            airDate,
-            diffDays
-          });
-        }
-      }
-
-      // ۲. قسمت قبلی که پخش شده (گذشته)
-      if (show.last_episode_to_air && show.last_episode_to_air.air_date) {
-        const airDate = new Date(show.last_episode_to_air.air_date);
-        airDate.setHours(0, 0, 0, 0);
-        const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (diffDays < 0) {
-          allEpisodes.push({
-            show,
-            episode: show.last_episode_to_air,
-            airDate,
-            diffDays
-          });
+        const ep = show.next_episode_to_air;
+        const key = `${show.id}_${ep.id}`;
+        if (!addedKeys.has(key)) {
+          const airDate = new Date(ep.air_date);
+          airDate.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays <= 365) {
+            addedKeys.add(key);
+            allEpisodes.push({ show, episode: ep, airDate, diffDays });
+          }
         }
       }
     });
 
-    // مرتب‌سازی زمانی از قدیمی‌ترین گذشته تا دورترین آینده
+    // مرتب‌سازی از گذشته تا دورترین آینده
     allEpisodes.sort((a, b) => a.airDate.getTime() - b.airDate.getTime());
 
-    // گروه‌بندی دقیق طبق سناریوی خواسته شده
     const groups: { [key: string]: any[] } = {};
+    let firstUpcoming: string | null = null;
 
     allEpisodes.forEach(item => {
       const { diffDays, airDate } = item;
@@ -404,7 +427,6 @@ export default function TrackerMainPage() {
       let badge = "";
 
       if (diffDays < 0) {
-        // بخش گذشته
         const absDays = Math.abs(diffDays);
         if (absDays === 1) {
           label = "دیروز (Yesterday)";
@@ -419,39 +441,40 @@ export default function TrackerMainPage() {
         }
         badge = `${absDays} روز قبل`;
       } else if (diffDays === 0) {
-        // امروز
         label = "امروز (Today)";
         badge = "امروز! 🔥";
       } else if (diffDays === 1) {
-        // فردا
         label = "فردا (Tomorrow)";
         badge = "۱ روز دیگر";
       } else if (diffDays <= 7) {
-        // روزهای این هفته (دوشنبه، چهارشنبه، ...)
         const dayName = airDate.toLocaleDateString('fa-IR', { weekday: 'long' });
         label = dayName;
         badge = `${diffDays} روز دیگر`;
       } else {
-        // بعد از این هفته: در آینده
         label = "در آینده (In the future)";
         badge = `${diffDays} روز دیگر`;
       }
 
       if (!groups[label]) groups[label] = [];
       groups[label].push({ ...item, badge });
+
+      // مشخص کردن اولین گروهِ زمان حال یا آینده برای اسکرول اولیه
+      if (diffDays >= 0 && !firstUpcoming) {
+        firstUpcoming = label;
+      }
     });
 
-    return groups;
-  }, [trackedShows, calendarFilter]);
+    return { groups, firstUpcomingKey: firstUpcoming };
+  }, [trackedShows, calendarFilter, seasonEpisodesMap]);
 
-  // اسکرول نرم به بخش «امروز» به محض باز شدن تقویم
+  // اسکرول هوشمند به امروز، یا اگر امروز چیزی نبود به اولین پخش آینده (مثلاً فردا)
   useEffect(() => {
-    if (isCalendarMode && todaySectionRef.current) {
+    if (isCalendarMode && firstUpcomingRef.current) {
       setTimeout(() => {
-        todaySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        firstUpcomingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 150);
     }
-  }, [isCalendarMode]);
+  }, [isCalendarMode, firstUpcomingKey]);
 
   if (loading) {
     return (
@@ -568,20 +591,21 @@ export default function TrackerMainPage() {
         {/* ۱. تقویم پخش یکپارچه (گذشته در بالا، امروز در وسط با فوکوس خودکار، آینده در پایین) */}
         {isCalendarMode ? (
           <div className="space-y-8 animate-in fade-in duration-300">
-            {Object.keys(calendarData).length === 0 ? (
+            {Object.keys(calendarGroups).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500 gap-3 bg-white/5 rounded-3xl border border-white/5 border-dashed">
                 <AlertCircle size={44} strokeWidth={1.5} />
                 <p className="text-sm font-medium">هیچ قسمتی برای پخش در سریال‌های شما یافت نشد.</p>
               </div>
             ) : (
-              Object.entries(calendarData).map(([groupTitle, items]) => {
+              Object.entries(calendarGroups).map(([groupTitle, items]) => {
                 const isToday = groupTitle.includes("امروز");
                 const isPast = groupTitle.includes("قبل") || groupTitle.includes("دیروز") || groupTitle.includes("هفته گذشته") || groupTitle.includes("۱۴") || groupTitle.includes("۱۳");
+                const isTargetToScroll = groupTitle === firstUpcomingKey;
 
                 return (
                   <div 
                     key={groupTitle} 
-                    ref={isToday ? todaySectionRef : null}
+                    ref={isTargetToScroll ? firstUpcomingRef : null}
                     className={`space-y-3 scroll-mt-24 ${isToday ? 'bg-[#ccff00]/[0.03] p-4 rounded-3xl border border-[#ccff00]/20 shadow-[0_0_20px_rgba(204,255,0,0.05)]' : ''}`}
                   >
                     <div className="flex items-center justify-between border-b border-white/10 pb-2">
