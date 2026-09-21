@@ -28,7 +28,24 @@ import {
   Award
 } from 'lucide-react';
 import EpisodeModal from './components/EpisodeModal';
-
+// لیست ۱۶ تخصص پزشکی-سینمایی اختصاصی بینجر
+const SPECIALTIES = [
+  { id: 'comedy', name: 'فوق تخصص قهقهه', genreId: 35 },
+  { id: 'mystery', name: 'متخصص مغز و اعصاب', genreId: 9648 },
+  { id: 'kdrama', name: 'دکتر کیدراما', isKdrama: true },
+  { id: 'horror', name: 'فوق تخصص ترس', genreId: 27 },
+  { id: 'crime', name: 'متخصص پزشکی قانونی', genreId: 80 },
+  { id: 'epic', name: 'دکتر اپیک', genreId: 10765 },
+  { id: 'mini', name: 'مینی دکتر', isMini: true },
+  { id: 'action', name: 'دکتر آدرنالین', genreId: 10759 },
+  { id: 'teen', name: 'دکتر تین', isTeen: true },
+  { id: 'romance', name: 'دکتر رومنس', genreId: 10766 },
+  { id: 'scifi', name: 'دکتر خیالباف', genreId: 10765 },
+  { id: 'western', name: 'دکتر کابوی', genreId: 37 },
+  { id: 'musical', name: 'متخصص موزیکولوژی', genreId: 10402 },
+  { id: 'doc', name: 'متخصص فکتولوژی', genreId: 99 },
+  { id: 'biography', name: 'مدیر بایگانی', isBio: true },
+];  
 export default function BingerHomeScreen() {
   const router = useRouter();
   const supabase = createClient() as any;
@@ -54,6 +71,50 @@ export default function BingerHomeScreen() {
 
   // مودال جزئیات قسمت
   const [selectedEpData, setSelectedEpData] = useState<any>(null);
+// محاسبه ۱۰۰٪ زنده هویت و تخصص سینمایی بر اساس سریال‌های تماشا شده کاربر
+  const userSpecialty = useMemo(() => {
+    const watchedShowIds = Array.from(new Set(watchedRecords.map(w => Number(w.show_id))));
+    const count = watchedShowIds.length;
+
+    // اگر کاربر کمتر از ۵ سریال دیده باشد
+    if (count < 5) {
+      return `در حال رمزگشایی هویت (${count}/5)`;
+    }
+
+    const watchedShows = trackedShows.filter(s => watchedShowIds.includes(Number(s.id)));
+    if (watchedShows.length === 0) return 'سینمافیل بینجر';
+
+    const genreHoursMap: Record<number, number> = {};
+    let kdramaCount = 0;
+    let miniCount = 0;
+
+    watchedShows.forEach((show: any) => {
+      const episodeCount = show.number_of_episodes || 10;
+      const avgRuntime = show.episode_run_time?.[0] || 45;
+      const showHours = Math.round((episodeCount * avgRuntime) / 60) || 8;
+
+      if (show.origin_country?.includes('KR')) kdramaCount++;
+      if (episodeCount <= 8) miniCount++;
+
+      show.genres?.forEach((g: any) => {
+        if (g.id === 18) return; // درام را برای تخصص اصلی رد می‌کنیم
+        genreHoursMap[g.id] = (genreHoursMap[g.id] || 0) + showHours;
+      });
+    });
+
+    if (kdramaCount >= watchedShows.length * 0.4) {
+      return SPECIALTIES.find(s => s.id === 'kdrama')?.name || 'دکتر کیدراما';
+    }
+    if (miniCount >= watchedShows.length * 0.5) {
+      return SPECIALTIES.find(s => s.id === 'mini')?.name || 'مینی دکتر';
+    }
+
+    const sortedGenres = Object.entries(genreHoursMap).sort(([, a], [, b]) => b - a);
+    const topGenreId = sortedGenres[0] ? Number(sortedGenres[0][0]) : 35;
+
+    const assigned = SPECIALTIES.find(s => s.genreId === topGenreId) || SPECIALTIES[0];
+    return assigned.name;
+  }, [trackedShows, watchedRecords]);
 
   // ۱. واکشی اطلاعات جامع کاربر و دیتابیس
   const loadInitialData = async () => {
@@ -511,7 +572,7 @@ export default function BingerHomeScreen() {
               </span>
               <span className="text-[11px] font-bold text-[#ccff00] flex items-center gap-1">
                 <Award size={12} />
-                {userProfile?.tag || userProfile?.cinematic_title || 'متخصص مغز و اعصاب'}
+                {userSpecialty}
               </span>
             </div>
           </div>
