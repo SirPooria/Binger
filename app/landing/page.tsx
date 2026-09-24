@@ -2,29 +2,29 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Eye, Sparkles, ArrowLeft, Loader2, CheckCircle, User } from 'lucide-react';
+import { Users, Eye, Sparkles, ArrowLeft, Loader2, CheckCircle, User as UserIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { validateIranPhoneNumber } from '@/lib/validation/phone';
+import type { User } from '@supabase/supabase-js';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function BingerLandingPage() {
-  const supabase = createClient() as any;
+  const supabase = createClient();
   const [phone, setPhone] = useState("");
+  const [consent, setConsent] = useState(true);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState("");
 
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // --- تغییر مهم برای افزایش سرعت: استفاده از getSession به جای getUser ---
-// --- بررسی وضعیت لاگین با مهار ارورهای اضافی کنسول ---
   useEffect(() => {
     const checkUser = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        setUser(data.session?.user || null);
-      } catch (err) {
-        // نادیده گرفتن خطاهای کنسل شدن ریکوئست در محیط توسعه
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        setUser(currentUser);
+      } catch {
         setUser(null);
       } finally {
         setAuthLoading(false);
@@ -34,135 +34,159 @@ export default function BingerLandingPage() {
     checkUser();
   }, [supabase.auth]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setMessage("");
     setStatus('idle');
 
-    const iranMobileRegex = /^09[0-9]{9}$/;
-    if (!iranMobileRegex.test(phone)) {
+    const phoneValidation = validateIranPhoneNumber(phone);
+    if (!phoneValidation.isValid) {
       setStatus('error');
-      setMessage("شماره موبایل نامعتبر است (مثلاً ۰۹۱۲...)");
+      setMessage(phoneValidation.error || "شماره موبایل نامعتبر است (مثلاً ۰۹۱۲۳۴۵۶۷۸۹)");
+      return;
+    }
+
+    if (!consent) {
+      setStatus('error');
+      setMessage("لطفاً موافقت با دریافت پیامک را تایید کنید.");
       return;
     }
 
     setStatus('loading');
 
     try {
-      const { error } = await supabase
-        .from('waitlist')
-        .insert([{ phone: phone }]);
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: phoneValidation.normalizedPhone,
+          consent: true,
+        }),
+      });
 
-      if (error) throw error;
+      const data = await res.json() as { error?: string; message?: string; status?: string };
+
+      if (!res.ok) {
+        setStatus('error');
+        setMessage(data.error || data.message || "مشکلی پیش آمد. لطفاً دوباره تلاش کنید.");
+        return;
+      }
 
       setStatus('success');
-      setMessage("تبریک، جایگاه شما رزرو شد، منتظر ما باشید");
-      setPhone(""); 
-      
-    } catch (error) {
-      console.error("Supabase Error:", error);
+      setMessage(data.message || "تبریک، جایگاه شما رزرو شد! منتظر ما باشید.");
+      setPhone("");
+    } catch {
       setStatus('error');
-      setMessage("مشکلی پیش آمد. شاید قبلاً ثبت‌نام کرده‌اید؟");
+      setMessage("خطا در برقراری ارتباط با سرور. لطفاً اتصال اینترنت را بررسی کنید.");
     }
   };
 
   return (
-    <div dir="rtl" className="h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] overflow-hidden relative selection:bg-[#ccff00] selection:text-black flex flex-col">
-      
+    <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] overflow-x-hidden overflow-y-auto relative selection:bg-[#ccff00] selection:text-black flex flex-col">
       <div className="fixed top-[-20%] right-[-10%] w-[500px] h-[500px] bg-cyan-500/20 rounded-full blur-[100px] pointer-events-none" />
       <div className="fixed bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-[#ccff00]/10 rounded-full blur-[100px] pointer-events-none" />
 
-      <nav className="w-full z-50 flex justify-between items-center px-8 py-6">
+      <header className="w-full z-50 flex justify-between items-center px-4 sm:px-8 py-4 sm:py-6">
         <div className="flex items-center gap-3">
-            <img src="/Logo.png" alt="Logo" className="h-10 w-auto object-contain" />
-            <span className="text-[10px] text-gray-400 hidden sm:block">اپلیکیشن ردیابی سریال</span>
+          <Image src="/Logo.png" alt="لوگوی بینجر" width={120} height={40} className="h-8 sm:h-10 w-auto object-contain" priority />
+          <span className="text-[10px] text-gray-400 hidden sm:block">اپلیکیشن ردیابی سریال</span>
         </div>
 
         <div>
-            {authLoading ? (
-                <div className="h-10 w-32 bg-white/10 rounded-full animate-pulse"></div>
-            ) : user ? (
-                <Link 
-                  href="/dashboard" 
-                  className="bg-[#ccff00] text-black px-6 py-3 rounded-full font-black text-sm hover:bg-[#b3e600] transition-all shadow-[0_0_20px_rgba(204,255,0,0.4)] flex items-center gap-2"
-                >
-                    <User size={18} strokeWidth={2.5} />
-                    برو به داشبورد
-                </Link>
-            ) : (
-                <Link 
-                  href="/login" 
-                  className="bg-white/10 border border-white/20 text-white px-6 py-3 rounded-full font-bold text-sm hover:bg-white/20 transition-all flex items-center gap-2"
-                >
-                    ورود / ثبت‌نام
-                    <ArrowLeft size={18} />
-                </Link>
-            )}
+          {authLoading ? (
+            <div className="h-10 w-32 bg-white/10 rounded-full animate-pulse" />
+          ) : user ? (
+            <Link 
+              href="/dashboard" 
+              className="bg-[#ccff00] hover:bg-[#b3e600] text-black font-bold px-4 py-2 sm:px-6 sm:py-2.5 rounded-full text-xs sm:text-sm flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(204,255,0,0.3)] hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
+            >
+              <span>ورود به داشبورد</span>
+              <ArrowLeft size={16} />
+            </Link>
+          ) : (
+            <Link 
+              href="/login" 
+              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium px-4 py-2 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm flex items-center gap-2 transition-all hover:border-[#ccff00]/50 hover:text-[#ccff00] focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
+            >
+              <UserIcon size={14} />
+              <span>ورود / ثبت‌نام</span>
+            </Link>
+          )}
         </div>
-      </nav>
+      </header>
 
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 grid grid-cols-12 gap-4 items-center h-full pb-20">
-        <div className="col-span-12 md:col-span-5 flex flex-col justify-center space-y-6 z-20 text-right md:-mt-32">
-          
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-[#ccff00] w-fit"
-          >
-            <Sparkles size={14} />
-            <span> وارد لیست انتظار شو ( ظرفیت محدود ) </span>
-          </motion.div>
-          
-          <h1 className="text-4xl lg:text-7xl font-black leading-tight">
-           دیگه یادت نمیره <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-500">قسمت چندی !</span>
+      <main className="flex-1 flex flex-col items-center justify-center text-center px-4 z-10 max-w-4xl mx-auto my-auto py-8">
+        <div className="flex flex-col items-center gap-4 sm:gap-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-[11px] sm:text-xs text-gray-300 backdrop-blur-md">
+            <span className="flex h-2 w-2 rounded-full bg-[#ccff00] animate-ping" />
+            <span>به زودی؛ در حال آماده‌سازی برای انتشار عمومی</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-tight sm:leading-tight">
+            همگام با دنیای سریال، <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ccff00] to-cyan-400">
+              بدون جا ماندن از حتی یک قسمت!
+            </span>
           </h1>
-          
-          <p className="text-lg text-gray-400 leading-relaxed max-w-md">
-           اولین دستیار شخصیِ فیلم‌بازها در ایران. نقد کن، لیستت رو بساز <br className="hidden md:block"/>
-           و بدون ترس از اسپویل نقد بخون ! 
+
+          <p className="text-sm sm:text-lg text-gray-400 leading-relaxed max-w-md">
+            اولین دستیار شخصیِ فیلم‌بازها در ایران. نقد کن، لیستت رو بساز <br className="hidden md:block" />
+            و بدون ترس از اسپویل نقد بخون!
           </p>
 
-          <div className="mt-4 w-full max-w-sm relative group">
-            
+          <form onSubmit={handleSubmit} className="mt-2 sm:mt-4 w-full max-w-sm relative group">
             {status !== 'success' ? (
-              <div className="relative h-16">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-[#ccff00] to-cyan-500 rounded-xl blur opacity-30 group-hover:opacity-50 transition duration-500"></div>
-                <div className="relative flex p-1.5 bg-[#0a0a0a] border border-white/10 rounded-xl h-full items-center">
-                  <input 
-                    type="tel" 
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="شماره موبایل (۰۹۱۲...)" 
-                    disabled={status === 'loading'}
-                    className="flex-1 bg-transparent border-none outline-none text-white px-3 font-medium text-right dir-rtl placeholder:text-gray-600 h-full w-full"
-                  />
-                  <button 
-                    onClick={handleSubmit}
-                    disabled={status === 'loading'}
-                    className="bg-[#ccff00] hover:bg-[#b3e600] disabled:bg-gray-600 text-black font-bold h-full px-5 rounded-lg transition-all flex items-center gap-2 text-sm whitespace-nowrap"
-                  >
-                    {status === 'loading' ? (
-                      <>
-                        <span>صبر کنید</span>
-                        <Loader2 className="animate-spin" size={16} />
-                      </>
-                    ) : (
-                      <>
-                        <span>رزرو جایگاه</span>
-                        <ArrowLeft size={16} />
-                      </>
-                    )}
-                  </button>
+              <div className="space-y-3">
+                <div className="relative h-14 sm:h-16">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-[#ccff00] to-cyan-500 rounded-xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+                  <div className="relative flex p-1 sm:p-1.5 bg-[#0a0a0a] border border-white/10 rounded-xl h-full items-center">
+                    <input 
+                      type="tel" 
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="شماره موبایل (۰۹۱۲۳۴۵۶۷۸۹)" 
+                      disabled={status === 'loading'}
+                      aria-label="شماره موبایل برای رزرو جایگاه"
+                      className="flex-1 bg-transparent border-none outline-none text-white px-2 sm:px-3 text-xs sm:text-base font-medium text-right dir-rtl placeholder:text-gray-600 h-full w-full"
+                    />
+                    <button 
+                      type="submit"
+                      disabled={status === 'loading'}
+                      className="bg-[#ccff00] hover:bg-[#b3e600] disabled:bg-gray-600 text-black font-bold h-full px-3.5 sm:px-5 rounded-lg transition-all flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-black"
+                    >
+                      {status === 'loading' ? (
+                        <>
+                          <span>صبر کنید</span>
+                          <Loader2 className="animate-spin" size={16} />
+                        </>
+                      ) : (
+                        <>
+                          <span>رزرو جایگاه</span>
+                          <ArrowLeft size={16} />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
+
+                <label className="flex items-center gap-2 text-right text-[11px] text-gray-400 cursor-pointer justify-start pr-1">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    className="accent-[#ccff00] rounded cursor-pointer"
+                  />
+                  <span>موافقم که پیامک اطلاع‌رسانی راه‌اندازی برای این شماره ارسال شود.</span>
+                </label>
               </div>
             ) : (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="w-full h-16 bg-[#ccff00]/10 border border-[#ccff00]/50 rounded-xl flex items-center justify-center gap-3 text-[#ccff00]"
+                className="w-full h-14 sm:h-16 bg-[#ccff00]/10 border border-[#ccff00]/50 rounded-xl flex items-center justify-center gap-3 text-[#ccff00]"
               >
                 <CheckCircle size={24} />
-                <span className="font-bold text-lg">شما رزرو شدید! 🎉</span>
+                <span className="font-bold text-base sm:text-lg">شما رزرو شدید! 🎉</span>
               </motion.div>
             )}
 
@@ -175,77 +199,39 @@ export default function BingerLandingPage() {
                 {message}
               </motion.p>
             )}
+          </form>
+        </div>
 
+        <section aria-label="ویژگی‌های بینجر" className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12 sm:mt-16 w-full text-right">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-sm">
+            <div className="w-8 h-8 rounded-lg bg-[#ccff00]/10 flex items-center justify-center text-[#ccff00] mb-3">
+              <Eye size={18} />
+            </div>
+            <h2 className="text-sm sm:text-base font-bold text-white mb-1">ضد اسپویل هوشمند</h2>
+            <p className="text-xs text-gray-400 leading-relaxed">فقط نقدهایی رو می‌بینی که تا همون قسمتی که دیدی نوشته شدن!</p>
           </div>
-          
-        </div>
 
-        <div className="col-span-12 md:col-span-7 relative h-full flex items-center justify-center md:-mt-10 min-h-[300px]">
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] md:w-[400px] h-[300px] md:h-[400px] bg-cyan-500/10 blur-[60px] md:blur-[80px] rounded-full"></div>
-             
-             <motion.div 
-               initial={{ opacity: 0, y: 50 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ delay: 0.2, duration: 0.8 }}
-               className="relative w-full h-full flex items-center justify-center"
-             >
-                <img 
-                  src="/Phone1.png" 
-                  alt="Mystery Screen 1" 
-                  className="absolute left-4 md:left-20 w-[160px] md:w-[280px] z-10 opacity-80 scale-90 object-contain"
-                  style={{ transform: 'rotate(-5deg)' }} 
-                />
-                
-                <img 
-                  src="/Phone2.png" 
-                  alt="Mystery Screen 2" 
-                  className="relative z-20 w-[140px] md:w-[250px] drop-shadow-2xl object-contain"
-                  style={{ transform: 'rotate(5deg)' }} 
-                />
-             </motion.div>
-        </div>
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-sm">
+            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400 mb-3">
+              <Sparkles size={18} />
+            </div>
+            <h2 className="text-sm sm:text-base font-bold text-white mb-1">دستیار هوش مصنوعی</h2>
+            <p className="text-xs text-gray-400 leading-relaxed">مودت رو بهش بگو تا دقیق‌ترین سریال رو بر اساس سلیقه‌ت بهت پیشنهاد بده.</p>
+          </div>
+
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-sm">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 mb-3">
+              <Users size={18} />
+            </div>
+            <h2 className="text-sm sm:text-base font-bold text-white mb-1">شبکه فیلم‌بازها</h2>
+            <p className="text-xs text-gray-400 leading-relaxed">دوستات رو دنبال کن، ببین چی می‌بینن و به لیست‌های هم امتیاز بدید.</p>
+          </div>
+        </section>
       </main>
 
-      <div className="relative md:absolute bottom-0 w-full bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-6 px-6 z-30">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            <div className="relative flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-cyan-500/30 backdrop-blur-md group overflow-visible min-h-[70px]">
-                <div className="absolute -top-6 -right-2 w-16 md:w-24 transition-transform group-hover:scale-110 drop-shadow-2xl z-40">
-                    <img src="/bingy.png" className="w-full h-full object-contain" alt="Bingy Mascot" />
-                </div>
-                <div className="w-12 md:w-20 shrink-0"></div> 
-                <div className="text-right z-10 flex-1">
-                    <h3 className="text-sm font-bold text-white leading-tight"> تنها نبین! </h3>
-                    <p className="text-xs text-cyan-400 mt-0.5"> با هزاران نفر همراه شو. اینجا سینما تعطیل نیست. </p>
-                </div>
-            </div>
-
-            <FeatureCard 
-                icon={<Eye className="text-[#ccff00]" size={20} />} 
-                title="آرشیوِ مغزت رو خالی کن"
-                desc=" مهم نیست کی دیدی، ما دقیق یادمونه کجای سریالی. "
-            />
-            <FeatureCard 
-                icon={<Users className="text-pink-500" size={20} />} 
-                title=" منطقه امن (بدون اسپویل) "
-                desc=" هر اپیزودی که ببینی، به نظراتش دسترسی پیدا میکنی! "
-            />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
-  return (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 backdrop-blur-md hover:bg-white/10 transition-colors min-h-[70px]">
-      <div className="w-10 h-10 min-w-[40px] rounded-lg bg-black/50 flex items-center justify-center border border-white/10 overflow-hidden p-1">
-        {icon}
-      </div>
-      <div className="text-right flex-1">
-        <h3 className="text-sm font-bold text-white leading-tight">{title}</h3>
-        <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
-      </div>
+      <footer className="w-full text-center py-4 text-[11px] text-gray-600 z-10">
+        تمامی حقوق برای پلتفرم بینجر محفوظ است © {new Date().getFullYear()}
+      </footer>
     </div>
   );
 }

@@ -39,7 +39,7 @@ export default function EpisodeModal({ showId, seasonNum, episodeNum, onClose, o
 
       // 2. Check Release Date & Watch Status
       if (user) {
-        const released = new Date(data.air_date) <= new Date();
+        const released = data.air_date ? new Date(data.air_date) <= new Date() : false;
         setIsReleased(released);
 
         // Check if watched

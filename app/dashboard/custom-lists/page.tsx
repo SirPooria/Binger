@@ -292,7 +292,7 @@ export default function CustomListsPage() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 pb-28 md:pb-12">
       <div className="max-w-5xl mx-auto">
 
         {/* هدر بالای صفحه */}
@@ -352,28 +352,28 @@ export default function CustomListsPage() {
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     
                     {/* اطلاعات اصلی لیست */}
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2.5 mb-2">
                         {/* بج اولویت نمایش */}
-                        <span className="bg-white/10 border border-white/10 text-[10px] font-bold px-2 py-0.5 rounded-md text-gray-300">
+                        <span className="bg-white/10 border border-white/10 text-[10px] font-bold px-2 py-0.5 rounded-md text-gray-300 shrink-0">
                           اولویت {index + 1}
                         </span>
 
                         {/* بج وضعیت عمومی/خصوصی */}
                         {list.is_public ? (
-                          <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
                             <Globe size={11} /> عمومی
                           </span>
                         ) : (
-                          <span className="bg-gray-500/10 border border-gray-500/30 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <span className="bg-gray-500/10 border border-gray-500/30 text-gray-400 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
                             <Lock size={11} /> خصوصی
                           </span>
                         )}
 
-                        <span className="text-xs text-gray-500">• {items.length} سریال</span>
+                        <span className="text-xs text-gray-500 shrink-0">• {items.length} سریال</span>
                       </div>
 
-                      <h3 className="text-lg md:text-xl font-black text-white">
+                      <h3 className="text-lg md:text-xl font-black text-white truncate">
                         {list.title}
                       </h3>
 
@@ -385,7 +385,7 @@ export default function CustomListsPage() {
                     </div>
 
                     {/* دکمه‌های جابجایی اولویت (Swap) + منوی سه نقطه */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
                       
                       {/* دکمه‌های جابجایی رتبه و اولویت */}
                       <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
@@ -411,10 +411,11 @@ export default function CustomListsPage() {
                       {/* دکمه مدیریت و افزودن سریال */}
                       <button
                         onClick={() => openShowsManager(list)}
-                        className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl border border-white/10 transition-all flex items-center gap-1.5 cursor-pointer"
+                        className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-white/10 transition-all flex items-center gap-1.5 cursor-pointer"
                       >
                         <Search size={14} className="text-[#ccff00]" />
-                        <span>افزودن / مدیریت سریال‌ها</span>
+                        <span className="hidden sm:inline">افزودن / مدیریت سریال‌ها</span>
+                        <span className="sm:hidden">مدیریت سریال‌ها</span>
                       </button>
 
                       {/* منوی ۳ نقطه */}

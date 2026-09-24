@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   getShowDetails, getSeasonDetails, getImageUrl, getBackdropUrl, 
-  getSimilarShows, BASE_URL, API_KEY 
+  getSimilarShows 
 } from '@/lib/tmdbClient';
 import { createClient } from '@/lib/supabase';
 import { 
@@ -179,15 +180,19 @@ export default function ShowDetailsPage() {
 
   const fetchCredits = async (id: string) => {
     try {
-      const res = await fetch(`${BASE_URL}/tv/${id}/credits?api_key=${API_KEY}`);
+      const res = await fetch(`/api/tmdb/tv/${encodeURIComponent(id)}/credits`);
+      if (!res.ok) return;
       const data = await res.json();
       if (data.cast) setCast(data.cast.slice(0, 10));
-    } catch(e) {}
+    } catch (e) {
+      console.error('Error fetching credits:', e);
+    }
   };
 
   const getEnglishDetails = async (id: string) => {
     try {
-      const res = await fetch(`${BASE_URL}/tv/${id}?api_key=${API_KEY}&language=en-US`);
+      const res = await fetch(`/api/tmdb/tv/${encodeURIComponent(id)}?language=en-US`);
+      if (!res.ok) return null;
       return await res.json();
     } catch { return null; }
   };
@@ -620,17 +625,17 @@ export default function ShowDetailsPage() {
       )}
 
       {/* --- HERO SECTION --- */}
-      <div className="relative w-full h-[65vh] md:h-[75vh]">
+      <div className="relative w-full min-h-[55vh] h-auto md:h-[75vh] flex flex-col justify-end">
         <div className="absolute inset-0">
           <img src={getBackdropUrl(show.backdrop_path)} className="w-full h-full object-cover opacity-60" alt={show.name} />
           <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent"></div>
           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent"></div>
         </div>
         
-        <div className="absolute bottom-0 w-full p-6 md:p-12 flex flex-col md:flex-row gap-8 items-end z-10 pb-20">
-          <div className="flex-1 space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="bg-[#ccff00] text-black text-xs font-black px-2.5 py-1 rounded uppercase">
+        <div className="relative w-full p-4 sm:p-6 md:p-12 flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-end z-10 pt-20 pb-8 md:pb-16">
+          <div className="flex-1 space-y-3 sm:space-y-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <span className="bg-[#ccff00] text-black text-[11px] sm:text-xs font-black px-2.5 py-1 rounded uppercase">
                 وضعیت: {getStatusText(show.status)}
               </span>
               {watchedEpisodes.length > 0 && (
@@ -643,57 +648,57 @@ export default function ShowDetailsPage() {
               )}
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-7xl font-black leading-tight text-white drop-shadow-2xl ltr text-right tracking-tighter">
+            <h1 className="text-2xl sm:text-4xl md:text-6xl font-black leading-tight text-white drop-shadow-2xl ltr text-right tracking-tighter">
               {showEn?.name || show.name}
             </h1>
-            <h2 className="text-lg md:text-2xl text-gray-300 font-bold rtl text-right opacity-90">
+            <h2 className="text-base sm:text-lg md:text-2xl text-gray-300 font-bold rtl text-right opacity-90">
               {show.name !== show.original_name ? show.name : ''}
             </h2>
             
-            <div className="flex flex-wrap items-center gap-3 md:gap-4 text-sm text-gray-300 font-bold ltr">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-gray-300 font-bold ltr">
               <button 
                 onClick={toggleWatchlist}
                 disabled={watchlistLoading}
-                className={`flex items-center gap-2 px-4 md:px-6 py-3 rounded-xl font-bold transition-all border cursor-pointer active:scale-95 text-xs md:text-sm ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold transition-all border cursor-pointer active:scale-95 text-xs sm:text-sm ${
                   inWatchlist ? 'bg-[#ccff00] text-black border-[#ccff00]' : 'bg-white/20 text-white border-white/30 hover:bg-white/30'
                 }`}
               >
-                {watchlistLoading ? <Loader2 className="animate-spin" size={18} /> : (inWatchlist ? <Check size={18} /> : <Plus size={18} />)}
+                {watchlistLoading ? <Loader2 className="animate-spin" size={16} /> : (inWatchlist ? <Check size={16} /> : <Plus size={16} />)}
                 <span>{inWatchlist ? 'در لیست انتظار' : 'افزودن به لیست'}</span>
               </button>
               
               {progressPercent === 100 ? (
-                <span className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold bg-green-500/20 text-green-400 border border-green-500/30 cursor-default select-none text-xs md:text-sm">
-                  <CheckCircle2 size={18} />
+                <span className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold bg-green-500/20 text-green-400 border border-green-500/30 cursor-default select-none text-xs sm:text-sm">
+                  <CheckCircle2 size={16} />
                   <span>کامل تماشا شده</span>
                 </span>
               ) : (
                 <button 
                   onClick={() => setShowConfirmAll(true)}
-                  className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all active:scale-95 text-xs md:text-sm cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all active:scale-95 text-xs sm:text-sm cursor-pointer"
                 >
-                  <CheckCircle2 size={18} className="text-gray-400" />
+                  <CheckCircle2 size={16} className="text-gray-400" />
                   <span>کل سریال رو دیدم</span>
                 </button>
               )}
 
-              <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-[#ccff00] border border-white/10 transition-all active:scale-95 cursor-pointer">
-                <Share2 size={18} />
+              <button onClick={() => setShowShareModal(true)} className="flex items-center justify-center p-2.5 sm:px-4 sm:py-3 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-[#ccff00] border border-white/10 transition-all active:scale-95 cursor-pointer">
+                <Share2 size={16} />
               </button>
 
-              <span className="flex items-center gap-1 bg-black/40 px-3 py-1 rounded-full border border-white/10">
-                <Star size={14} fill="#ccff00" className="text-[#ccff00]" /> {show.vote_average ? show.vote_average.toFixed(1) : '-'}
+              <span className="flex items-center gap-1 bg-black/40 px-2.5 py-1 rounded-full border border-white/10 text-xs">
+                <Star size={13} fill="#ccff00" className="text-[#ccff00]" /> {show.vote_average ? show.vote_average.toFixed(1) : '-'}
               </span>
-              <span>{show.first_air_date?.split('-')[0]}</span>
-              <span>{show.number_of_seasons} فصل</span>
+              <span className="text-xs">{show.first_air_date?.split('-')[0]}</span>
+              <span className="text-xs">{show.number_of_seasons} فصل</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* --- TABS --- */}
-      <div className="sticky top-0 z-40 bg-[#050505]/85 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-6 flex gap-8">
+      <div className="sticky top-20 md:top-24 z-40 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-6 sm:gap-8">
           <button 
             onClick={() => setActiveTab('about')}
             className={`py-4 text-sm font-bold relative transition-colors cursor-pointer ${activeTab === 'about' ? 'text-[#ccff00]' : 'text-gray-400 hover:text-white'}`}
@@ -763,10 +768,10 @@ export default function ShowDetailsPage() {
                 <h3 className="font-bold text-white mb-4">مشابه این سریال</h3>
                 <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
                   {similarShows.map((sim) => (
-                    <div key={sim.id} onClick={() => router.push(`/dashboard/tv/${sim.id}`)} className="group relative cursor-pointer w-[120px] shrink-0">
+                    <Link key={sim.id} href={`/dashboard/tv/${sim.id}`} className="group relative w-[120px] shrink-0 block focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-xl">
                       <img src={getImageUrl(sim.poster_path)} className="w-full rounded-lg shadow-md group-hover:scale-105 transition-transform" alt={sim.name} />
                       <h4 className="text-[10px] text-center mt-2 text-gray-400 line-clamp-1">{sim.name}</h4>
-                    </div>
+                    </Link>
                   ))}
                   {similarShows.length === 0 && <span className="text-xs text-gray-500">موردی یافت نشد.</span>}
                 </div>
@@ -825,24 +830,24 @@ export default function ShowDetailsPage() {
                   <Play className="text-[#ccff00]" size={18} /> کجا ببینیم؟
                 </h3>
                 <div className="flex gap-4 justify-center flex-wrap">
-                  <div onClick={() => handlePlatformClick('filimo')} className="relative group">
+                  <button type="button" onClick={() => handlePlatformClick('filimo')} className="relative group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-2xl" aria-label="تماشا در فیلیمو">
                     <PlatformIcon name="فیلیمو" color={platformLinks?.filimo_url ? "bg-yellow-500 border-yellow-400" : "bg-gray-800 grayscale opacity-70 hover:grayscale-0 hover:opacity-100"} />
                     {platformLinks?.filimo_url && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>}
-                  </div>
+                  </button>
                   
-                  <div onClick={() => handlePlatformClick('namava')} className="relative group">
+                  <button type="button" onClick={() => handlePlatformClick('namava')} className="relative group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-2xl" aria-label="تماشا در نماوا">
                     <PlatformIcon name="نماوا" color={platformLinks?.namava_url ? "bg-blue-600 border-blue-400" : "bg-gray-800 grayscale opacity-70 hover:grayscale-0 hover:opacity-100"} />
                     {platformLinks?.namava_url && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>}
-                  </div>
+                  </button>
 
-                  <div onClick={() => handlePlatformClick('filmnet')} className="relative group">
+                  <button type="button" onClick={() => handlePlatformClick('filmnet')} className="relative group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-2xl" aria-label="تماشا در فیلم‌نت">
                     <PlatformIcon name="فیلم‌نت" color={platformLinks?.filmnet_url ? "bg-black border-white/20" : "bg-gray-800 grayscale opacity-70 hover:grayscale-0 hover:opacity-100"} icon={<span className="text-[#e50914] font-black">FN</span>} />
                     {platformLinks?.filmnet_url && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>}
-                  </div>
+                  </button>
 
-                  <div onClick={() => handlePlatformClick('google')}>
+                  <button type="button" onClick={() => handlePlatformClick('google')} className="relative group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-2xl" aria-label="جستجو در گوگل">
                     <PlatformIcon name="گوگل" color="bg-gray-700" icon={<Search size={20} />} />
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -932,7 +937,7 @@ export default function ShowDetailsPage() {
                         <div className="absolute left-3 top-1/2 -translate-y-1/2">
                           <button 
                             onClick={(e) => { e.stopPropagation(); toggleWatched(ep.id); }}
-                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all active:scale-75 cursor-pointer ${isWatched ? 'bg-[#ccff00] border-[#ccff00]' : 'border-gray-600 hover:border-white opacity-0 group-hover:opacity-100'}`}
+                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all active:scale-75 cursor-pointer ${isWatched ? 'bg-[#ccff00] border-[#ccff00]' : 'border-white/30 hover:border-white opacity-80 md:opacity-0 md:group-hover:opacity-100'}`}
                           >
                             {isWatched && <Check size={16} className="text-black" strokeWidth={3} />}
                           </button>
@@ -999,11 +1004,11 @@ export default function ShowDetailsPage() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 sm:gap-4">
                           <button 
                             onClick={(e) => { e.stopPropagation(); toggleSeasonWatched(season.season_number, allSeasonsData[season.season_number]); }}
                             disabled={isLoading}
-                            className={`text-xs font-bold border px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                            className={`text-xs font-bold border px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
                               isFullyWatched 
                                 ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.2)]' 
                                 : 'text-gray-400 hover:text-[#ccff00] border-white/10 hover:border-[#ccff00]'
@@ -1014,7 +1019,10 @@ export default function ShowDetailsPage() {
                             ) : isFullyWatched ? (
                               <><Check size={14} strokeWidth={3} /> کامل دیدم</>
                             ) : (
-                              'شخم زدم (کل فصل)'
+                              <>
+                                <span className="hidden sm:inline">شخم زدم (کل فصل)</span>
+                                <span className="sm:hidden">ثبت فصل</span>
+                              </>
                             )}
                           </button>
                           {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -1027,32 +1035,40 @@ export default function ShowDetailsPage() {
                             allSeasonsData[season.season_number].map((ep: any) => {
                               const isWatched = watchedEpisodes.includes(ep.id);
                               return (
-                                <div key={ep.id} className="flex items-center gap-4 p-4 hover:bg-white/5 border-b border-white/5 last:border-0 group cursor-pointer" onClick={() => setSelectedEp(ep)}>
-                                  <div className="w-16 h-10 bg-gray-800 rounded overflow-hidden shrink-0">
-                                    {ep.still_path ? (
-                                      <img 
-                                        src={getImageUrl(ep.still_path)} 
-                                        className={`w-full h-full object-cover ${isWatched ? '' : 'grayscale'}`} 
-                                        loading="lazy"
-                                        alt={ep.name}
-                                      />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center bg-white/5">
-                                        <span className="text-[8px] font-black text-gray-600">NO IMG</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="w-8 text-center text-sm font-bold text-gray-500">{ep.episode_number}</div>
-                                  <div className="flex-1">
-                                    <h5 className={`text-sm font-bold ${isWatched ? 'text-[#ccff00]' : 'text-gray-200'}`}>{ep.name}</h5>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400">{ep.air_date}</span>
-                                      <span className="text-[10px] text-gray-500">{ep.runtime}m</span>
-                                    </div>
-                                  </div>
+                                <div key={ep.id} className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-white/5 border-b border-white/5 last:border-0 group">
                                   <button 
+                                    type="button" 
+                                    onClick={() => setSelectedEp(ep)} 
+                                    className="flex-1 flex items-center gap-3 sm:gap-4 text-right focus:outline-none focus:ring-1 focus:ring-[#ccff00] rounded-lg"
+                                  >
+                                    <div className="w-14 sm:w-16 h-9 sm:h-10 bg-gray-800 rounded overflow-hidden shrink-0">
+                                      {ep.still_path ? (
+                                        <img 
+                                          src={getImageUrl(ep.still_path)} 
+                                          className={`w-full h-full object-cover ${isWatched ? '' : 'grayscale'}`} 
+                                          loading="lazy"
+                                          alt={ep.name}
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-white/5">
+                                          <span className="text-[8px] font-black text-gray-600">NO IMG</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="w-6 sm:w-8 text-center text-xs sm:text-sm font-bold text-gray-500">{ep.episode_number}</div>
+                                    <div className="flex-1 min-w-0">
+                                      <h5 className={`text-xs sm:text-sm font-bold truncate ${isWatched ? 'text-[#ccff00]' : 'text-gray-200'}`}>{ep.name}</h5>
+                                      <div className="flex items-center gap-2 mt-0.5 sm:mt-1">
+                                        <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-gray-400">{ep.air_date}</span>
+                                        <span className="text-[10px] text-gray-500">{ep.runtime}m</span>
+                                      </div>
+                                    </div>
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    aria-label="تغییر وضعیت تماشا"
                                     onClick={(e) => { e.stopPropagation(); toggleWatched(ep.id); }}
-                                    className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${isWatched ? 'bg-[#ccff00] border-[#ccff00]' : 'border-gray-600 hover:border-white opacity-0 group-hover:opacity-100'}`}
+                                    className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-90 cursor-pointer shrink-0 ${isWatched ? 'bg-[#ccff00] border-[#ccff00]' : 'border-white/30 hover:border-white opacity-80 md:opacity-0 md:group-hover:opacity-100'}`}
                                   >
                                     {isWatched && <Check size={16} className="text-black" />}
                                   </button>

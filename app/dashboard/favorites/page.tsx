@@ -168,7 +168,7 @@ export default function ManageFavoritesPage() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 pb-28 md:pb-12">
       <div className="max-w-5xl mx-auto">
 
         {/* هدر بالای صفحه */}
@@ -285,7 +285,7 @@ export default function ManageFavoritesPage() {
 
       {/* اعلان Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1c1c1c] text-[#ccff00] border border-[#ccff00]/40 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl z-50 flex items-center gap-2">
+        <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 bg-[#1c1c1c] text-[#ccff00] border border-[#ccff00]/40 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl z-50 flex items-center gap-2">
           <CheckCircle2 size={16} />
           <span>{toastMessage}</span>
         </div>

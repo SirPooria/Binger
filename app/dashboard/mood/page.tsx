@@ -423,7 +423,7 @@ export default function MoodChatPage() {
       </div>
 
       {/* بخش ورودی پیام و دکمه‌های سریع (Chips) */}
-      <div className="bg-[#0a0a0a]/95 border-t border-white/10 backdrop-blur-xl z-20 flex flex-col gap-2 pb-3">
+      <div className="bg-[#0a0a0a]/95 border-t border-white/10 backdrop-blur-xl z-20 flex flex-col gap-2 pb-24 md:pb-3">
         <div className="overflow-x-auto no-scrollbar py-2 px-4">
           <div className="flex gap-2 w-max">
             {QUICK_CHIPS.map((chip, idx) => (

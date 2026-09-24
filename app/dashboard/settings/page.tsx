@@ -220,7 +220,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 flex justify-center items-start">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8 pb-28 md:pb-8 flex justify-center items-start">
       <div className="w-full max-w-2xl">
 
         {/* دکمه بازگشت به پروفایل */}

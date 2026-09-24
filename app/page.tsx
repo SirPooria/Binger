@@ -40,7 +40,7 @@ export default function WelcomePage() {
   const displayPosters = posters.length > 0 ? posters : new Array(12).fill("/placeholder.png");
 
   return (
-    <div dir="rtl" className="h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] overflow-hidden relative flex flex-col items-center justify-center">
+    <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] overflow-x-hidden overflow-y-auto py-10 px-4 relative flex flex-col items-center justify-center">
       
       {/* --- BACKGROUND POSTER WALL (Marquee Effect) --- */}
       <div className="absolute inset-0 z-0 opacity-40 grayscale-[50%] brightness-[0.4] pointer-events-none overflow-hidden">
@@ -67,7 +67,7 @@ export default function WelcomePage() {
       </div>
 
       {/* --- CONTENT --- */}
-      <div className="relative z-10 w-full max-w-md px-8 text-center space-y-10 animate-in fade-in slide-in-from-bottom-10 duration-1000">
+      <div className="relative z-10 w-full max-w-md px-4 sm:px-8 text-center space-y-8 sm:space-y-10 animate-in fade-in slide-in-from-bottom-10 duration-1000 my-auto">
         
         <motion.div 
           initial={{ scale: 0, rotate: -180 }}

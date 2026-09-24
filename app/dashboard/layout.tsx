@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link'; 
 import { 
-  Home, Search, List, User, LogOut, Calendar as CalIcon, 
+  Home, Search, List, User, LogOut, 
   X, Sparkles, Menu, Loader2, Star, ChevronRight, SlidersHorizontal, 
-  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check
+  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check, Compass
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { searchShows, advancedDiscoverShows, getPopularShows, getImageUrl } from '@/lib/tmdbClient';
@@ -58,8 +58,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const fetchUserWatchlist = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
-        if (data) setWatchlistIds(new Set(data.map((item: any) => Number(item.show_id))));
+        const { data } = await supabase.from('favorites').select('show_id').eq('user_id', user.id);
+        if (data) setWatchlistIds(new Set(data.map((item) => Number(item.show_id))));
       }
     };
     fetchUserWatchlist();
@@ -74,11 +74,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (nextSet.has(showId)) {
       nextSet.delete(showId);
       setWatchlistIds(nextSet);
-      await supabase.from('watchlist').delete().eq('user_id', user.id).eq('show_id', showId);
+      await supabase.from('favorites').delete().eq('user_id', user.id).eq('show_id', showId);
     } else {
       nextSet.add(showId);
       setWatchlistIds(nextSet);
-      await supabase.from('watchlist').insert([{ user_id: user.id, show_id: showId }]);
+      await supabase.from('favorites').insert({ user_id: user.id, show_id: showId });
     }
   };
 
@@ -497,7 +497,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         
         <nav className="flex-1 w-full space-y-2">
           <MenuItem icon={<Home size={20} />} label="صفحه اصلی" active={pathname === '/dashboard'} onClick={() => router.push('/dashboard')} />
-          <MenuItem icon={<CalIcon size={20} />} label="تقویم پخش" active={pathname === '/dashboard/calendar'} onClick={() => router.push('/dashboard/calendar')} />
+          <MenuItem icon={<Compass size={20} />} label="اکسپلور" active={pathname === '/dashboard/explore'} onClick={() => router.push('/dashboard/explore')} />
           <MenuItem icon={<List size={20} />} label="سریال های من" active={pathname === '/dashboard/lists'} onClick={() => router.push('/dashboard/lists')} />
           <MenuItem icon={<Sparkles size={20} className="text-purple-400" />} label=" پیشنهاد سریال " active={pathname === '/dashboard/mood'} onClick={() => router.push('/dashboard/mood')} />
           <MenuItem icon={<User size={20} />} label="پروفایل" active={pathname === '/dashboard/profile'} onClick={() => router.push('/dashboard/profile')} />
@@ -511,50 +511,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* TOP HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-[100] w-full px-4 py-4 md:px-8 md:py-6 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-all h-24 pointer-events-none">
-        <div className="flex items-center gap-4 pointer-events-auto">
+      <header className="fixed top-0 left-0 right-0 z-[100] w-full px-3 py-3 md:px-8 md:py-6 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-all h-20 md:h-24 pointer-events-none">
+        <div className="flex items-center gap-2.5 md:gap-4 pointer-events-auto">
           {!isMainPage && (
-            <button onClick={() => router.back()} className="md:hidden p-2.5 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer">
-              <ChevronRight size={24} className="text-white group-hover:text-[#ccff00]" />
+            <button onClick={() => router.back()} className="md:hidden p-2 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer">
+              <ChevronRight size={22} className="text-white group-hover:text-[#ccff00]" />
             </button>
           )}
-          <button onClick={() => setIsSidebarOpen(true)} className={`p-2.5 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer ${!isMainPage ? 'hidden md:block' : 'block'}`}>
-            <Menu size={24} className="text-white group-hover:text-[#ccff00]" />
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 md:p-2.5 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer block">
+            <Menu size={22} className="text-white group-hover:text-[#ccff00] md:w-6 md:h-6" />
           </button>
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => router.push('/dashboard')}>
-            <img src="/Logo.png" alt="Binger Logo" className="w-20 h-20 object-contain" />
-          </div>
+          <Link href="/dashboard" className="flex items-center gap-2 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-xl" aria-label="صفحه اصلی بینجر">
+            <img src="/Logo.png" alt="لوگوی بینجر" className="w-14 h-14 md:w-20 md:h-20 object-contain" />
+          </Link>
         </div>
         
         <div className="pointer-events-auto">
           <button 
+            type="button"
             onClick={() => setShowSearchOverlay(true)} 
-            className="flex items-center gap-2 px-4 py-3 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-full border border-white/10 hover:border-[#ccff00]/50 transition-all group cursor-pointer shadow-lg"
+            className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-full border border-white/10 hover:border-[#ccff00]/50 transition-all group cursor-pointer shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
           >
-            <Search size={20} className="text-gray-400 group-hover:text-[#ccff00] transition-colors" />
+            <Search size={18} className="text-gray-400 group-hover:text-[#ccff00] transition-colors md:w-5 md:h-5" />
             <span className="text-xs text-gray-400 font-bold hidden md:inline group-hover:text-white">جستجوی سریال...</span>
           </button>
         </div>
       </header>
 
-      <main className="flex-1 w-full relative pt-24 pb-20 md:pb-0">
+      <main className="flex-1 w-full relative pt-20 md:pt-24 pb-28 md:pb-12">
         {children}
       </main>
 
       {/* --- MOBILE NAVIGATION --- */}
       <div className="md:hidden fixed bottom-0 w-full z-[120]">
         <div className="bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/10 h-20 pb-6 safe-area-pb grid grid-cols-5 items-center relative">
-          <Link href="/dashboard" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard' ? "text-[#ccff00]" : "text-gray-500"}`}>
+          <Link href="/dashboard" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="خانه">
             <Home size={22} />
           </Link>
-          <Link href="/dashboard/calendar" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/calendar' ? "text-[#ccff00]" : "text-gray-500"}`}>
-            <CalIcon size={22} />
+          <Link href="/dashboard/explore" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/explore' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="کاوش">
+            <Compass size={22} />
           </Link>
           <div className="h-full"></div>
-          <Link href="/dashboard/lists" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/lists' ? "text-[#ccff00]" : "text-gray-500"}`}>
+          <Link href="/dashboard/lists" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/lists' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="لیست‌ها">
             <List size={22} />
           </Link>
-          <Link href="/dashboard/profile" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/profile' ? "text-[#ccff00]" : "text-gray-500"}`}>
+          <Link href="/dashboard/profile" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/profile' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="پروفایل">
             <User size={22} />
           </Link>
         </div>
@@ -562,7 +563,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="absolute left-1/2 -translate-x-1/2 bottom-8 z-10">
           <Link 
             href="/dashboard/mood" 
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+            aria-label="دستیار مود سینمایی"
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
               pathname === '/dashboard/mood' 
                 ? "bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.5)] scale-110" 
                 : "bg-[#1a1a1a] text-[#ccff00] border border-[#ccff00]/30 shadow-lg hover:border-[#ccff00]"
@@ -577,12 +579,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 }
 
-function MenuItem({ icon, label, active = false, onClick }: any) {
+interface MenuItemProps {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}
+
+function MenuItem({ icon, label, active = false, onClick }: MenuItemProps) {
   return (
-    <div onClick={onClick} className={`flex items-center gap-3 p-3 mx-2 rounded-xl cursor-pointer transition-all duration-200 group ${active ? 'bg-[#ccff00] text-black font-bold shadow-lg shadow-[#ccff00]/20' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+    <button 
+      type="button" 
+      onClick={onClick} 
+      className={`w-full flex items-center gap-3 p-3 mx-2 rounded-xl text-right transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
+        active 
+          ? 'bg-[#ccff00] text-black font-bold shadow-lg shadow-[#ccff00]/20' 
+          : 'text-gray-400 hover:bg-white/5 hover:text-white'
+      }`}
+    >
       <span className={`transition-transform group-hover:scale-110 ${active ? 'scale-110' : ''}`}>{icon}</span>
       <span className="text-sm">{label}</span>
       {active && <div className="mr-auto w-1.5 h-1.5 rounded-full bg-black"></div>}
-    </div>
+    </button>
   );
 }

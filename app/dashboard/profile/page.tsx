@@ -2,19 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-      const cachePayload: any = {
-        profileInfo: { username: '', bio: '', avatar_url: '😎', is_vip: false },
-        timeStats: { months: 0, days: 0, hours: 0 },
-        totalEpisodes: 0,
-        socialStats: { followers: 0, following: 0, comments: 0 },
-        achievementStats: { watchedRows: [], comments: [], followingIds: [], followerIds: [], favoriteIds: [], episodeRatings: [], commentLikeCount: 0, savedListCount: 0, eventTypes: [] },
-        favorites: [],
-        watchedShows: [],
-        customLists: [],
-        savedLists: [],
-        coverImage: null,
-      };
-
 import { getShowDetailsLite, getBackdropUrl, getImageUrl } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -23,74 +10,19 @@ import {
   Plus, Award, X, Clock, Play, User as UserIcon, 
   Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck
 } from 'lucide-react';
-
-// --- لیست نهایی ۳۵ اچیومنت رسمی بینجر ---
-const ALL_ACHIEVEMENTS = [
-  // ۱. تعامل با محتوا و محصول
-  { id: 'pilot_tester', title: 'The Pilot Tester', icon: '🧪', category: 'محتوا', desc: 'تماشای قسمت اول (پایلوت) از ۵ سریال مختلف بدون دراپ کردن.', threshold: 5, type: 'pilot' },
-  { id: 'seasoned_finisher', title: 'Seasoned Finisher', icon: '🏁', category: 'محتوا', desc: 'تمام کردن کامل یک سریال که حداقل ۵ فصل دارد.', threshold: 1, type: 'completed_long' },
-  { id: 'genre_nomad', title: 'Genre Nomad', icon: '🧭', category: 'محتوا', desc: 'ثبت تماشای سریال در ۵ ژانر کاملاً متفاوت در یک ماه.', threshold: 5, type: 'genres' },
-  { id: 'the_perfectionist', title: 'The Perfectionist', icon: '⭐', category: 'محتوا', desc: 'امتیاز دادن به تک‌تک اپیزودهای یک فصل کامل.', threshold: 1, type: 'rated_season' },
-  { id: 'early_adopter', title: 'Early Adopter', icon: '⚡', category: 'محتوا', desc: 'ثبت و نقد یک سریال جدید در ۴۸ ساعت اول انتشار جهانی آن.', threshold: 1, type: 'early_review' },
-  { id: 'binge_pioneer', title: 'Binge Pioneer', icon: '⛏️', category: 'محتوا', desc: 'اضافه کردن سریالی به لیست تماشا که کمتر از ۱۰۰ نفر آن را می‌بینند.', threshold: 1, type: 'niche_show' },
-  { id: 'cinematic_marathon', title: 'Cinematic Marathon', icon: '🏃', category: 'محتوا', desc: 'تماشای ۵ اپیزود از یک سریال در کمتر از ۲۴ ساعت.', threshold: 5, type: 'marathon' },
-  { id: 'the_reviver', title: 'The Reviver', icon: '🔄', category: 'محتوا', desc: 'از سرگیری سریالی که بیش از ۶ ماه رها شده بوده است.', threshold: 1, type: 'revived' },
-
-  // ۲. وفاداری و بازگشت کاربر
-  { id: 'weekend_warrior', title: 'Weekend Warrior', icon: '⚔️', category: 'وفاداری', desc: 'ثبت تماشای حداقل یک اپیزود در ۴ آخر هفته متوالی.', threshold: 4, type: 'weekend' },
-  { id: 'streak_7days', title: '7-Day Streak', icon: '🔥', category: 'وفاداری', desc: 'ثبت تماشا یا فعالیت در اپلیکیشن برای ۷ روز پشت سر هم.', threshold: 7, type: 'streak' },
-  { id: 'night_owl', title: 'Night Owl', icon: '🦉', category: 'وفاداری', desc: 'ثبت تماشای ۵ اپیزود در بازه زمانی ۱۲ شب تا ۴ صبح.', threshold: 5, type: 'night_owl' },
-  { id: 'monthly_ritual', title: 'Monthly Ritual', icon: '📅', category: 'وفاداری', desc: 'داشتن حداقل یک ثبت تماشا در هر ماه برای ۶ ماه متوالی.', threshold: 6, type: 'monthly' },
-  { id: 'season_premiere_tracker', title: 'Season Premiere Tracker', icon: '🎯', category: 'وفاداری', desc: 'ثبت تماشای اولین اپیزود از فصل جدید سریال در ۲۴ ساعت اول.', threshold: 1, type: 'premiere' },
-  { id: 'consistent_critic', title: 'Consistent Critic', icon: '✍️', category: 'وفاداری', desc: 'ثبت حداقل یک نقد یا کامنت در ۳ هفته پیاپی.', threshold: 3, type: 'critic_streak' },
-  { id: 'morning_bird', title: 'Morning Bird', icon: '🌅', category: 'وفاداری', desc: 'ثبت تماشا بین ساعت ۵ تا ۸ صبح.', threshold: 1, type: 'morning_bird' },
-  { id: 'loyal_viewer', title: 'The Loyal Viewer', icon: '🛡️', category: 'وفاداری', desc: 'تماشای یک سریال در حال پخش تا پایان فصل بدون وقفه طولانی.', threshold: 1, type: 'loyal' },
-  { id: 'one_year_club', title: 'One Year Club', icon: '🎂', category: 'وفاداری', desc: 'عضویت و فعالیت مستمر به مدت ۵۲ هفته (یک سال تمام).', threshold: 365, type: 'account_age' },
-
-  // ۳. گیمیفیکیشن و چالش‌های خاص
-  { id: 'chronological_master', title: 'Chronological Master', icon: '⏳', category: 'چالشی', desc: 'تماشای آثار یک دنیای سینمایی بر اساس خط زمانی داستان.', threshold: 1, type: 'chronological' },
-  { id: 'the_randomizer', title: 'The Randomizer', icon: '🎲', category: 'چالشی', desc: 'انتخاب یک عنوان تصادفی از آثار برتر (IMDb Top 250) و تماشای کامل آن.', threshold: 1, type: 'randomizer' },
-  { id: 'top_1_percent', title: 'Top 1% Fan', icon: '🥇', category: 'چالشی', desc: 'قرار گرفتن جزو ۱ درصد سریع‌ترین کاربران در به پایان رساندن یک سریال.', threshold: 1, type: 'top_speed' },
-  { id: 'trendsetter', title: 'Trendsetter', icon: '💎', category: 'چالشی', desc: 'نوشتن نقدی که بیش از ۲۰ لایک از دیگران دریافت کند.', threshold: 20, type: 'review_likes' },
-  { id: 'easter_egg_hunter', title: 'Easter Egg Hunter', icon: '🥚', category: 'چالشی', desc: 'پیدا کردن یک ویژگی پنهان یا ایستر اگ در محیط اپلیکیشن.', threshold: 1, type: 'easter_egg' },
-  { id: 'cult_leader', title: 'Cult Leader', icon: '🔮', category: 'چالشی', desc: '۵ فالوور سریالی را شروع کنند که شما به تازگی نقد کرده‌اید.', threshold: 5, type: 'cult' },
-  { id: 'the_advocate', title: 'The Advocate', icon: '📢', category: 'چالشی', desc: 'به اشتراک‌گذاری پروفایل یا لیست تماشای بینجر در شبکه‌های اجتماعی.', threshold: 1, type: 'advocate' },
-  { id: 'badge_of_honor', title: 'Badge of Honor', icon: '🎖️', category: 'چالشی', desc: 'دریافت تایید و ریپلای مثبت از یک کاربر سطح بالا در پلتفرم.', threshold: 1, type: 'honor' },
-
-  // ۴. اثر شبکه‌ای و اجتماعی
-  { id: 'matchmaker', title: 'Matchmaker', icon: '💞', category: 'اجتماعی', desc: 'افزودن همزمان یک سریال به لیست محبوب‌ها با کاربری که فالو دارید.', threshold: 1, type: 'matchmaker' },
-  { id: 'first_follower', title: 'The First Follower', icon: '🤝', category: 'اجتماعی', desc: 'فالو کردن کاربری که دقیقاً همان روز در اپلیکیشن ثبت‌نام کرده است.', threshold: 1, type: 'first_follower' },
-  { id: 'echo_chamber', title: 'Echo Chamber', icon: '🔊', category: 'اجتماعی', desc: 'تماشای سریالی توسط ۳ نفر از فالوورهایتان که به آن ۵ ستاره داده‌اید.', threshold: 3, type: 'echo' },
-  { id: 'the_debater', title: 'The Debater', icon: '💬', category: 'اجتماعی', desc: 'شرکت در یک رشته کامنت با حداقل ۵ رفت‌وبرگشت بحث.', threshold: 5, type: 'debater' },
-  { id: 'conversation_starter', title: 'Conversation Starter', icon: '💡', category: 'اجتماعی', desc: 'نوشتن نقدی که حداقل ۱۰ کامنت متفاوت دریافت کند.', threshold: 10, type: 'starter' },
-  { id: 'squad_goals', title: 'Squad Goals', icon: '👥', category: 'اجتماعی', desc: 'ساختن یک لیست سفارشی که توسط ۵ کاربر دیگر ذخیره شود.', threshold: 5, type: 'squad' },
-  { id: 'mutual_trust', title: 'Mutual Trust', icon: '🤲', category: 'اجتماعی', desc: 'فالو کردن متقابل با ۲۰ کاربر مختلف (دریافت ۲۰ فالوبک).', threshold: 20, type: 'mutual' },
-  { id: 'the_scout', title: 'The Scout', icon: '🔭', category: 'اجتماعی', desc: 'معرفی زودهنگام سریالی که بعدها بین فالوورهایتان ترند شود.', threshold: 1, type: 'scout' },
-  { id: 'community_pillar', title: 'Community Pillar', icon: '🏛️', category: 'اجتماعی', desc: 'رسیدن به ۱۰۰ فالوور واقعی به همراه ثبت حداقل ۵۰ نقد ارزشمند.', threshold: 100, type: 'pillar' },
-  { id: 'viral_critic', title: 'Viral Critic', icon: '🚀', category: 'اجتماعی', desc: 'کلیک خوردن لینک نقد شما در خارج از اپلیکیشن بینجر.', threshold: 1, type: 'viral' },
-];
-
-const PROFILE_CACHE_TTL = 5 * 60 * 1000;
-const getProfileCacheKey = (userId: string) => `binger-profile-cache:v2:${userId}`;
-
-const readProfileCache = (userId: string) => {
-  try {
-    const raw = sessionStorage.getItem(getProfileCacheKey(userId));
-    if (!raw) return null;
-    const cached = JSON.parse(raw);
-    return Date.now() - cached.cachedAt < PROFILE_CACHE_TTL ? cached : null;
-  } catch {
-    return null;
-  }
-};
-
-const writeProfileCache = (userId: string, data: any) => {
-  try {
-    sessionStorage.setItem(getProfileCacheKey(userId), JSON.stringify({ ...data, cachedAt: Date.now() }));
-  } catch {
-    // Session storage can be unavailable or full; the profile still works without it.
-  }
-};
+import { 
+  ALL_ACHIEVEMENTS, 
+  getBadgeProgress as calculateBadgeProgress, 
+  type AchievementBadge, 
+  type AchievementUserStats 
+} from '@/lib/achievements';
+import { 
+  readProfileCache, 
+  writeProfileCache, 
+  clearProfileCache, 
+  clearAllProfileCaches,
+  type CachedProfileData 
+} from '@/lib/profileCache';
 
 export default function ProfilePage() {
   const supabase = createClient() as any; 
@@ -197,6 +129,29 @@ export default function ProfilePage() {
           return;
         }
 
+        const payload: Omit<CachedProfileData, 'version' | 'cachedAt'> = {
+          profileInfo: { username: '', bio: '', avatar_url: '😎', is_vip: false },
+          timeStats: { months: 0, days: 0, hours: 0 },
+          totalEpisodes: 0,
+          socialStats: { followers: 0, following: 0, comments: 0 },
+          achievementStats: {
+            watchedRows: [],
+            comments: [],
+            followingIds: [],
+            followerIds: [],
+            favoriteIds: [],
+            episodeRatings: [],
+            commentLikeCount: 0,
+            savedListCount: 0,
+            eventTypes: [],
+          },
+          favorites: [],
+          watchedShows: [],
+          customLists: [],
+          savedLists: [],
+          coverImage: null,
+        };
+
         // ۱. واکشی اطلاعات پروفایل (نام کاربری و بیو)
         const { data: profileData } = await supabase
               .from('profiles')
@@ -211,7 +166,7 @@ export default function ProfilePage() {
                   avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎',
                   is_vip: profileData.is_vip === true,
               };
-              cachePayload.profileInfo = nextProfileInfo;
+              payload.profileInfo = nextProfileInfo;
               setProfileInfo(nextProfileInfo);
           }
 
@@ -266,7 +221,7 @@ export default function ProfilePage() {
           savedListCount: 0,
           eventTypes: (eventsRes.data || []).map((item: any) => item.event_type),
         });
-        cachePayload.achievementStats = {
+        payload.achievementStats = {
           watchedRows: watchedData,
           comments: commentsRes.data || [],
           followingIds: (followingRes.data || []).map((item: any) => item.following_id),
@@ -282,7 +237,7 @@ export default function ProfilePage() {
 
         if (watchedData && watchedData.length > 0) {
           setTotalEpisodes(watchedData.length);
-          cachePayload.totalEpisodes = watchedData.length;
+          payload.totalEpisodes = watchedData.length;
 
           // مرتب‌سازی سریال‌ها از جدیدترین به قدیمی‌ترین
         const sortedWatched = [...watchedData].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -309,13 +264,13 @@ export default function ProfilePage() {
           const days = daysTotal % 30;
 
           setTimeStats({ months, days, hours: hoursTotal });
-          cachePayload.timeStats = { months, days, hours: hoursTotal };
+          payload.timeStats = { months, days, hours: hoursTotal };
 
           // تصویر کاور بر اساس آخرین اثر تماشا شده
           const lastShowId = sortedWatched[0]?.show_id;
           if (showsDetailsMap[String(lastShowId)]?.backdrop_path) {
             const nextCoverImage = getBackdropUrl(showsDetailsMap[String(lastShowId)].backdrop_path);
-            cachePayload.coverImage = nextCoverImage;
+            payload.coverImage = nextCoverImage;
             setCoverImage(nextCoverImage);
           }
 
@@ -332,7 +287,7 @@ export default function ProfilePage() {
           }).filter(Boolean);
 
           setWatchedShows(allWatchedList);
-          cachePayload.watchedShows = allWatchedList;
+          payload.watchedShows = allWatchedList;
         }
 
         // ۳. آمارهای اجتماعی
@@ -340,7 +295,7 @@ export default function ProfilePage() {
         const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id);
         const { count: comments } = await supabase.from('comments').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
         setSocialStats({ followers: followers || 0, following: following || 0, comments: comments || 0 });
-        cachePayload.socialStats = { followers: followers || 0, following: following || 0, comments: comments || 0 };
+        payload.socialStats = { followers: followers || 0, following: following || 0, comments: comments || 0 };
 
         // ۴. سریال‌های محبوب به همراه محاسبه پروگرس‌بار
         const { data: favData } = await supabase.from('favorites').select('show_id').eq('user_id', user.id);
@@ -359,7 +314,7 @@ export default function ProfilePage() {
             return { ...d, progress, watchedCount, totalEps };
           }));
           setFavorites(favs.filter(Boolean));
-          cachePayload.favorites = favs.filter(Boolean);
+          payload.favorites = favs.filter(Boolean);
         }
         // ۵. خواندن لیست‌های اختصاصی کاربر با اولویت تعیین‌شده
         const { data: listsData } = await supabase
@@ -373,12 +328,12 @@ export default function ProfilePage() {
           .order('created_at', { ascending: false });
 
         setCustomLists(listsData || []);
-        cachePayload.customLists = listsData || [];
+        payload.customLists = listsData || [];
         if (listsData?.length > 0) {
           const listIds = listsData.map((list: any) => String(list.id));
           const { data: savedLists } = await supabase.from('list_saves').select('list_id').in('list_id', listIds);
           setAchievementStats(prev => ({ ...prev, savedListCount: savedLists?.length || 0 }));
-          cachePayload.achievementStats.savedListCount = savedLists?.length || 0;
+          payload.achievementStats.savedListCount = savedLists?.length || 0;
         }
 
         const { data: savedListRows } = await supabase
@@ -395,13 +350,13 @@ export default function ProfilePage() {
             .eq('is_public', true);
           const savedOrder = new Map<string, number>(savedListIds.map((id: string, index: number) => [id, index]));
           const sortedSavedLists = (savedListData || []).sort((first: any, second: any) => (savedOrder.get(String(first.id)) || 0) - (savedOrder.get(String(second.id)) || 0));
-          cachePayload.savedLists = sortedSavedLists;
+          payload.savedLists = sortedSavedLists;
           setSavedLists(sortedSavedLists);
         } else {
-          cachePayload.savedLists = [];
+          payload.savedLists = [];
           setSavedLists([]);
         }
-        writeProfileCache(user.id, cachePayload);
+        writeProfileCache(user.id, payload);
       } catch (err) {
         console.error("Error loading profile:", err);
       } finally {
@@ -443,167 +398,64 @@ export default function ProfilePage() {
     setModalLoading(false);
   };
 
-  const getBadgeProgress = (badge: any) => {
-    let current = 0;
-    const watchedRows = achievementStats.watchedRows;
-    const watchedDates = watchedRows
-      .map((row: any) => new Date(row.created_at))
-      .filter((date: Date) => !Number.isNaN(date.getTime()))
-      .sort((firstDate: Date, secondDate: Date) => firstDate.getTime() - secondDate.getTime());
-    const dateKey = (date: Date) => date.toISOString().slice(0, 10);
-    const uniqueDateKeys = Array.from(new Set(watchedDates.map(dateKey)));
+  const badgeStats: AchievementUserStats = {
+    totalEpisodes,
+    watchedRows: achievementStats.watchedRows.map((r: any) => ({
+      show_id: Number(r.show_id),
+      episode_id: r.episode_id ? Number(r.episode_id) : null,
+      created_at: String(r.created_at || ''),
+    })),
+    watchedShows: watchedShows.map((s: any) => ({
+      id: Number(s.id),
+      number_of_seasons: s.number_of_seasons,
+      progress: s.progress,
+      genres: s.genres,
+      status: s.status,
+      first_air_date: s.first_air_date,
+    })),
+    comments: achievementStats.comments.map((c: any) => ({
+      id: Number(c.id),
+      show_id: c.show_id ? Number(c.show_id) : null,
+      parent_id: c.parent_id ? Number(c.parent_id) : null,
+      created_at: String(c.created_at || ''),
+    })),
+    followingIds: achievementStats.followingIds,
+    followerIds: achievementStats.followerIds,
+    favoriteIds: achievementStats.favoriteIds,
+    episodeRatings: achievementStats.episodeRatings,
+    commentLikeCount: achievementStats.commentLikeCount,
+    savedListCount: achievementStats.savedListCount,
+    eventTypes: achievementStats.eventTypes,
+    accountCreatedAt: user?.created_at,
+    followersCount: socialStats.followers,
+  };
 
-    const longestConsecutiveRun = (keys: string[]) => {
-      let longest = 0;
-      let currentRun = 0;
-      let previousTime = 0;
-      keys.sort().forEach((key) => {
-        const currentTime = new Date(`${key}T00:00:00Z`).getTime();
-        if (currentTime - previousTime === 24 * 60 * 60 * 1000) currentRun += 1;
-        else currentRun = 1;
-        previousTime = currentTime;
-        longest = Math.max(longest, currentRun);
-      });
-      return longest;
-    };
-
-    const longestConsecutiveNumbers = (values: number[]) => {
-      const sortedValues = Array.from(new Set(values)).sort((first, second) => first - second);
-      let longest = 0;
-      let currentRun = 0;
-      let previousValue: number | null = null;
-      sortedValues.forEach((value) => {
-        currentRun = previousValue !== null && value === previousValue + 1 ? currentRun + 1 : 1;
-        previousValue = value;
-        longest = Math.max(longest, currentRun);
-      });
-      return longest;
-    };
-
-    const watchedByShow = new Map<number, any[]>();
-    watchedRows.forEach((row: any) => {
-      const showId = Number(row.show_id);
-      watchedByShow.set(showId, [...(watchedByShow.get(showId) || []), row]);
-    });
-
-    // ۱. تماشای قسمت اول از ۵ سریال مختلف
-    if (badge.type === 'pilot') {
-      current = watchedShows.length;
-    }
-    else if (badge.type === 'completed_long') {
-      current = watchedShows.filter((show: any) => show.number_of_seasons >= 5 && show.progress >= 100).length;
-    }
-    else if (badge.type === 'genres') {
-      current = new Set(watchedShows.flatMap((show: any) => (show.genres || []).map((genre: any) => genre.id))).size;
-    }
-    else if (badge.type === 'rated_season') {
-      current = 0;
-    }
-    else if (badge.type === 'early_review') {
-      current = achievementStats.comments.some((comment: any) => {
-        const show = watchedShows.find((watchedShow: any) => Number(watchedShow.id) === Number(comment.show_id));
-        if (!show?.first_air_date || !comment.created_at) return false;
-        return new Date(comment.created_at).getTime() - new Date(show.first_air_date).getTime() <= 48 * 60 * 60 * 1000;
-      }) ? 1 : 0;
-    }
-    // ۲. تماشای ۵ اپیزود بین ۱۲ شب تا ۴ صبح (جغد شب)
-    else if (badge.type === 'night_owl') {
-      // بررسی ساعت تماشای اپیزودها از روی تاریخچه
-      current = Math.min(badge.threshold, Math.floor(totalEpisodes * 0.3)); 
-    }
-    // ۳. تماشای صبحگاهی بین ۵ تا ۸ صبح (سحرخیز)
-    else if (badge.type === 'morning_bird') {
-      current = totalEpisodes > 0 ? 1 : 0;
-    }
-    // ۴. ماراتن ۵ اپیزود در ۲۴ ساعت
-    else if (badge.type === 'marathon') {
-      current = 0;
-      watchedByShow.forEach((rows: any[]) => {
-        for (let index = 0; index < rows.length; index += 1) {
-          const windowStart = new Date(rows[index].created_at).getTime();
-          const withinDay = rows.filter((row: any) => new Date(row.created_at).getTime() - windowStart <= 24 * 60 * 60 * 1000).length;
-          current = Math.max(current, withinDay);
-        }
-      });
-    }
-    // ۵. ایستر اگ (با کلیک روی آواتار فعال می‌شود)
-    else if (badge.type === 'easter_egg') {
-      current = achievementStats.eventTypes.includes('easter_egg_found') ? 1 : 0;
-    }
-    // ۶. سن اکانت و عضویت ۱ ساله
-    else if (badge.type === 'account_age') {
-      const createdAt = user?.created_at ? new Date(user.created_at).getTime() : Date.now();
-      current = Math.floor((Date.now() - createdAt) / (1000 * 60 * 60 * 24));
-    }
-    else if (badge.type === 'weekend') {
-      const weekendWeeks = watchedDates
-        .filter((date: Date) => [5, 6].includes(date.getDay()))
-        .map((date: Date) => Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - date.getUTCDay()) / (7 * 24 * 60 * 60 * 1000)));
-      current = longestConsecutiveNumbers(weekendWeeks);
-    }
-    else if (badge.type === 'streak') {
-      current = longestConsecutiveRun(uniqueDateKeys);
-    }
-    else if (badge.type === 'monthly') {
-      const monthIndexes = watchedDates.map((date: Date) => date.getUTCFullYear() * 12 + date.getUTCMonth());
-      current = longestConsecutiveNumbers(monthIndexes);
-    }
-    else if (badge.type === 'loyal') {
-      current = watchedShows.filter((show: any) => show.progress >= 100 && ['Returning Series', 'Ended', 'Canceled'].includes(show.status)).length;
-    }
-    // ۷. اشتراک‌گذاری پروفایل
-    else if (badge.type === 'advocate') {
-      current = achievementStats.eventTypes.filter((eventType) => ['profile_shared', 'show_shared', 'advocacy_click'].includes(eventType)).length > 0 ? 1 : 0;
-    }
-    // ۸. مدال‌های سوشیال و تعاملی
-    else if (badge.type === 'pillar') {
-      current = Math.min(socialStats.followers, socialStats.comments);
-    }
-    else if (badge.type === 'mutual') {
-      current = achievementStats.followingIds.filter((id) => achievementStats.followerIds.includes(id)).length;
-    }
-    else if (badge.type === 'debater' || badge.type === 'critic_streak') {
-      if (badge.type === 'critic_streak') {
-        const commentWeeks = Array.from(new Set(achievementStats.comments.map((comment: any) => {
-          const date = new Date(comment.created_at);
-          const firstDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - date.getUTCDay()));
-          return firstDay.toISOString().slice(0, 10);
-        })));
-        current = longestConsecutiveRun(commentWeeks);
-      } else {
-        current = achievementStats.comments.filter((comment: any) => comment.parent_id).length;
-      }
-    }
-    else if (badge.type === 'starter') {
-      current = achievementStats.comments.filter((comment: any) => comment.parent_id).length;
-    }
-    else if (badge.type === 'review_likes') {
-      current = achievementStats.commentLikeCount;
-    }
-    else if (badge.type === 'squad') {
-      current = achievementStats.savedListCount;
-    }
-    else if (badge.type === 'randomizer') {
-      current = achievementStats.eventTypes.includes('randomizer_completed') ? 1 : 0;
-    }
-    else if (badge.type === 'chronological') {
-      current = achievementStats.eventTypes.includes('chronological_completed') ? 1 : 0;
-    }
-
-    const percentage = Math.min(100, Math.round((current / badge.threshold) * 100));
-    return { current, isUnlocked: current >= badge.threshold, percentage };
+  const getBadgeProgress = (badge: AchievementBadge) => {
+    return calculateBadgeProgress(badge, badgeStats);
   };
 
   const handleLogout = async () => {
+    clearAllProfileCaches();
     await supabase.auth.signOut();
     router.push('/login');
   };
 
   const recordAchievementEvent = async (eventType: string) => {
     if (!user) return;
-    await supabase.from('achievement_events').insert({ user_id: user.id, event_type: eventType });
-    sessionStorage.removeItem(getProfileCacheKey(user.id));
-    setAchievementStats(prev => ({ ...prev, eventTypes: [...prev.eventTypes, eventType] }));
+    try {
+      await fetch('/api/achievements/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventType }),
+      });
+      clearProfileCache(user.id);
+      setAchievementStats(prev => ({
+        ...prev,
+        eventTypes: prev.eventTypes.includes(eventType) ? prev.eventTypes : [...prev.eventTypes, eventType],
+      }));
+    } catch (err) {
+      console.error('Failed to record achievement event:', err);
+    }
   };
 
   const handleEasterEggClick = () => {
@@ -664,20 +516,20 @@ export default function ProfilePage() {
 
       <div className="flex-1">
         {/* --- HERO HEADER --- */}
-        <div className="relative w-full h-[60vh] min-h-[450px]">
+        <div className="relative w-full min-h-[480px] sm:min-h-[450px] md:h-[60vh]">
           <div className="absolute inset-0">
             {coverImage ? <img src={coverImage} className="w-full h-full object-cover opacity-60" alt="Cover" /> : <div className="w-full h-full bg-gradient-to-br from-purple-900 to-black"></div>}
             <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent"></div>
             <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent"></div>
           </div>
 
-          <div className="absolute top-8 w-full px-6 flex justify-end items-center z-20">
-            <button onClick={handleLogout} className="bg-white/10 hover:bg-red-500/20 hover:text-red-400 backdrop-blur-md px-4 py-2 rounded-full transition-all border border-white/5 flex items-center gap-2 text-xs font-bold cursor-pointer">
-              <LogOut size={16} /> خروج
+          <div className="absolute top-4 sm:top-8 w-full px-4 sm:px-6 flex justify-end items-center z-20">
+            <button onClick={handleLogout} className="bg-white/10 hover:bg-red-500/20 hover:text-red-400 backdrop-blur-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all border border-white/5 flex items-center gap-1.5 sm:gap-2 text-xs font-bold cursor-pointer">
+              <LogOut size={15} /> خروج
             </button>
           </div>
 
-          <div className="absolute bottom-0 w-full px-6 pb-6 flex flex-col items-center z-20 translate-y-8">
+          <div className="absolute bottom-0 w-full px-4 sm:px-6 pb-4 sm:pb-6 flex flex-col items-center z-20 translate-y-6 sm:translate-y-8">
             <div className="relative group cursor-pointer">
               {/* قاب طلایی درخشان دور آواتار مخصوص کاربر VIP */}
               <div className={`rounded-full transition-all relative z-10 ${
@@ -741,7 +593,7 @@ export default function ProfilePage() {
               </Link>
             </div>
 
-            <div className="flex items-center gap-2 mt-6 bg-[#1a1a1a]/80 border border-white/10 backdrop-blur-xl p-1.5 rounded-2xl shadow-xl">
+            <div className="flex items-center gap-1 sm:gap-2 mt-4 sm:mt-6 bg-[#1a1a1a]/80 border border-white/10 backdrop-blur-xl p-1 sm:p-1.5 rounded-2xl shadow-xl max-w-[95vw]">
               {loading ? <ProfileBoxLoading /> : <>
                 <SocialItem count={socialStats.followers} label="Followers" onClick={() => openListModal('followers')} />
                 <div className="w-px h-8 bg-white/10"></div>
@@ -754,7 +606,7 @@ export default function ProfilePage() {
         </div>
 
         {/* --- CONTENT --- */}
-        <div className="max-w-5xl mx-auto px-4 mt-20 space-y-12 mb-20">
+        <div className="max-w-5xl mx-auto px-4 mt-16 sm:mt-20 space-y-8 sm:space-y-12 mb-20">
           
           {/* STATS GRID */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1080,9 +932,9 @@ export default function ProfilePage() {
 
 function SocialItem({ count, label, onClick }: { count: number, label: string, onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center justify-center w-20 py-2 hover:bg-white/5 rounded-xl transition-all cursor-pointer group">
-      <span className="text-lg font-black text-white group-hover:text-[#ccff00] transition-colors">{count}</span>
-      <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wide">{label}</span>
+    <button onClick={onClick} className="flex flex-col items-center justify-center w-16 sm:w-20 py-1.5 sm:py-2 hover:bg-white/5 rounded-xl transition-all cursor-pointer group">
+      <span className="text-base sm:text-lg font-black text-white group-hover:text-[#ccff00] transition-colors">{count}</span>
+      <span className="text-[9px] sm:text-[10px] uppercase font-bold text-gray-500 tracking-wide">{label}</span>
     </button>
   );
 }
@@ -1096,10 +948,21 @@ function ProfileBoxLoading() {
   );
 }
 
-function BadgeItem({ badge, progress, onClick }: any) {
+interface BadgeItemProps {
+  badge: AchievementBadge;
+  progress: { isUnlocked: boolean; percentage: number; current: number };
+  onClick: () => void;
+}
+
+function BadgeItem({ badge, progress, onClick }: BadgeItemProps) {
   const { isUnlocked, percentage } = progress;
   return (
-    <div onClick={onClick} className={`shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border min-w-[110px] cursor-pointer transition-all hover:scale-105 ${isUnlocked ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5 opacity-50 grayscale'}`}>
+    <button 
+      type="button"
+      onClick={onClick} 
+      aria-label={`مدال ${badge.title}`}
+      className={`shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border min-w-[110px] cursor-pointer transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${isUnlocked ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5 opacity-50 grayscale'}`}
+    >
       <div className="text-4xl drop-shadow-md mb-1">{badge.icon}</div>
       <span className={`text-[10px] font-bold ${isUnlocked ? 'text-white' : 'text-gray-500'}`}>{badge.title}</span>
       
@@ -1108,7 +971,7 @@ function BadgeItem({ badge, progress, onClick }: any) {
           <div className="h-full bg-gray-400 rounded-full" style={{ width: `${percentage}%` }}></div>
         </div>
       )}
-    </div>
+    </button>
   );
 }
 

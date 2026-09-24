@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { 
+import {
   X, Check, Star, Play, Clock, Calendar, MessageSquare, Heart,
   ChevronRight, ChevronLeft, Share2, Loader2, Send, Lock,
   CheckCircle2, Eye, Award, Reply, ArrowRight, CornerDownLeft,
   Image as ImageIcon
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { getSeasonDetails, getImageUrl, getShowDetails, BASE_URL, API_KEY } from '@/lib/tmdbClient';
+import { getSeasonDetails, getImageUrl, getShowDetails } from '@/lib/tmdbClient';
 import confetti from 'canvas-confetti';
 
 interface EpisodeModalProps {
@@ -81,7 +81,7 @@ export default function EpisodeModal({
   const triggerCelebration = () => {
     try {
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
-    } catch {}
+    } catch { }
   };
 
   // ۱. دریافت فصل و بازیگران اصلی
@@ -94,7 +94,7 @@ export default function EpisodeModal({
 
         const [sData, creditsRes] = await Promise.all([
           getSeasonDetails(String(showId), Number(seasonNum)),
-          fetch(`${BASE_URL}/tv/${showId}/credits?api_key=${API_KEY}`).then(r => r.json()).catch(() => ({}))
+          fetch(`/api/tmdb/tv/${encodeURIComponent(showId)}/credits`).then(r => r.ok ? r.json() : { cast: [] }).catch(() => ({ cast: [] })) as Promise<{ cast?: Array<{ id: number; name: string; character?: string; profile_path?: string | null }> }>
         ]);
 
         const eps = sData?.episodes || [];
@@ -369,7 +369,7 @@ export default function EpisodeModal({
     showToast('امتیاز اپیزود ثبت شد.');
   };
 
- // ثبت ری‌اکشن حسی در دیتابیس
+  // ثبت ری‌اکشن حسی در دیتابیس
   const handleSelectReaction = async (emoji: string) => {
     setSelectedReaction(emoji);
     setReactionVotes(prev => ({ ...prev, [emoji]: 100 }));
@@ -515,14 +515,14 @@ export default function EpisodeModal({
 
   const rootComments = comments.filter(c => !c.parent_id);
   const getRepliesForComment = (parentId: number) => comments.filter(c => c.parent_id === parentId);
-// بررسی اینکه آیا تاریخ پخش این قسمت رسیده یا نه
+  // بررسی اینکه آیا تاریخ پخش این قسمت رسیده یا نه
   const isEpisodeReleased = episode?.air_date ? new Date(episode.air_date) <= new Date() : false;
   return (
-    <div 
+    <div
       className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto"
       onClick={onClose}
     >
-      <div 
+      <div
         dir="rtl"
         className="bg-[#121212] border border-white/10 w-full max-w-2xl rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.9)] relative my-auto font-['Vazirmatn'] flex flex-col max-h-[92vh] transition-all duration-300"
         onClick={e => e.stopPropagation()}
@@ -575,8 +575,8 @@ export default function EpisodeModal({
               <Share2 size={16} className="text-[#ccff00]" />
             </button>
 
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="p-2 rounded-xl bg-white/5 hover:bg-white/15 text-gray-400 hover:text-white transition-all cursor-pointer"
             >
               <X size={18} />
@@ -597,9 +597,9 @@ export default function EpisodeModal({
                 {/* کاور سینمایی */}
                 <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-white/10 shadow-xl group">
                   {episode.still_path ? (
-                    <img 
-                      src={getImageUrl(episode.still_path)} 
-                      alt={episode.name} 
+                    <img
+                      src={getImageUrl(episode.still_path)}
+                      alt={episode.name}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -608,7 +608,7 @@ export default function EpisodeModal({
                       <span className="text-xs">بدون تصویر رسمی</span>
                     </div>
                   )}
-                  
+
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex items-end p-4 sm:p-5">
                     <div className="w-full flex items-end justify-between gap-4">
                       <div>
@@ -693,29 +693,28 @@ export default function EpisodeModal({
                       <span>این قسمت هنوز پخش نشده است {episode.air_date ? `(تاریخ پخش: ${episode.air_date})` : ''}</span>
                     </div>
                   ) : (
-                  <button
-                    disabled={actionLoading}
-                    onClick={handleToggleWatched}
-                    className={`w-full py-4 rounded-2xl font-black text-sm transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-xl ${
-                      isWatched
-                        ? 'bg-[#ccff00] text-black shadow-[0_0_25px_rgba(204,255,0,0.3)] hover:bg-[#b3e600]'
-                        : 'bg-white text-black hover:bg-gray-200'
-                    }`}
-                  >
-                    {actionLoading ? (
-                      <Loader2 size={18} className="animate-spin" />
-                    ) : isWatched ? (
-                      <>
-                        <Check size={20} strokeWidth={3} />
-                        <span> تماشا شده ✅ </span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye size={20} />
-                        <span> این اپیزود را تماشا کردم </span>
-                      </>
-                    )}
-                  </button>
+                    <button
+                      disabled={actionLoading}
+                      onClick={handleToggleWatched}
+                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all duration-300 active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-xl ${isWatched
+                          ? 'bg-[#ccff00] text-black shadow-[0_0_25px_rgba(204,255,0,0.3)] hover:bg-[#b3e600]'
+                          : 'bg-white text-black hover:bg-gray-200'
+                        }`}
+                    >
+                      {actionLoading ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : isWatched ? (
+                        <>
+                          <Check size={20} strokeWidth={3} />
+                          <span> تماشا شده ✅ </span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye size={20} />
+                          <span> این اپیزود را تماشا کردم </span>
+                        </>
+                      )}
+                    </button>
                   )}
                 </div>
 
@@ -741,7 +740,7 @@ export default function EpisodeModal({
                   </div>
                 ) : (
                   <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-                    
+
                     {/* ۱. ری‌اکشن حسی ۱۰۰٪ واقعی از دیتابیس (با درصد زنده برای تک‌تک ایموجی‌ها) */}
                     <div className="bg-[#181818] border border-white/10 rounded-2xl p-4 sm:p-5">
                       <div className="flex items-center justify-between mb-3">
@@ -755,7 +754,7 @@ export default function EpisodeModal({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                         {REACTIONS.map((r) => {
                           const isSelected = selectedReaction === r.emoji;
                           const votePercent = reactionVotes[r.emoji] || 0;
@@ -764,25 +763,24 @@ export default function EpisodeModal({
                             <button
                               key={r.emoji}
                               onClick={() => handleSelectReaction(r.emoji)}
-                              className={`relative p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer overflow-hidden ${
-                                isSelected
+                              className={`relative p-1.5 sm:p-3 rounded-xl sm:rounded-2xl border flex flex-col items-center justify-center gap-0.5 sm:gap-1 transition-all cursor-pointer overflow-hidden ${isSelected
                                   ? 'bg-[#ccff00]/15 border-[#ccff00] scale-105 shadow-[0_0_15px_rgba(204,255,0,0.2)]'
                                   : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/15'
-                              }`}
+                                }`}
                             >
                               {selectedReaction && totalReactionVotes > 0 && (
-                                <div 
+                                <div
                                   className="absolute bottom-0 left-0 right-0 h-1 bg-[#ccff00] transition-all duration-700"
                                   style={{ width: `${votePercent}%` }}
                                 />
                               )}
 
-                              <span className="text-2xl sm:text-3xl">{r.emoji}</span>
-                              <span className="text-[10px] text-gray-400 font-bold mt-1">{r.label}</span>
+                              <span className="text-xl sm:text-3xl">{r.emoji}</span>
+                              <span className="text-[9px] sm:text-[10px] text-gray-400 font-bold mt-0.5 truncate max-w-full px-0.5">{r.label}</span>
 
                               {/* نمایش درصد ۱۰۰٪ واقعی هر ایموجی از دیتابیس */}
                               {selectedReaction && totalReactionVotes > 0 && (
-                                <span className="text-[10px] font-black text-[#ccff00] ltr font-mono mt-0.5">
+                                <span className="text-[9px] sm:text-[10px] font-black text-[#ccff00] ltr font-mono mt-0.5">
                                   {votePercent}٪
                                 </span>
                               )}
@@ -816,15 +814,14 @@ export default function EpisodeModal({
                               <div
                                 key={actor.id}
                                 onClick={() => handleVoteCharacter(actor)}
-                                className={`relative rounded-2xl p-2.5 border transition-all cursor-pointer overflow-hidden flex flex-col items-center text-center group ${
-                                  isSelected 
-                                    ? 'bg-[#ccff00]/10 border-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.25)]' 
+                                className={`relative rounded-2xl p-2.5 border transition-all cursor-pointer overflow-hidden flex flex-col items-center text-center group ${isSelected
+                                    ? 'bg-[#ccff00]/10 border-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.25)]'
                                     : 'bg-white/5 border-white/5 hover:border-white/20'
-                                }`}
+                                  }`}
                               >
                                 {totalCharacterVotes > 0 && (
-                                  <div 
-                                    className="absolute bottom-0 left-0 right-0 h-1 bg-[#ccff00] transition-all duration-700" 
+                                  <div
+                                    className="absolute bottom-0 left-0 right-0 h-1 bg-[#ccff00] transition-all duration-700"
                                     style={{ width: `${votePercent}%` }}
                                   />
                                 )}
@@ -856,7 +853,7 @@ export default function EpisodeModal({
                     )}
 
                     {/* ۳. کارت ورود به فروم اپیزود */}
-                    <div 
+                    <div
                       onClick={() => setCurrentView('forum')}
                       className="bg-gradient-to-r from-purple-900/30 to-[#ccff00]/10 border border-white/10 hover:border-[#ccff00]/50 rounded-2xl p-4 sm:p-5 flex items-center justify-between transition-all cursor-pointer group shadow-lg"
                     >
@@ -903,7 +900,7 @@ export default function EpisodeModal({
         {/* ================= نمای ۲: تالار کامل فروم و نظرات ================= */}
         {currentView === 'forum' && (
           <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-5 animate-in fade-in duration-200">
-            
+
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <MessageSquare size={18} className="text-[#ccff00]" />
@@ -968,7 +965,7 @@ export default function EpisodeModal({
 
                   return (
                     <div key={comment.id} className="space-y-2">
-                      
+
                       {/* کامنت اصلی */}
                       <div className="bg-[#181818] border border-white/10 rounded-2xl p-4 space-y-2.5">
                         <div className="flex items-center justify-between">
@@ -1008,11 +1005,10 @@ export default function EpisodeModal({
                                   setNewComment('');
                                 }
                               }}
-                              className={`text-xs flex items-center gap-1 transition-colors cursor-pointer px-2.5 py-1 rounded-lg ${
-                                isReplyingHere 
-                                  ? 'bg-red-500/15 text-red-400 border border-red-500/20' 
+                              className={`text-xs flex items-center gap-1 transition-colors cursor-pointer px-2.5 py-1 rounded-lg ${isReplyingHere
+                                  ? 'bg-red-500/15 text-red-400 border border-red-500/20'
                                   : 'text-gray-400 hover:text-[#ccff00] hover:bg-white/5'
-                              }`}
+                                }`}
                             >
                               <Reply size={13} />
                               <span>{isReplyingHere ? 'بستن کادر' : 'پاسخ'}</span>
@@ -1028,7 +1024,7 @@ export default function EpisodeModal({
                         <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] pr-10">
                           <div className="flex items-center gap-2 flex-1 max-w-[160px]">
                             <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                              <div 
+                              <div
                                 className={`h-full transition-all ${author.percent === 100 ? 'bg-[#ccff00]' : 'bg-cyan-400'}`}
                                 style={{ width: `${Math.max(author.percent, 5)}%` }}
                               />

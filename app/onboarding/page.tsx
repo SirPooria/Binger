@@ -107,8 +107,8 @@ export default function Onboarding() {
         }));
         
         const { error: dbError } = await supabase
-            .from('watchlist')
-            .upsert(records as any, { onConflict: 'user_id, show_id' });
+            .from('favorites')
+            .upsert(records, { onConflict: 'user_id, show_id' });
 
         if (dbError) throw dbError;
 
@@ -137,19 +137,19 @@ export default function Onboarding() {
   if (loading && page === 1) return <div className="h-screen bg-[#050505] flex items-center justify-center text-[#ccff00]"><Loader2 className="animate-spin" size={48} /></div>;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-6 pb-32">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 sm:p-6 pb-32">
       
       {/* Header */}
-      <div className="max-w-4xl mx-auto text-center mt-10 mb-12 space-y-4 animate-in fade-in slide-in-from-bottom-4">
-          <div className="w-16 h-16 bg-[#ccff00]/10 rounded-full flex items-center justify-center mx-auto border border-[#ccff00]/20 mb-6">
-              <Sparkles size={32} className="text-[#ccff00]" />
+      <div className="max-w-4xl mx-auto text-center mt-6 sm:mt-10 mb-8 sm:mb-12 space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-bottom-4">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#ccff00]/10 rounded-full flex items-center justify-center mx-auto border border-[#ccff00]/20 mb-4 sm:mb-6">
+              <Sparkles size={28} className="text-[#ccff00]" />
           </div>
-          <h1 className="text-3xl md:text-5xl font-black">چی دوست داری؟</h1>
-          <p className="text-gray-400 text-lg">چند تا از سریال‌های مورد علاقه‌ت رو انتخاب کن تا هوش مصنوعی بینجر دستش بیاد چی بهت پیشنهاد بده.</p>
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black">چی دوست داری؟</h1>
+          <p className="text-gray-400 text-sm sm:text-lg">چند تا از سریال‌های مورد علاقه‌ت رو انتخاب کن تا هوش مصنوعی بینجر دستش بیاد چی بهت پیشنهاد بده.</p>
       </div>
 
       {/* Grid */}
-      <div className="max-w-5xl mx-auto grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 md:gap-6">
+      <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
           {shows.map((show, index) => {
               const isSelected = selectedIds.has(show.id);
               const isLastElement = shows.length === index + 1;
@@ -187,11 +187,11 @@ export default function Onboarding() {
       )}
 
       {/* Bottom Bar (Floating) */}
-      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent z-50 flex justify-center">
+      <div className="fixed bottom-0 left-0 right-0 p-4 sm:p-6 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-transparent z-50 flex justify-center">
           <button 
             onClick={handleFinish}
             disabled={selectedIds.size === 0 || submitting}
-            className={`flex items-center gap-3 px-12 py-4 rounded-2xl font-black text-lg transition-all shadow-2xl ${
+            className={`w-full max-w-sm flex items-center justify-center gap-3 px-6 sm:px-12 py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition-all shadow-2xl ${
                 selectedIds.size > 0 
                 ? 'bg-[#ccff00] text-black hover:bg-[#b3e600] scale-100' 
                 : 'bg-white/10 text-gray-500 cursor-not-allowed scale-95 opacity-50'

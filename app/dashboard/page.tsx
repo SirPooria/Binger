@@ -558,37 +558,42 @@ export default function BingerHomeScreen() {
       {/* ========================================================================= */}
       {/* بخش اول: هدر مینیمال هویت (Compact Identity Header) */}
       {/* ========================================================================= */}
-      <header className="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-md border-b border-white/10 px-4 md:px-8 py-3.5 shadow-2xl">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      <header className="sticky top-20 md:top-24 z-40 bg-[#050505]/95 backdrop-blur-md border-b border-white/10 px-4 md:px-8 py-3.5 shadow-2xl">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
           
           {/* هویت کاربر و تگ تخصص */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-xl shadow-inner shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-lg sm:text-xl shadow-inner shrink-0">
               {userProfile?.avatar_url || '😎'}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-sm md:text-base font-black text-white truncate flex items-center gap-2">
+              <span className="text-xs sm:text-sm md:text-base font-black text-white truncate flex items-center gap-1.5">
                 {userProfile?.username || currentUser?.user_metadata?.full_name || 'کاربر بینجر'}
               </span>
-              <span className="text-[11px] font-bold text-[#ccff00] flex items-center gap-1">
-                <Award size={12} />
-                {userSpecialty}
+              <span className="text-[10px] sm:text-[11px] font-bold text-[#ccff00] flex items-center gap-1 truncate">
+                <Award size={12} className="shrink-0" />
+                <span className="truncate">{userSpecialty}</span>
               </span>
             </div>
           </div>
 
           {/* نوتیفیکیشن عددی قسمت‌های امروز */}
-          <div className="flex items-center gap-2">
-            <div className={`px-3 py-1.5 rounded-xl border text-xs font-black flex items-center gap-1.5 shadow-md ${
+          <div className="flex items-center gap-2 shrink-0">
+            <div className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-black flex items-center gap-1.5 shadow-md ${
               calendarData.totalTodayCount > 0
                 ? 'bg-[#ccff00]/15 border-[#ccff00]/40 text-[#ccff00]'
                 : 'bg-white/5 border-white/10 text-gray-400'
             }`}>
-              <Bell size={14} className={calendarData.totalTodayCount > 0 ? 'text-[#ccff00] animate-pulse' : 'text-gray-500'} />
-              <span>
+              <Bell size={13} className={`shrink-0 ${calendarData.totalTodayCount > 0 ? 'text-[#ccff00] animate-pulse' : 'text-gray-500'}`} />
+              <span className="hidden sm:inline">
                 {calendarData.totalTodayCount > 0 
                   ? `${calendarData.totalTodayCount} قسمت جدید امروز داری`
                   : 'امروز قسمت جدیدی نداری'}
+              </span>
+              <span className="sm:hidden font-mono">
+                {calendarData.totalTodayCount > 0 
+                  ? `${calendarData.totalTodayCount} جدید`
+                  : '۰ جدید'}
               </span>
             </div>
           </div>

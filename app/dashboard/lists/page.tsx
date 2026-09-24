@@ -258,7 +258,7 @@ export default function MyListsPage() {
   const endedCompletedCount = shows.filter(show => watchedStatus[show.id]?.isEnded).length;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-20">
+    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-28 md:pb-20">
       
       <div className="flex items-center gap-4 mb-8">
         <button onClick={() => router.back()} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all cursor-pointer">
@@ -271,10 +271,10 @@ export default function MyListsPage() {
       </div>
 
       {/* تب‌ها */}
-      <div className="flex gap-6 mb-8 border-b border-white/10 px-2 max-w-5xl mx-auto w-full">
+      <div className="flex gap-4 sm:gap-6 mb-8 border-b border-white/10 px-2 max-w-5xl mx-auto w-full overflow-x-auto no-scrollbar whitespace-nowrap">
         <button
           onClick={() => changeTab('completed')}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`pb-3 shrink-0 flex items-center gap-2 border-b-2 text-sm sm:text-base transition-all cursor-pointer ${
             activeTab === 'completed'
               ? 'border-emerald-400 text-emerald-400 font-bold'
               : 'border-transparent text-gray-400 hover:text-white'
@@ -285,7 +285,7 @@ export default function MyListsPage() {
         </button>
         <button
           onClick={() => changeTab('watched')}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`pb-3 shrink-0 flex items-center gap-2 border-b-2 text-sm sm:text-base transition-all cursor-pointer ${
             activeTab === 'watched'
               ? 'border-[#ccff00] text-[#ccff00] font-bold'
               : 'border-transparent text-gray-400 hover:text-white'
@@ -296,7 +296,7 @@ export default function MyListsPage() {
         </button>
         <button
           onClick={() => changeTab('watchlist')}
-          className={`pb-3 flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`pb-3 shrink-0 flex items-center gap-2 border-b-2 text-sm sm:text-base transition-all cursor-pointer ${
             activeTab === 'watchlist'
               ? 'border-purple-500 text-purple-500 font-bold'
               : 'border-transparent text-gray-400 hover:text-white'
