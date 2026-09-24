@@ -343,6 +343,10 @@ export default function EpisodeModal({
         showToast('دیدم! تالار نظرات و نظرسنجی باز شد 🎉');
       }
 
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
+      }
+
       if (onWatchedChange) onWatchedChange();
     } catch (err) {
       console.error(err);

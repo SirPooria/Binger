@@ -296,4 +296,3 @@ export function getBadgeProgress(
 }
 
 export const calculateBadgeProgress = getBadgeProgress;
-

@@ -211,7 +211,7 @@ export default function MyListsPage() {
         <div className="absolute bottom-0 p-4 w-full">
           <h3 className="text-lg font-bold text-white line-clamp-1 ltr text-left">{show.name}</h3>
           
-          {(activeTab === 'watched' || activeTab === 'completed') && (
+          {status && status.watchedCount > 0 ? (
             <div className="mt-2">
               <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mb-1.5">
                 <div 
@@ -228,9 +228,7 @@ export default function MyListsPage() {
                 </span>
               </div>
             </div>
-          )}
-
-          {activeTab === 'watchlist' && (
+          ) : activeTab === 'watchlist' ? (
             <div className="flex items-center gap-2 text-xs font-bold text-gray-400 mt-2">
               <span className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-md">
                 <Clock size={12} className="text-[#ccff00]" />
@@ -243,7 +241,7 @@ export default function MyListsPage() {
                  show.status}
               </span>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     );

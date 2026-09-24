@@ -9,6 +9,7 @@ import {
   ArrowRight, Share2, Globe, Lock, Layers, 
   Loader2, CheckCircle2, Film, BookmarkPlus, BookmarkCheck
 } from 'lucide-react';
+import { ShowCardProgress } from '../../components/ShowProgressBar';
 
 export default function SingleListPage() {
   const params = useParams();
@@ -287,7 +288,11 @@ export default function SingleListPage() {
                       alt={item.show_name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
+                    {/* نشانگر درصد پیشرفت در بالای پوستر */}
+                    <ShowCardProgress showId={item.show_id} showBar={false} />
                   </div>
+                  {/* نوار پیشرفت زیر پوستر */}
+                  <ShowCardProgress showId={item.show_id} showBadge={false} />
                   <h4 className="text-xs font-bold text-gray-200 group-hover:text-[#ccff00] transition-colors truncate px-1">
                     {item.show_name}
                   </h4>

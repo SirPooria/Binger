@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { searchShows, advancedDiscoverShows, getPopularShows, getImageUrl } from '@/lib/tmdbClient';
+import { WatchedProvider } from '@/lib/watchedContext';
+import { ShowCardProgress } from './components/ShowProgressBar';
 
 // ژانرهای برتر برای فیلتر سریع
 const QUICK_GENRES = [
@@ -36,7 +38,7 @@ const MIN_RATINGS = [
   { value: 8.5, label: '★ شاهکار (+۸.۵)' },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -427,6 +429,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         >
                           {watchlistIds.has(Number(show.id)) ? <Check size={14} strokeWidth={3} /> : <Plus size={14} strokeWidth={2.5} />}
                         </button>
+
+                        {/* نشانگر درصد پیشرفت در بالای پوستر */}
+                        <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-3 opacity-90 group-hover:opacity-100 transition-opacity">
                           <h3 className="text-xs font-bold text-white line-clamp-1">{show.name}</h3>
                           <div className="flex items-center justify-between mt-1 text-[10px] text-gray-400">
@@ -435,6 +441,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </span>
                             <span>{show.first_air_date ? show.first_air_date.substring(0, 4) : ''}</span>
                           </div>
+                          {/* نوار پیشرفت زیر کارت در بخش سرچ و پیشنهاد بینجر */}
+                          <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
                         </div>
                       </div>
                     ))}
@@ -601,5 +609,13 @@ function MenuItem({ icon, label, active = false, onClick }: MenuItemProps) {
       <span className="text-sm">{label}</span>
       {active && <div className="mr-auto w-1.5 h-1.5 rounded-full bg-black"></div>}
     </button>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <WatchedProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </WatchedProvider>
   );
 }

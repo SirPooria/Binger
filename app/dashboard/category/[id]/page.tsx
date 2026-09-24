@@ -7,6 +7,7 @@ import {
   getLatestAnime, getAsianDramas, getNewestGlobal, getImageUrl 
 } from '@/lib/tmdbClient';
 import { Loader2, ArrowRight, Star, Calendar } from 'lucide-react';
+import { ShowCardProgress } from '../../components/ShowProgressBar';
 
 export default function CategoryPage() {
   const params = useParams();
@@ -119,6 +120,9 @@ export default function CategoryPage() {
               {/* گرادینت روی عکس */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-[#000000]/40 to-transparent opacity-80"></div>
               
+              {/* نشانگر درصد پیشرفت در بالای پوستر */}
+              <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+
               {/* اطلاعات کارت */}
               <div className="absolute bottom-0 p-3 w-full flex flex-col gap-1">
                 <h3 className="text-xs md:text-sm font-bold text-white line-clamp-1 text-right" dir="auto">
@@ -135,6 +139,9 @@ export default function CategoryPage() {
                       {show.vote_average ? show.vote_average.toFixed(1) : '0'}
                     </span>
                 </div>
+
+                {/* نوار پیشرفت زیر اطلاعات کارت */}
+                <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
               </div>
 
               {/* برچسب کشور (اختیاری) */}

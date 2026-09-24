@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { 
   Heart, ArrowRight, Search, Loader2, CheckCircle2, Tv
 } from 'lucide-react';
+import { ShowCardProgress } from '../components/ShowProgressBar';
 
 export default function ManageFavoritesPage() {
   const router = useRouter();
@@ -249,7 +250,13 @@ export default function ManageFavoritesPage() {
                         }`} 
                       />
                     </button>
+
+                    {/* نشانگر درصد پیشرفت در بالای پوستر */}
+                    <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
                   </div>
+
+                  {/* نوار پیشرفت زیر پوستر */}
+                  <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
 
                   {/* عنوان سریال */}
                   <h4 className="text-xs font-bold text-gray-200 group-hover:text-[#ccff00] transition-colors truncate px-1">

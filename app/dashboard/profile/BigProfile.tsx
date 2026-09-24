@@ -9,6 +9,7 @@ import {
   Plus, Award, X, Clock, Play, User as UserIcon, Calendar, 
   Lock, CheckCircle, LogOut, Share2, Trophy, Globe, Users, Instagram, Twitter, Github
 } from 'lucide-react';
+import { ShowCardProgress } from '../components/ShowProgressBar';
 
 // --- مدال‌ها ---
 const ALL_ACHIEVEMENTS = [
@@ -344,6 +345,7 @@ const openListModal = async (type: 'followers' | 'following' | 'comments' | 'lea
                         {favorites.map((s) => (
                             <div key={s.id} onClick={() => router.push(`/dashboard/tv/${s.id}`)} className="group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 ring-1 ring-white/10 hover:ring-[#ccff00]/50">
                                 <img src={getImageUrl(s.poster_path)} className="w-full h-full object-cover" />
+                                <ShowCardProgress showId={s.id} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3"><span className="text-xs font-bold text-white text-center">{s.name}</span></div>
                             </div>
                         ))}

@@ -13,6 +13,7 @@ import {
   ChevronDown, ChevronUp, Tag, CheckCircle2, Search, Users, ArrowRight 
 } from 'lucide-react';
 import EpisodeModal from '../../components/EpisodeModal';
+import { ShowCardProgress } from '../../components/ShowProgressBar';
 import confetti from 'canvas-confetti'; 
 
 // --- اسکلت لودینگ (Skeleton Loader) ---
@@ -349,6 +350,9 @@ export default function ShowDetailsPage() {
         const released = episodes.filter(ep => isReleased(ep.air_date)).map(e => e.id);
         if (released.every(id => newWatchedList.includes(id))) triggerCelebration();
       }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
+      }
       return;
     }
 
@@ -390,6 +394,9 @@ export default function ShowDetailsPage() {
     }
 
     setWatchedEpisodes(prev => Array.from(new Set([...prev, ...allIds])));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
+    }
     triggerCelebration();
   };
 
@@ -439,6 +446,9 @@ export default function ShowDetailsPage() {
 
         watchedEpisodesRef.current = newWatchedList;
         setWatchedEpisodes(newWatchedList);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
+        }
       } catch (error) {
         console.error('Season watch update failed', error);
       } finally {
@@ -501,6 +511,9 @@ export default function ShowDetailsPage() {
       }
       
       setWatchedEpisodes(prev => Array.from(new Set([...prev, ...idsToMark])));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
+      }
       triggerCelebration();
 
     } catch (err: any) {
@@ -769,7 +782,10 @@ export default function ShowDetailsPage() {
                 <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
                   {similarShows.map((sim) => (
                     <Link key={sim.id} href={`/dashboard/tv/${sim.id}`} className="group relative w-[120px] shrink-0 block focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-xl">
-                      <img src={getImageUrl(sim.poster_path)} className="w-full rounded-lg shadow-md group-hover:scale-105 transition-transform" alt={sim.name} />
+                      <div className="relative rounded-lg overflow-hidden">
+                        <img src={getImageUrl(sim.poster_path)} className="w-full rounded-lg shadow-md group-hover:scale-105 transition-transform" alt={sim.name} />
+                        <ShowCardProgress showId={sim.id} />
+                      </div>
                       <h4 className="text-[10px] text-center mt-2 text-gray-400 line-clamp-1">{sim.name}</h4>
                     </Link>
                   ))}

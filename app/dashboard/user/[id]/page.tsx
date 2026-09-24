@@ -12,6 +12,7 @@ import {
   Lock, CheckCircle, Share2, Trophy, Tv, 
   Layers, ArrowRight, UserPlus, UserCheck, CheckCircle2 
 } from 'lucide-react';
+import { ShowCardProgress } from '../../components/ShowProgressBar';
 import type { Database } from '@/lib/database.types';
 
 type PublicProfile = {
@@ -638,6 +639,7 @@ export default function UserPublicProfilePage() {
                         بدون پوستر
                       </div>
                     )}
+                    <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} />
                   </div>
                   <div className="p-3">
                     <h3 className="font-bold text-xs text-white truncate group-hover:text-[#ccff00] transition-colors">

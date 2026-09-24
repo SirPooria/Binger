@@ -18,6 +18,7 @@ import {
   ArrowLeft, Flame, Star, Search, SlidersHorizontal, RotateCcw,
   X, Layers, Globe, Eye, Tv, Share2, Lock, Clapperboard, Loader2
 } from 'lucide-react';
+import { ShowCardProgress } from '../components/ShowProgressBar';
 
 // --- GENRE TRANSLATIONS ---
 const GENRE_MAP: Record<number, string> = {
@@ -1624,6 +1625,9 @@ function ShowCard({ show, isAdded, onClick, onToggle }: any) {
       >
         {isAdded ? <Bookmark size={14} fill="black" /> : <Plus size={14} />}
       </button>
+
+      {/* نشانگر درصد پیشرفت در بالای پوستر */}
+      <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
       
       <div className="absolute bottom-0 p-2.5 sm:p-3 w-full">
         <h3 className="text-xs font-bold text-white line-clamp-1 drop-shadow-md">{show.name}</h3>
@@ -1636,6 +1640,9 @@ function ShowCard({ show, isAdded, onClick, onToggle }: any) {
             </span>
           )}
         </div>
+
+        {/* نوار پیشرفت زیر مشخصات کارت */}
+        <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Zap, X, Cpu, Star, HelpCircle, ArrowRight, RotateCcw, Crown } from 'lucide-react';
 import { getImageUrl, searchShows, getPopularShows, getShowDetails } from '@/lib/tmdbClient'; 
 import { useRouter } from 'next/navigation';
+import { ShowCardProgress } from '../components/ShowProgressBar';
 import { createClient } from '@/lib/supabase';
 
 const QUICK_CHIPS = [
@@ -394,10 +395,15 @@ export default function MoodChatPage() {
                         <div className="absolute top-1.5 right-1.5 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-bold text-[#ccff00] flex items-center gap-0.5 shadow-sm border border-white/5">
                           <Star size={9} fill="currentColor" /> {show.vote_average ? show.vote_average.toFixed(1) : '—'}
                         </div>
+                        {/* نشانگر درصد پیشرفت در بالای پوستر */}
+                        <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+
                         <div className="absolute bottom-0 w-full p-2 text-right">
                           <h4 className="text-[10px] font-bold line-clamp-2 text-white group-hover:text-[#ccff00] transition-colors leading-tight">
                             {show.name}
                           </h4>
+                          {/* نوار پیشرفت زیر عنوان */}
+                          <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
                         </div>
                       </div>
                     ))}

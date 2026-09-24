@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, Calendar, Loader2, MapPin, Tv, UserRound } from 'lucide-react';
 import { getImageUrl, getPersonDetails } from '@/lib/tmdbClient';
+import { ShowCardProgress } from '../../components/ShowProgressBar';
 
 export default function ActorPage() {
   const params = useParams();
@@ -119,9 +120,13 @@ export default function ActorPage() {
                   onClick={() => router.push(`/dashboard/tv/${show.id}`)}
                   className="group text-right cursor-pointer"
                 >
-                  <div className="aspect-[2/3] rounded-2xl overflow-hidden border border-white/10 bg-white/5 group-hover:border-[#ccff00]/60 group-hover:-translate-y-1 transition-all">
+                  <div className="relative aspect-[2/3] rounded-2xl overflow-hidden border border-white/10 bg-white/5 group-hover:border-[#ccff00]/60 group-hover:-translate-y-1 transition-all">
                     <img src={getImageUrl(show.poster_path)} alt={show.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    {/* نشانگر درصد پیشرفت در بالای پوستر */}
+                    <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
                   </div>
+                  {/* نوار پیشرفت زیر پوستر */}
+                  <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
                   <h3 className="text-sm font-bold text-gray-200 mt-2 line-clamp-1 group-hover:text-[#ccff00]">{show.name}</h3>
                   <p className="text-[10px] text-gray-500 line-clamp-1 mt-1">{show.character || 'بازیگر'}</p>
                 </button>

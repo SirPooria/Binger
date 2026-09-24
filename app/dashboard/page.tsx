@@ -28,6 +28,7 @@ import {
   Award
 } from 'lucide-react';
 import EpisodeModal from './components/EpisodeModal';
+import { ShowCardProgress } from './components/ShowProgressBar';
 // لیست ۱۶ تخصص پزشکی-سینمایی اختصاصی بینجر
 const SPECIALTIES = [
   { id: 'comedy', name: 'فوق تخصص قهقهه', genreId: 35 },
@@ -317,6 +318,10 @@ export default function BingerHomeScreen() {
         console.error("Optimistic insert failed:", error);
         setWatchedRecords(prev => prev.filter(w => Number(w.episode_id) !== Number(episodeId)));
       }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
     }
   };
 
@@ -625,11 +630,14 @@ export default function BingerHomeScreen() {
                   className="bg-[#181818] border border-white/5 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-white/20 transition-all"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <img 
-                      src={getImageUrl(show.poster_path)} 
-                      alt={show.name} 
-                      className="w-10 h-14 rounded-xl object-cover shrink-0" 
-                    />
+                    <div className="relative w-10 h-14 rounded-xl overflow-hidden shrink-0 bg-white/5">
+                      <img 
+                        src={getImageUrl(show.poster_path)} 
+                        alt={show.name} 
+                        className="w-full h-full object-cover" 
+                      />
+                      <ShowCardProgress showId={show.id} showPercentageBadge={false} />
+                    </div>
                     <div className="flex flex-col min-w-0">
                       <span className="text-xs font-bold text-white truncate">{show.name}</span>
                       <span className="text-[10px] text-gray-400 mt-0.5 font-mono">⭐ {show.vote_average?.toFixed(1) || 'N/A'}</span>

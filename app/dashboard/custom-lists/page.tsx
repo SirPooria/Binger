@@ -10,6 +10,7 @@ import {
   Lock, ArrowUp, ArrowDown, Search, X, Loader2, ArrowRight, 
   Check, Film, Layers, CheckCircle2, Compass
 } from 'lucide-react';
+import { ShowCardProgress } from '../components/ShowProgressBar';
 
 export default function CustomListsPage() {
   const router = useRouter();
@@ -652,11 +653,14 @@ export default function CustomListsPage() {
                     return (
                       <div key={show.id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl transition-colors">
                         <div className="flex items-center gap-3">
-                          <img 
-                            src={getImageUrl(show.poster_path)} 
-                            alt={show.name} 
-                            className="w-10 h-14 object-cover rounded-lg bg-black"
-                          />
+                          <div className="relative w-10 h-14 shrink-0 rounded-lg overflow-hidden bg-black">
+                            <img 
+                              src={getImageUrl(show.poster_path)} 
+                              alt={show.name} 
+                              className="w-full h-full object-cover"
+                            />
+                            <ShowCardProgress showId={show.id} showPercentageBadge={false} />
+                          </div>
                           <div>
                             <h5 className="text-xs font-bold text-white">{show.name}</h5>
                             <span className="text-[10px] text-gray-400 ltr block text-right">{show.first_air_date?.split('-')[0] || ''}</span>
@@ -692,11 +696,14 @@ export default function CustomListsPage() {
                 listShows.map((item) => (
                   <div key={item.id} className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-2.5 rounded-2xl">
                     <div className="flex items-center gap-3">
-                      <img 
-                        src={getImageUrl(item.poster_path)} 
-                        alt={item.show_name} 
-                        className="w-10 h-14 object-cover rounded-lg bg-black"
-                      />
+                      <div className="relative w-10 h-14 shrink-0 rounded-lg overflow-hidden bg-black">
+                        <img 
+                          src={getImageUrl(item.poster_path)} 
+                          alt={item.show_name} 
+                          className="w-full h-full object-cover"
+                        />
+                        <ShowCardProgress showId={item.show_id} showPercentageBadge={false} />
+                      </div>
                       <span className="text-xs font-bold text-white">{item.show_name}</span>
                     </div>
 
