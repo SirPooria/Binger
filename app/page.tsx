@@ -69,6 +69,15 @@ export default function WelcomePage() {
       {/* --- CONTENT --- */}
       <div className="relative z-10 w-full max-w-md px-4 sm:px-8 text-center space-y-8 sm:space-y-10 animate-in fade-in slide-in-from-bottom-10 duration-1000 my-auto">
         
+        <Link 
+          href="/landing" 
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-xs font-bold hover:bg-[#ccff00]/20 transition-all mb-4 shadow-[0_0_15px_rgba(204,255,0,0.15)]"
+        >
+          <span className="w-2 h-2 rounded-full bg-[#ccff00] animate-ping"></span>
+          <span>🔥 رویداد پیش‌ثبت‌نام، رزرو آیدی و جام بینجر</span>
+          <ArrowLeft size={14} />
+        </Link>
+
         <motion.div 
           initial={{ scale: 0, rotate: -180 }}
           animate={{ scale: 1, rotate: 0 }}

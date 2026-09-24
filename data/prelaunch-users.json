@@ -1,0 +1,110 @@
+[
+  {
+    "id": 1,
+    "phone": "0912***1001",
+    "username": "Shelby_Tommy",
+    "redeem_code": "BINGER-SHELBY",
+    "invites_count": 28,
+    "avatar": "🎩",
+    "created_at": "2026-09-20T10:00:00Z"
+  },
+  {
+    "id": 2,
+    "phone": "0912***2002",
+    "username": "Heisenberg_WW",
+    "redeem_code": "BINGER-METH",
+    "invites_count": 21,
+    "avatar": "⚗️",
+    "created_at": "2026-09-20T11:30:00Z"
+  },
+  {
+    "id": 3,
+    "phone": "0912***3003",
+    "username": "Rust_Cohle",
+    "redeem_code": "BINGER-TRUE",
+    "invites_count": 17,
+    "avatar": "🚬",
+    "created_at": "2026-09-21T09:15:00Z"
+  },
+  {
+    "id": 4,
+    "phone": "0912***4004",
+    "username": "Tony_Soprano",
+    "redeem_code": "BINGER-TONY",
+    "invites_count": 14,
+    "avatar": "🥩",
+    "created_at": "2026-09-21T14:40:00Z"
+  },
+  {
+    "id": 5,
+    "phone": "0912***5005",
+    "username": "Dexter_Morgan",
+    "redeem_code": "BINGER-DEXTER",
+    "invites_count": 11,
+    "avatar": "💉",
+    "created_at": "2026-09-22T08:20:00Z"
+  },
+  {
+    "id": 6,
+    "phone": "0912***6006",
+    "username": "Geralt_Rivia",
+    "redeem_code": "BINGER-WITCHER",
+    "invites_count": 9,
+    "avatar": "🐺",
+    "created_at": "2026-09-22T16:10:00Z"
+  },
+  {
+    "id": 7,
+    "phone": "0912***7007",
+    "username": "Jon_Snow",
+    "redeem_code": "BINGER-WINTER",
+    "invites_count": 8,
+    "avatar": "⚔️",
+    "created_at": "2026-09-23T11:00:00Z"
+  },
+  {
+    "id": 8,
+    "phone": "0912***8008",
+    "username": "Don_Corleone",
+    "redeem_code": "BINGER-DON",
+    "invites_count": 7,
+    "avatar": "🌹",
+    "created_at": "2026-09-23T18:25:00Z"
+  },
+  {
+    "id": 9,
+    "phone": "0912***9009",
+    "username": "Lalo_Salamanca",
+    "redeem_code": "BINGER-LALO",
+    "invites_count": 6,
+    "avatar": "🌮",
+    "created_at": "2026-09-24T12:00:00Z"
+  },
+  {
+    "id": 10,
+    "phone": "0912***0010",
+    "username": "Neo_Matrix",
+    "redeem_code": "BINGER-NEO",
+    "invites_count": 5,
+    "avatar": "🕶️",
+    "created_at": "2026-09-24T15:30:00Z"
+  },
+  {
+    "id": 11,
+    "phone": "0912***1111",
+    "username": "Tyler_Durden",
+    "redeem_code": "BINGER-FIGHT",
+    "invites_count": 4,
+    "avatar": "🧼",
+    "created_at": "2026-09-24T19:45:00Z"
+  },
+  {
+    "id": 12,
+    "phone": "0912***2222",
+    "username": "Batman_Wayne",
+    "redeem_code": "BINGER-BAT",
+    "invites_count": 3,
+    "avatar": "🦇",
+    "created_at": "2026-09-24T21:10:00Z"
+  }
+]
