@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { 
   Plus, MoreVertical, Trash2, Edit3, Share2, Globe, 
   Lock, ArrowUp, ArrowDown, Search, X, Loader2, ArrowRight, 
-  Check, Film, Layers, CheckCircle2, Compass
+  Check, Film, Layers, CheckCircle2, Compass, Pin, Crown, Sparkles, AlertCircle
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
 
@@ -18,10 +18,12 @@ export default function CustomListsPage() {
 
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [isVip, setIsVip] = useState(false);
   const [lists, setLists] = useState<any[]>([]);
 
   // استیت‌های مدال ساخت / ویرایش لیست
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [editingList, setEditingList] = useState<any>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -58,6 +60,15 @@ export default function CustomListsPage() {
       }
       setUser(user);
 
+      // خواندن وضعیت VIP کاربر
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_vip, role')
+        .eq('id', user.id)
+        .single();
+      const userIsVip = profile?.is_vip === true || profile?.role === 'admin';
+      setIsVip(userIsVip);
+
       // خواندن لیست‌ها مرتب شده بر اساس رتبه اولویت
       const { data: listsData, error } = await supabase
         .from('user_lists')
@@ -66,6 +77,7 @@ export default function CustomListsPage() {
           list_items ( id, show_id, show_name, poster_path )
         `)
         .eq('user_id', user.id)
+        .order('is_pinned', { ascending: false })
         .order('order_index', { ascending: true })
         .order('created_at', { ascending: false });
 
@@ -111,10 +123,47 @@ export default function CustomListsPage() {
     }
   };
 
+  // ۲.۵ سنجاق کردن یا لغو سنجاق لیست در بالای پروفایل (مخصوص VIP)
+  const handleTogglePin = async (list: any) => {
+    if (!isVip) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+
+    const nextPinned = !list.is_pinned;
+    try {
+      if (nextPinned) {
+        // برای داشتن یک لیست پین‌شده شاخص، بقیه را آن‌پین می‌کنیم
+        await supabase.from('user_lists').update({ is_pinned: false }).eq('user_id', user.id);
+      }
+      const { error } = await supabase
+        .from('user_lists')
+        .update({ is_pinned: nextPinned })
+        .eq('id', list.id);
+
+      if (error) throw error;
+      setLists(lists.map(l => ({
+        ...l,
+        is_pinned: l.id === list.id ? nextPinned : false
+      })));
+      showToast(nextPinned ? 'لیست در بالای پروفایل شما سنجاق (پین) شد! 📌' : 'پین لیست از بالای پروفایل برداشته شد.');
+    } catch (err) {
+      console.error(err);
+      showToast('خطا در تغییر وضعیت پین.');
+    }
+  };
+
   // ۳. ذخیره یا ویرایش مشخصات لیست
   const handleSaveList = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !user) return;
+
+    // بررسی سقف ۳ لیست برای کاربران عادی
+    if (!editingList && !isVip && lists.length >= 3) {
+      setIsFormModalOpen(false);
+      setIsUpgradeModalOpen(true);
+      return;
+    }
 
     setSavingList(true);
     try {
@@ -142,7 +191,8 @@ export default function CustomListsPage() {
             title: title.trim(),
             description: description.trim(),
             is_public: isPublic,
-            order_index: nextOrderIndex
+            order_index: nextOrderIndex,
+            is_pinned: false,
           });
 
         if (error) throw error;
@@ -307,34 +357,54 @@ export default function CustomListsPage() {
               <ArrowRight size={18} />
             </Link>
             <div>
-              <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-2">
-                <Layers className="text-[#ccff00]" size={26} /> لیست‌های سفارشی من
-              </h1>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-2">
+                  <Layers className="text-[#ccff00]" size={26} /> لیست‌های سفارشی من
+                </h1>
+                {isVip ? (
+                  <span className="bg-amber-500/15 border border-amber-400/40 text-amber-300 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+                    <Crown size={14} className="fill-amber-300" /> کاربر ویژه VIP (نامحدود)
+                  </span>
+                ) : (
+                  <span className="bg-white/5 border border-white/10 text-gray-300 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                    <span>ظرفیت لیست‌ها:</span>
+                    <strong className={lists.length >= 3 ? "text-amber-400 font-black" : "text-[#ccff00] font-black"}>
+                      {lists.length} از ۳ (عادی)
+                    </strong>
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-400 mt-1">
-                لیست‌های عمومی و پیشنهادی بسازید و اولویت نمایش آن‌ها را در پروفایل با دکمه‌های جابجایی تعیین کنید.
+                لیست‌های اختصاصی بسازید، اولویت آن‌ها را مشخص کنید و لیست‌های منتخب را در بالای پروفایل‌تان سنجاق (پین) کنید.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              setEditingList(null);
-              setTitle('');
-              setDescription('');
-              setIsPublic(true);
-              setIsFormModalOpen(true);
-            }}
-            className="bg-[#ccff00] hover:bg-[#b3e600] text-black font-black text-xs px-5 py-3 rounded-2xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(204,255,0,0.25)] active:scale-95 cursor-pointer"
-          >
-            <Plus size={18} />
-            <span>ساخت لیست جدید</span>
-          </button>
-          <Link
-            href="/dashboard/custom-lists/explore"
-            className="bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs px-5 py-3 rounded-2xl flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <Compass size={18} /> کشف لیست‌های عمومی
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (!isVip && lists.length >= 3) {
+                  setIsUpgradeModalOpen(true);
+                  return;
+                }
+                setEditingList(null);
+                setTitle('');
+                setDescription('');
+                setIsPublic(true);
+                setIsFormModalOpen(true);
+              }}
+              className="bg-[#ccff00] hover:bg-[#b3e600] text-black font-black text-xs px-5 py-3 rounded-2xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(204,255,0,0.25)] active:scale-95 cursor-pointer"
+            >
+              <Plus size={18} />
+              <span>ساخت لیست جدید</span>
+            </button>
+            <Link
+              href="/dashboard/custom-lists/explore"
+              className="bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs px-5 py-3 rounded-2xl flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Compass size={18} /> کشف لیست‌ها
+            </Link>
+          </div>
         </div>
 
         {/* کارت‌های لیست‌ها */}
@@ -354,7 +424,14 @@ export default function CustomListsPage() {
                     
                     {/* اطلاعات اصلی لیست */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2.5 mb-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        {/* بج پین در بالای پروفایل */}
+                        {list.is_pinned && (
+                          <span className="bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1 shrink-0 shadow-[0_0_12px_rgba(245,158,11,0.25)]">
+                            <Pin size={11} className="fill-amber-300" /> سنجاق در بالای پروفایل
+                          </span>
+                        )}
+
                         {/* بج اولویت نمایش */}
                         <span className="bg-white/10 border border-white/10 text-[10px] font-bold px-2 py-0.5 rounded-md text-gray-300 shrink-0">
                           اولویت {index + 1}
@@ -385,9 +462,23 @@ export default function CustomListsPage() {
                       )}
                     </div>
 
-                    {/* دکمه‌های جابجایی اولویت (Swap) + منوی سه نقطه */}
+                    {/* دکمه‌های جابجایی اولویت (Swap) + دکمه پین + منوی سه نقطه */}
                     <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
                       
+                      {/* دکمه پین سریع */}
+                      <button
+                        onClick={() => handleTogglePin(list)}
+                        className={`p-2 sm:px-3 sm:py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                          list.is_pinned
+                            ? 'bg-amber-500/20 border-amber-400/50 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                            : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+                        }`}
+                        title={list.is_pinned ? 'لغو سنجاق از بالای پروفایل' : 'سنجاق به عنوان لیست منتخب در بالای پروفایل (مخصوص VIP)'}
+                      >
+                        <Pin size={14} className={list.is_pinned ? 'fill-amber-300' : ''} />
+                        <span className="hidden sm:inline">{list.is_pinned ? 'پین‌شده' : 'پین به پروفایل'}</span>
+                      </button>
+
                       {/* دکمه‌های جابجایی رتبه و اولویت */}
                       <div className="flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
                         <button
@@ -430,9 +521,23 @@ export default function CustomListsPage() {
 
                         {openMenuId === list.id && (
                           <div 
-                            className="absolute left-0 mt-2 w-48 bg-[#181818] border border-white/15 rounded-2xl p-1.5 shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-150"
+                            className="absolute left-0 mt-2 w-52 bg-[#181818] border border-white/15 rounded-2xl p-1.5 shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-150"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            <button
+                              onClick={() => {
+                                handleTogglePin(list);
+                                setOpenMenuId(null);
+                              }}
+                              className={`w-full text-right px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer ${
+                                list.is_pinned
+                                  ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20'
+                                  : 'text-gray-300 hover:text-white hover:bg-white/10'
+                              }`}
+                            >
+                              <Pin size={14} className={list.is_pinned ? 'fill-amber-400' : ''} />
+                              <span>{list.is_pinned ? 'لغو سنجاق از بالای پروفایل' : '📌 سنجاق در بالای پروفایل (VIP)'}</span>
+                            </button>
                             <button
                               onClick={() => {
                                 setEditingList(list);
@@ -733,6 +838,46 @@ export default function CustomListsPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* مدال ارتقا به VIP برای سقف لیست‌ها و قابلیت پین */}
+      {isUpgradeModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#121212] border border-amber-400/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-[0_0_50px_rgba(245,158,11,0.25)] text-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500" />
+            
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-400/30 text-amber-300 flex items-center justify-center mx-auto mb-4 shadow-[0_0_25px_rgba(245,158,11,0.3)]">
+              <Crown size={32} />
+            </div>
+
+            <h3 className="text-xl font-black text-white mb-2">
+              دسترسی اختصاصی کاربران VIP
+            </h3>
+            
+            <p className="text-xs text-gray-300 leading-relaxed mb-6">
+              کاربران عادی حداکثر می‌توانند <span className="text-amber-400 font-bold">۳ لیست سفارشی</span> بسازند.
+              با تهیه اشتراک <span className="text-amber-300 font-bold">Binger VIP</span>، قابلیت ساخت <span className="text-[#ccff00] font-bold">نامحدود لیست</span>، سنجاق کردن کالکشن در بالای پروفایل، و دسترسی به آمار پیشرفته و سالنامه Binger Wrapped برای شما فعال می‌شود.
+            </p>
+
+            <div className="space-y-2.5">
+              <Link
+                href="/dashboard/subscription"
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-black text-sm rounded-xl flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.4)] transition-all"
+              >
+                <Sparkles size={16} />
+                <span>مشاهده پلن‌ها و خرید اشتراک VIP</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => setIsUpgradeModalOpen(false)}
+                className="w-full py-2.5 text-xs text-gray-400 hover:text-white font-bold transition-colors cursor-pointer"
+              >
+                فعلاً نه، متوجه شدم
+              </button>
+            </div>
           </div>
         </div>
       )}

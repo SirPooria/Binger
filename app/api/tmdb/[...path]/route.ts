@@ -44,6 +44,7 @@ const ALLOWED_PATH_PATTERNS = [
   /^tv\/on_the_air$/,
   /^tv\/top_rated$/,
   /^tv\/\d+$/,
+  /^tv\/\d+\/credits$/,
   /^tv\/\d+\/season\/\d+$/,
   /^tv\/\d+\/season\/\d+\/episode\/\d+$/,
   /^tv\/\d+\/recommendations$/,

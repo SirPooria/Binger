@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { 
   Loader2, Zap, MessageSquare, Heart, Award, X, Clock, Play, 
   Lock, CheckCircle, Share2, Trophy, Tv, 
-  Layers, ArrowRight, UserPlus, UserCheck, CheckCircle2 
+  Layers, ArrowRight, UserPlus, UserCheck, CheckCircle2, Pin
 } from 'lucide-react';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
 import type { Database } from '@/lib/database.types';
@@ -241,6 +241,7 @@ export default function UserPublicProfilePage() {
           .select('*, list_items(*)')
           .eq('user_id', targetUserId)
           .eq('is_public', true)
+          .order('is_pinned', { ascending: false })
           .order('order_index', { ascending: true })
           .order('created_at', { ascending: false });
 
@@ -571,7 +572,14 @@ export default function UserPublicProfilePage() {
                     className="bg-white/5 border border-white/10 hover:border-[#ccff00]/40 rounded-3xl p-5 transition-all block group focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-xs text-emerald-400 font-bold">🌐 عمومی</span>
+                      <div className="flex items-center gap-2">
+                        {list.is_pinned && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 shadow-sm">
+                            <Pin size={10} className="fill-amber-300" /> سنجاق‌شده در بالای پروفایل
+                          </span>
+                        )}
+                        <span className="text-xs text-emerald-400 font-bold">🌐 عمومی</span>
+                      </div>
                       <span className="text-xs text-gray-500 font-bold">{items.length} سریال</span>
                     </div>
 

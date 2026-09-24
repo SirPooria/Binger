@@ -26,6 +26,33 @@ export interface TMDBShow {
     episode_number: number;
     season_number: number;
   } | null;
+  episode_run_time?: number[];
+  created_by?: {
+    id: number;
+    name: string;
+    profile_path: string | null;
+  }[];
+  networks?: {
+    id: number;
+    name: string;
+    logo_path: string | null;
+  }[];
+  credits?: {
+    cast: {
+      id: number;
+      name: string;
+      character?: string;
+      profile_path: string | null;
+      order?: number;
+    }[];
+    crew: {
+      id: number;
+      name: string;
+      job?: string;
+      department?: string;
+      profile_path: string | null;
+    }[];
+  };
   seasons?: {
     id: number;
     name: string;
@@ -400,6 +427,21 @@ export const getShowDetailsLite = async (id: string): Promise<TMDBShow | null> =
   const data = await fetchFromGateway<TMDBShow>(`tv/${id}`, { language: 'en-US' });
   if (data) {
     liteDetailsCache.set(id, data);
+  }
+  return data;
+};
+
+export const getShowWithCredits = async (id: string): Promise<TMDBShow | null> => {
+  const cacheKey = `credits_${id}`;
+  const cached = liteDetailsCache.get(cacheKey);
+  if (cached) return cached;
+
+  const data = await fetchFromGateway<TMDBShow>(`tv/${id}`, {
+    language: 'en-US',
+    append_to_response: 'credits',
+  });
+  if (data) {
+    liteDetailsCache.set(cacheKey, data);
   }
   return data;
 };

@@ -8,7 +8,8 @@ import Link from 'next/link';
 import { 
   Loader2, Zap, MessageSquare, Heart, 
   Plus, Award, X, Clock, Play, User as UserIcon, 
-  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck
+  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck,
+  BarChart3, Sparkles, Pin
 } from 'lucide-react';
 import { 
   ALL_ACHIEVEMENTS, 
@@ -579,13 +580,27 @@ export default function ProfilePage() {
             )}
             
             {/* دکمه‌های مدیریتی */}
-            <div className="flex items-center gap-2 mt-4">
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
               <button onClick={handleShareProfile} className="w-9 h-9 bg-[#ccff00] text-black rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-[0_0_15px_rgba(204,255,0,0.4)] cursor-pointer" title="اشتراک گذاری پروفایل">
                 <Share2 size={18} />
               </button>
               
-              <Link href="/dashboard/settings" className="text-gray-300 text-xs font-bold bg-white/10 px-6 py-2.5 rounded-full border border-white/10 backdrop-blur-sm hover:bg-white/20 transition-all text-center">
+              <Link href="/dashboard/settings" className="text-gray-300 text-xs font-bold bg-white/10 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-sm hover:bg-white/20 transition-all text-center">
                 ویرایش پروفایل
+              </Link>
+
+              <Link 
+                href="/dashboard/insights" 
+                className="flex items-center gap-1.5 text-xs font-black px-4 py-2.5 rounded-full border transition-all text-center shadow-lg group bg-gradient-to-r from-cyan-500/20 via-blue-600/20 to-indigo-500/20 hover:from-cyan-500/30 hover:to-indigo-500/30 border-cyan-400/40 text-cyan-300 hover:scale-105"
+                title="آمار پیشرفته، محبوب‌ترین‌ها و سالنامه تماشا (Binger Wrapped)"
+              >
+                <BarChart3 size={15} className="group-hover:rotate-6 transition-transform text-cyan-400" />
+                <span>آمار و DNA سریالی</span>
+                {((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin') ? (
+                  <Sparkles size={13} className="text-amber-400" />
+                ) : (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/30">VIP</span>
+                )}
               </Link>
 
               <Link href="/dashboard/leaderboard" className="w-9 h-9 bg-purple-600 text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-[0_0_15px_rgba(147,51,234,0.4)] cursor-pointer border border-purple-400" title="جدول امتیازات">
@@ -607,6 +622,62 @@ export default function ProfilePage() {
 
         {/* --- CONTENT --- */}
         <div className="max-w-5xl mx-auto px-4 mt-16 sm:mt-20 space-y-8 sm:space-y-12 mb-20">
+          
+          {/* کالکشن پین‌شده در بالای پروفایل (مخصوص VIP) */}
+          {customLists.find((l: any) => l.is_pinned) && (() => {
+            const pinnedList = customLists.find((l: any) => l.is_pinned);
+            return (
+              <div className="bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent border border-amber-400/40 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-[0_0_35px_rgba(245,158,11,0.12)]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                      <Pin size={20} className="fill-amber-300" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">کالکشن برگزیده و سنجاق‌شده</span>
+                        <span className="text-[9px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">VIP Pinned</span>
+                      </div>
+                      <h3 className="text-xl font-black text-white mt-0.5">{pinnedList.title}</h3>
+                    </div>
+                  </div>
+
+                  <Link
+                    href={`/dashboard/custom-lists/${pinnedList.id}`}
+                    className="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 self-start sm:self-auto shadow-md"
+                  >
+                    <span>مشاهده کالکشن</span>
+                    <span className="text-[11px] opacity-80">({(pinnedList.list_items || []).length} سریال)</span>
+                  </Link>
+                </div>
+
+                {pinnedList.description && (
+                  <p className="text-xs text-gray-300 leading-relaxed max-w-3xl mb-4">
+                    {pinnedList.description}
+                  </p>
+                )}
+
+                {/* پوسترهای لیست سنجاق‌شده */}
+                {(pinnedList.list_items || []).length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                    {(pinnedList.list_items || []).slice(0, 8).map((item: any) => (
+                      <Link
+                        key={item.id}
+                        href={`/dashboard/tv/${item.show_id}`}
+                        className="w-16 h-24 sm:w-20 sm:h-28 rounded-xl overflow-hidden shrink-0 border border-amber-400/20 hover:border-amber-400 bg-black/50 transition-all hover:scale-105 group/item"
+                      >
+                        <img
+                          src={getImageUrl(item.poster_path)}
+                          alt={item.show_name}
+                          className="w-full h-full object-cover group-hover/item:brightness-110"
+                        />
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           
           {/* STATS GRID */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -672,6 +743,35 @@ export default function ProfilePage() {
                     </div>
                   )}
                 </div>
+          </div>
+
+          {/* کارت خلاصه DNA سریالی و سالنامه تماشا */}
+          <div className="bg-gradient-to-br from-indigo-950/40 via-purple-950/20 to-black/60 border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <BarChart3 size={110} className="text-cyan-400" />
+            </div>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-400/30 text-cyan-300 text-xs font-bold">
+                  <Sparkles size={14} />
+                  <span>تحلیل سلیقه و ژنتیک سینمایی (Series DNA)</span>
+                </div>
+                <h3 className="text-xl md:text-2xl font-black text-white">
+                  سالنامه و بینش‌های دقیق تماشای شما (Binger Wrapped)
+                </h3>
+                <p className="text-xs text-gray-400 max-w-xl leading-relaxed">
+                  محبوب‌ترین بازیگران من، کارگردانانی که بیشترین اثر از آن‌ها را دیده‌ام، ساعات دقیق تماشا در ماه و سال، و کارت اشتراک‌گذاری افتخارات.
+                </p>
+              </div>
+
+              <Link
+                href="/dashboard/insights"
+                className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-black font-black text-xs px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(34,211,238,0.3)] transition-all hover:scale-105 shrink-0"
+              >
+                <BarChart3 size={16} />
+                <span>مشاهده داشبورد تحلیلی و نمودارها</span>
+              </Link>
+            </div>
           </div>
           {/* بخش لیست‌های اختصاصی کاربر با اولویت‌بندی */}
           <div>
