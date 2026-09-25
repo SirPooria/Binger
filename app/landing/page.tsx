@@ -11,7 +11,7 @@ import {
   XCircle, RotateCw, Edit3, KeyRound
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { validateIranPhoneNumber } from '@/lib/validation/phone';
+import { validateIranPhoneNumber, convertToAsciiDigits } from '@/lib/validation/phone';
 import type { User } from '@supabase/supabase-js';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -286,8 +286,10 @@ function LandingContent() {
     setStatus('loading');
 
     try {
+      // In Binger Supabase Auth, phone is stored as internationalFormat without plus (e.g. 989930663787)
+      const targetPhone = phoneValidation.internationalFormat;
       const { error } = await supabase.auth.signInWithOtp({
-        phone: '+' + phoneValidation.internationalFormat,
+        phone: targetPhone,
       });
 
       if (error) {
@@ -322,7 +324,7 @@ function LandingContent() {
 
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        phone: '+' + phoneValidation.internationalFormat,
+        phone: phoneValidation.internationalFormat,
       });
 
       if (error) {
@@ -340,11 +342,12 @@ function LandingContent() {
   };
 
   // مرحله ۲: تایید کد پیامک، ثبت در دیتابیس و اعطای بج و ریدیم کد
-  const handleVerifyAndRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifyAndRegister = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setMessage("");
 
-    const cleanOtp = otp.trim();
+    // Convert Persian / Arabic numerals and strip any extraneous text/spaces
+    const cleanOtp = convertToAsciiDigits(otp.trim()).replace(/\D/g, '').slice(0, 6);
     if (cleanOtp.length < 6) {
       setStatus('error');
       setMessage("لطفاً کد تایید ۶ رقمی پیامک شده را کامل وارد کنید.");
@@ -362,18 +365,40 @@ function LandingContent() {
 
     try {
       // 1. تایید کد پیامک در سامانه Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.verifyOtp({
-        phone: '+' + phoneValidation.internationalFormat,
+      // Try international format without plus first (Binger standard), fallback to with plus
+      let authUser: User | null = null;
+      let lastAuthError: { message?: string } | null = null;
+
+      const attempt1 = await supabase.auth.verifyOtp({
+        phone: phoneValidation.internationalFormat,
         token: cleanOtp,
         type: 'sms',
       });
 
-      if (authError || !authData.user) {
-        console.error("verifyOtp error:", authError);
+      if (!attempt1.error && attempt1.data?.user) {
+        authUser = attempt1.data.user;
+      } else {
+        // Fallback retry with leading plus
+        const attempt2 = await supabase.auth.verifyOtp({
+          phone: '+' + phoneValidation.internationalFormat,
+          token: cleanOtp,
+          type: 'sms',
+        });
+        if (!attempt2.error && attempt2.data?.user) {
+          authUser = attempt2.data.user;
+        } else {
+          lastAuthError = attempt1.error || attempt2.error;
+        }
+      }
+
+      if (!authUser) {
+        console.error("verifyOtp error:", lastAuthError);
         setStatus('error');
-        setMessage("کد تایید وارد شده نادرست یا منقضی شده است. لطفاً دوباره امتحان کنید.");
+        setMessage("کد تایید وارد شده نادرست یا منقضی شده است. لطفاً کد جدید دریافت کنید.");
         return;
       }
+
+      const verifiedUserId = authUser.id;
 
       // 2. ذخیره قطعی در لیست انتظار و همگام‌سازی پروفایل
       const res = await fetch('/api/waitlist', {
@@ -383,7 +408,7 @@ function LandingContent() {
           phone: phoneValidation.normalizedPhone,
           username: username.trim(),
           redeemCode: redeemCode.trim(),
-          userId: authData.user.id,
+          userId: verifiedUserId,
           consent: true,
         }),
       });
@@ -397,14 +422,14 @@ function LandingContent() {
       }
 
       // 3. همگام‌سازی نام کاربری در جدول profiles در صورت موجود بودن کاربر
-      if (authData.user.id && username.trim()) {
+      if (verifiedUserId && username.trim()) {
         await supabase.from('profiles').update({
           username: data.username || username.trim(),
           phone: phoneValidation.normalizedPhone,
-        }).eq('id', authData.user.id);
+        }).eq('id', verifiedUserId);
       }
 
-      setUser(authData.user);
+      setUser(authUser);
       setFormStep('completed');
       setStatus('success');
       setMessage(data.message || "تبریک! جایگاه و یوزرنیم شما با موفقیت در بینجر رزرو شد!");
@@ -831,7 +856,16 @@ function LandingContent() {
                   dir="ltr"
                   autoFocus
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(e) => {
+                    const converted = convertToAsciiDigits(e.target.value).replace(/\D/g, '').slice(0, 6);
+                    setOtp(converted);
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData('text');
+                    const converted = convertToAsciiDigits(pasted).replace(/\D/g, '').slice(0, 6);
+                    setOtp(converted);
+                  }}
                   placeholder="• • • • • •"
                   disabled={status === 'loading'}
                   className="w-full bg-[#080808] border border-[#ccff00]/40 focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/25 rounded-2xl py-4 text-center font-mono text-2xl tracking-[0.5em] font-black text-[#ccff00] focus:outline-none transition-all placeholder:text-gray-700"
