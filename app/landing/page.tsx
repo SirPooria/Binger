@@ -132,12 +132,44 @@ function LandingContent() {
     }
   }, []);
 
-  // چک کردن لاگین فعلی کاربر
+  // چک کردن لاگین فعلی کاربر و بارگذاری کارت رزرو شده
   useEffect(() => {
     const checkUser = async () => {
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         setUser(currentUser);
+        if (currentUser) {
+          const userPhone = currentUser.phone?.replace('+', '') || '';
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username, phone, is_vip')
+            .eq('id', currentUser.id)
+            .maybeSingle();
+
+          const activePhone = profile?.phone || userPhone;
+          if (profile?.username) {
+            setUsername(profile.username);
+            setAssignedUsername(profile.username);
+            setIsEarlyVip(Boolean(profile.is_vip));
+          }
+          if (activePhone) {
+            setPhone(activePhone);
+            try {
+              const res = await fetch(`/api/waitlist?user_phone=${encodeURIComponent(activePhone)}`);
+              if (res.ok) {
+                const waitlistData = await res.json();
+                if (waitlistData.user) {
+                  setAssignedCode(waitlistData.user.redeem_code);
+                  setAssignedUsername(waitlistData.user.username);
+                  setIsEarlyVip(Boolean(waitlistData.user.id <= 50));
+                  setFormStep('completed');
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
       } catch {
         setUser(null);
       } finally {
@@ -199,7 +231,8 @@ function LandingContent() {
     setUsernameCheckStatus('checking');
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/waitlist?check_username=${encodeURIComponent(trimmed)}`);
+        const phoneQuery = phone.trim() ? `&phone=${encodeURIComponent(phone.trim())}` : '';
+        const res = await fetch(`/api/waitlist?check_username=${encodeURIComponent(trimmed)}${phoneQuery}`);
         if (res.ok) {
           const data = await res.json();
           if (data.available) {
@@ -216,7 +249,7 @@ function LandingContent() {
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [username]);
+  }, [username, phone]);
 
   // Cooldown countdown timer for OTP resend
   useEffect(() => {
@@ -422,9 +455,10 @@ function LandingContent() {
       }
 
       // 3. همگام‌سازی نام کاربری در جدول profiles در صورت موجود بودن کاربر
-      if (verifiedUserId && username.trim()) {
+      const finalUsername = data.username || username.trim();
+      if (verifiedUserId && finalUsername) {
         await supabase.from('profiles').update({
-          username: data.username || username.trim(),
+          username: finalUsername,
           phone: phoneValidation.normalizedPhone,
         }).eq('id', verifiedUserId);
       }
@@ -434,7 +468,7 @@ function LandingContent() {
       setStatus('success');
       setMessage(data.message || "تبریک! جایگاه و یوزرنیم شما با موفقیت در بینجر رزرو شد!");
       setAssignedCode(data.redeemCode);
-      setAssignedUsername(data.username);
+      setAssignedUsername(finalUsername);
       setIsEarlyVip(Boolean(data.isEarlyAdopter));
       triggerCelebration();
       fetchLeaderboard();
@@ -951,9 +985,24 @@ function LandingContent() {
                     <Trophy size={15} className="text-[#ccff00]" />
                     کارت پیش‌ثبت‌نام رسمی شما در بینجر
                   </span>
-                  <span className="text-[11px] text-gray-400">
-                    آیدی رزرو شده: <strong className="text-[#ccff00] font-mono ltr">{assignedUsername || username}</strong>
-                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[11px] text-gray-400">
+                      آیدی رزرو شده: <strong className="text-[#ccff00] font-mono ltr">{assignedUsername || username}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormStep('info');
+                        setMessage('');
+                        setStatus('idle');
+                      }}
+                      className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                      title="ویرایش یا انتخاب آیدی دیگر"
+                    >
+                      <Edit3 size={11} />
+                      <span>تغییر آیدی</span>
+                    </button>
+                  </div>
                 </div>
                 {isEarlyVip && (
                   <span className="text-[10px] bg-gradient-to-r from-amber-400 to-[#ccff00] text-black font-black px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(204,255,0,0.4)]">

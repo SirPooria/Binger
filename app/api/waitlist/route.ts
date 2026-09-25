@@ -66,15 +66,37 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const checkUsername = searchParams.get('check_username')?.trim();
+    const phoneParam = searchParams.get('phone')?.trim() || searchParams.get('user_phone')?.trim();
 
     const users = getStoredUsers();
+
+    // 0. Query specific user status by phone
+    if (searchParams.has('user_phone') && phoneParam) {
+      const normalizedPhone = validateIranPhoneNumber(phoneParam).normalizedPhone || phoneParam;
+      const found = users.find(u => u.phone === normalizedPhone);
+      if (found) {
+        return NextResponse.json({
+          success: true,
+          user: found,
+        });
+      } else {
+        return NextResponse.json({ success: false, message: 'کاربر در لیست پیش‌ثبت‌نام یافت نشد' }, { status: 404 });
+      }
+    }
 
     // 1. Live username availability check endpoint
     if (checkUsername) {
       const cleanTarget = checkUsername.toLowerCase();
+      const normalizedPhone = phoneParam ? (validateIranPhoneNumber(phoneParam).normalizedPhone || phoneParam) : null;
       
       // Check in prelaunch list
-      const takenInPrelaunch = users.some(u => u.username.toLowerCase() === cleanTarget);
+      const takenInPrelaunch = users.some(u => {
+        if (normalizedPhone && u.phone === normalizedPhone) {
+          return false; // Their own handle
+        }
+        return u.username.toLowerCase() === cleanTarget;
+      });
+
       if (takenInPrelaunch) {
         return NextResponse.json({
           available: false,
@@ -87,16 +109,19 @@ export async function GET(request: NextRequest) {
         const supabase = await createClient();
         const { data: dbProfile } = await supabase
           .from('profiles')
-          .select('id, username')
+          .select('id, username, phone')
           .ilike('username', checkUsername)
           .limit(1)
           .maybeSingle();
 
         if (dbProfile && dbProfile.username) {
-          return NextResponse.json({
-            available: false,
-            message: 'این نام کاربری قبلاً توسط کاربر دیگری در سامانه ثبت شده است.',
-          });
+          const isSelf = normalizedPhone && dbProfile.phone === normalizedPhone;
+          if (!isSelf) {
+            return NextResponse.json({
+              available: false,
+              message: 'این نام کاربری قبلاً توسط کاربر دیگری در سامانه ثبت شده است.',
+            });
+          }
         }
       } catch (err) {
         console.error('Error checking profile username in supabase:', err);
@@ -198,25 +223,13 @@ export async function POST(request: NextRequest) {
     const existingUsers = getStoredUsers();
     const existingUser = existingUsers.find(u => u.phone === normalizedPhone);
 
-    // If already registered in waitlist or prelaunch
-    if (existingUser) {
-      return NextResponse.json({
-        success: true,
-        alreadyRegistered: true,
-        message: 'این شماره تماس قبلاً در لیست انتظار و بینجر ثبت شده است.',
-        redeemCode: existingUser.redeem_code,
-        username: existingUser.username,
-        invitesCount: existingUser.invites_count,
-        isEarlyAdopter: existingUser.id <= 50,
-        remainingVipSlots: Math.max(0, 50 - existingUsers.length),
-      });
-    }
-
     // 2. Prepare user details and check username uniqueness
     const rawUsername = (parsed.data.username || '').trim();
     if (rawUsername) {
       const cleanTarget = rawUsername.toLowerCase();
-      const isTaken = existingUsers.some(u => u.username.toLowerCase() === cleanTarget);
+      const isTaken = existingUsers.some(
+        u => u.phone !== normalizedPhone && u.username.toLowerCase() === cleanTarget
+      );
       if (isTaken) {
         return NextResponse.json({
           error: 'این نام کاربری قبلاً رزرو شده است. لطفاً یک نام کاربری دیگر انتخاب کنید.'
@@ -226,21 +239,25 @@ export async function POST(request: NextRequest) {
       // Check Supabase profiles
       const { data: dbProfile } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, phone')
         .ilike('username', rawUsername)
         .limit(1)
         .maybeSingle();
 
-      if (dbProfile && (!parsed.data.userId || dbProfile.id !== parsed.data.userId)) {
-        return NextResponse.json({
-          error: 'این نام کاربری قبلاً توسط کاربر دیگری در بینجر انتخاب شده است.'
-        }, { status: 400 });
+      if (dbProfile) {
+        const isSelf = (parsed.data.userId && dbProfile.id === parsed.data.userId) || 
+                       (dbProfile.phone && dbProfile.phone === normalizedPhone);
+        if (!isSelf) {
+          return NextResponse.json({
+            error: 'این نام کاربری قبلاً توسط کاربر دیگری در بینجر انتخاب شده است.'
+          }, { status: 400 });
+        }
       }
     }
 
     const cleanedUsername = rawUsername
       ? rawUsername.replace(/[^\w\u0600-\u06FF]/g, '_').slice(0, 20)
-      : `Binger_${Math.floor(1000 + Math.random() * 9000)}`;
+      : (existingUser?.username || `Binger_${Math.floor(1000 + Math.random() * 9000)}`);
 
     const codeSuffix = cleanedUsername
       .replace(/[^a-zA-Z0-9]/g, '')
@@ -248,6 +265,45 @@ export async function POST(request: NextRequest) {
       .slice(0, 8) || 'VIP';
 
     const personalRedeemCode = `BINGER-${codeSuffix}-${Math.floor(100 + Math.random() * 899)}`;
+
+    // If already registered in waitlist or prelaunch: update handle if provided and return updated data
+    if (existingUser) {
+      let finalUsername = existingUser.username;
+      let finalRedeemCode = existingUser.redeem_code;
+
+      if (rawUsername && rawUsername.toLowerCase() !== existingUser.username.toLowerCase()) {
+        existingUser.username = cleanedUsername;
+        existingUser.redeem_code = personalRedeemCode;
+        finalUsername = cleanedUsername;
+        finalRedeemCode = personalRedeemCode;
+        saveStoredUsers(existingUsers);
+      }
+
+      // Update Supabase profile if userId is provided
+      if (parsed.data.userId) {
+        await supabase
+          .from('profiles')
+          .update({
+            username: finalUsername,
+            phone: normalizedPhone,
+            is_vip: existingUser.id <= 50,
+          })
+          .eq('id', parsed.data.userId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        alreadyRegistered: true,
+        message: rawUsername 
+          ? 'تبریک! جایگاه و نام کاربری انتخابی شما با موفقیت در بینجر رزرو و ثبت شد! 🚀'
+          : 'این شماره تماس قبلاً در لیست انتظار و بینجر ثبت شده است.',
+        redeemCode: finalRedeemCode,
+        username: finalUsername,
+        invitesCount: existingUser.invites_count,
+        isEarlyAdopter: existingUser.id <= 50,
+        remainingVipSlots: Math.max(0, 50 - existingUsers.length),
+      });
+    }
 
     const CINEMATIC_AVATARS = ['🎬', '🍿', '🕶️', '👑', '🎩', '🔥', '⚡', '🏆', '💎', '🚀'];
     const randomAvatar = CINEMATIC_AVATARS[Math.floor(Math.random() * CINEMATIC_AVATARS.length)];
