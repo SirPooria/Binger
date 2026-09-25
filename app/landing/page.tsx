@@ -7,7 +7,8 @@ import {
   Crown, Flame, Star, Gift, Share2, Copy, Check, Tv, Play, 
   Clock, ShieldCheck, ChevronDown, MessageSquare, Heart, 
   Zap, Award, Compass, Search, Smartphone, ExternalLink,
-  BarChart3, ListPlus, ThumbsUp, Calendar, Bot, Film, CheckCircle2
+  BarChart3, ListPlus, ThumbsUp, Calendar, Bot, Film, CheckCircle2,
+  XCircle, RotateCw, Edit3, KeyRound
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { validateIranPhoneNumber } from '@/lib/validation/phone';
@@ -26,7 +27,13 @@ interface LeaderboardUser {
   prize: string;
 }
 
-const CINEMATIC_USERNAMES = [
+export interface CinematicCharacter {
+  name: string;
+  show: string;
+  icon: string;
+}
+
+const CINEMATIC_CHARACTERS_POOL: CinematicCharacter[] = [
   { name: 'Heisenberg', show: 'بریکینگ بد', icon: '⚗️' },
   { name: 'Shelby', show: 'پیکی بلایندرز', icon: '🎩' },
   { name: 'RustCohle', show: 'کاراگاه حقیقی', icon: '🚬' },
@@ -41,11 +48,48 @@ const CINEMATIC_USERNAMES = [
   { name: 'TylerDurden', show: 'فایت کلاب', icon: '🧼' },
   { name: 'Daenerys', show: 'مادر اژدها', icon: '🐉' },
   { name: 'SaulGoodman', show: 'قانون‌دان زیرک', icon: '⚖️' },
+  { name: 'JessePinkman', show: 'بریکینگ بد', icon: '💥' },
+  { name: 'ArthurShelby', show: 'پیکی بلایندرز', icon: '🥃' },
+  { name: 'MartyHart', show: 'کاراگاه حقیقی', icon: '🍺' },
+  { name: 'TyrionLannister', show: 'بازی تاج و تخت', icon: '🍷' },
+  { name: 'AryaStark', show: 'بازی تاج و تخت', icon: '🗡️' },
+  { name: 'GusFring', show: 'بریکینگ بد', icon: '🍗' },
+  { name: 'MichaelCorleone', show: 'پدرخوانده ۲', icon: '🇮🇹' },
+  { name: 'ElliotAlderson', show: 'مستر روبات', icon: '💻' },
+  { name: 'SherlockHolmes', show: 'شرلوک', icon: '🎻' },
+  { name: 'Moriarty', show: 'شرلوک', icon: '♟️' },
+  { name: 'RickGrimes', show: 'واکینگ دد', icon: '🤠' },
+  { name: 'Negan', show: 'واکینگ دد', icon: '🏏' },
+  { name: 'KendallRoy', show: 'وراثت', icon: '📈' },
+  { name: 'LoganRoy', show: 'وراثت', icon: '👑' },
+  { name: 'DonDraper', show: 'مد من', icon: '🥃' },
+  { name: 'Eleven', show: 'چیزهای عجیب', icon: '🧇' },
+  { name: 'Homelander', show: 'بویز', icon: '🦸' },
+  { name: 'BillyButcher', show: 'بویز', icon: '⚡' },
+  { name: 'Lucifer', show: 'لوسیفر', icon: '😈' },
+  { name: 'RagnarLothbrok', show: 'وایکینگ‌ها', icon: '🪓' },
+  { name: 'BoJack', show: 'بوجک هورسمن', icon: '🐴' },
+  { name: 'TedLasso', show: 'تد لاسو', icon: '⚽' },
+  { name: 'PatrickBateman', show: 'روانی آمریکایی', icon: '🪓' },
+  { name: 'SeverusSnape', show: 'هری پاتر', icon: '🪄' },
+  { name: 'JohnWick', show: 'جان ویک', icon: '🐶' },
+  { name: 'Joker', show: 'شوالیه تاریکی', icon: '🃏' },
+  { name: 'PaulAtreides', show: 'تل‌ماسه', icon: '🏜️' },
+  { name: 'Morpheus', show: 'ماتریکس', icon: '💊' },
+  { name: 'HannibalLecter', show: 'هانیبال', icon: '🍷' },
+  { name: 'Loki', show: 'لوکی', icon: '⌛' },
+  { name: 'ChandlerBing', show: 'فرندز', icon: '🛋️' },
+  { name: 'BarneyStinson', show: 'آشنایی با مادر', icon: '👔' },
+  { name: 'JackSparrow', show: 'دزدان دریایی', icon: '🏴‍☠️' },
+  { name: 'Wednesday', show: 'ونزدی', icon: '🖤' },
 ];
 
 function LandingContent() {
   const supabase = createClient();
+  const [formStep, setFormStep] = useState<'info' | 'otp' | 'completed'>('info');
   const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [cooldown, setCooldown] = useState(0);
   const [username, setUsername] = useState("");
   const [redeemCode, setRedeemCode] = useState("");
   const [consent, setConsent] = useState(true);
@@ -60,10 +104,19 @@ function LandingContent() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // Taken usernames and dynamic presets
+  const [takenUsernames, setTakenUsernames] = useState<string[]>([]);
+  const [visiblePresets, setVisiblePresets] = useState<CinematicCharacter[]>([]);
+  const [presetOffset, setPresetOffset] = useState(0);
+
+  // Live username uniqueness validation
+  const [usernameCheckStatus, setUsernameCheckStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [usernameCheckMsg, setUsernameCheckMsg] = useState('');
+
   // لیدربورد جام دعوت
   const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
-  const [totalRegistered, setTotalRegistered] = useState(12);
-  const [remainingVipSlots, setRemainingVipSlots] = useState(38);
+  const [totalRegistered, setTotalRegistered] = useState(25);
+  const [remainingVipSlots, setRemainingVipSlots] = useState(25);
   const [leaderboardSearch, setLeaderboardSearch] = useState("");
   const [activeTab, setActiveTab] = useState<'tracker' | 'insights' | 'ai_doctor' | 'spoiler_proof' | 'custom_lists'>('tracker');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -94,7 +147,7 @@ function LandingContent() {
     checkUser();
   }, [supabase.auth]);
 
-  // دریافت اطلاعات لیدربورد جام بینجر
+  // دریافت اطلاعات لیدربورد جام بینجر و یوزرهای رزرو شده
   const fetchLeaderboard = async () => {
     try {
       const res = await fetch('/api/waitlist');
@@ -102,8 +155,11 @@ function LandingContent() {
         const data = await res.json();
         if (data.success) {
           setLeaderboard(data.leaderboard || []);
-          setTotalRegistered(data.totalRegistered || 12);
-          setRemainingVipSlots(data.remainingVipSlots ?? 38);
+          setTotalRegistered(data.totalRegistered || 25);
+          setRemainingVipSlots(data.remainingVipSlots ?? 25);
+          if (Array.isArray(data.takenUsernames)) {
+            setTakenUsernames(data.takenUsernames);
+          }
         }
       }
     } catch (e) {
@@ -115,6 +171,62 @@ function LandingContent() {
     fetchLeaderboard();
   }, []);
 
+  // Update visible presets whenever takenUsernames or offset changes
+  useEffect(() => {
+    const takenSet = new Set(takenUsernames.map(n => n.toLowerCase()));
+    const available = CINEMATIC_CHARACTERS_POOL.filter(c => !takenSet.has(c.name.toLowerCase()));
+    if (available.length === 0) {
+      setVisiblePresets(CINEMATIC_CHARACTERS_POOL.slice(0, 10));
+      return;
+    }
+    const start = presetOffset % available.length;
+    const slice = available.slice(start, start + 10);
+    if (slice.length < 10) {
+      slice.push(...available.slice(0, 10 - slice.length));
+    }
+    setVisiblePresets(slice);
+  }, [takenUsernames, presetOffset]);
+
+  // Live username uniqueness debounced check
+  useEffect(() => {
+    const trimmed = username.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setUsernameCheckStatus('idle');
+      setUsernameCheckMsg('');
+      return;
+    }
+
+    setUsernameCheckStatus('checking');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/waitlist?check_username=${encodeURIComponent(trimmed)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.available) {
+            setUsernameCheckStatus('available');
+            setUsernameCheckMsg(data.message || 'نام کاربری آزاد و قابل رزرو است ✓');
+          } else {
+            setUsernameCheckStatus('taken');
+            setUsernameCheckMsg(data.message || 'این نام کاربری قبلاً رزرو شده است.');
+          }
+        }
+      } catch {
+        setUsernameCheckStatus('idle');
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [username]);
+
+  // Cooldown countdown timer for OTP resend
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown(c => c - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
   const triggerCelebration = () => {
     confetti({
       particleCount: 100,
@@ -124,7 +236,30 @@ function LandingContent() {
     });
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
+  // کلیک روی یوزرنیم پیشنهادی: مقدار را پر می‌کند و آن آیتم را از لیست حذف کرده و آیتم جدید جایگزین می‌کند
+  const handleSelectPreset = (item: CinematicCharacter) => {
+    setUsername(item.name);
+    setVisiblePresets(prev => {
+      const takenSet = new Set([...takenUsernames.map(n => n.toLowerCase()), item.name.toLowerCase()]);
+      const currentNames = new Set(prev.map(p => p.name.toLowerCase()));
+      const nextCandidate = CINEMATIC_CHARACTERS_POOL.find(
+        c => !takenSet.has(c.name.toLowerCase()) && !currentNames.has(c.name.toLowerCase())
+      );
+      const filtered = prev.filter(p => p.name !== item.name);
+      if (nextCandidate) {
+        filtered.push(nextCandidate);
+      }
+      return filtered;
+    });
+  };
+
+  // جابجایی ۱۰ پیشنهاد بعدی
+  const handleRotatePresets = () => {
+    setPresetOffset(prev => prev + 10);
+  };
+
+  // مرحله ۱: ارسال کد تایید پیامکی از طریق سامانه ملی‌پیامک (Supabase Auth)
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage("");
     setStatus('idle');
@@ -133,6 +268,12 @@ function LandingContent() {
     if (!phoneValidation.isValid) {
       setStatus('error');
       setMessage(phoneValidation.error || "شماره موبایل نامعتبر است (مثلاً ۰۹۱۲۳۴۵۶۷۸۹)");
+      return;
+    }
+
+    if (username.trim() && usernameCheckStatus === 'taken') {
+      setStatus('error');
+      setMessage("این نام کاربری قبلاً رزرو شده است. لطفاً یک نام کاربری دیگر انتخاب نمایید.");
       return;
     }
 
@@ -145,6 +286,96 @@ function LandingContent() {
     setStatus('loading');
 
     try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: '+' + phoneValidation.internationalFormat,
+      });
+
+      if (error) {
+        console.error("signInWithOtp error:", error);
+        setStatus('error');
+        if (error.message?.includes('rate') || error.message?.includes('too many')) {
+          setMessage("تعداد درخواست‌های پیامک بیش از حد مجاز است. لطفاً ۲ دقیقه دیگر تلاش کنید.");
+        } else {
+          setMessage(error.message || "خطا در ارسال پیامک کد تایید. لطفاً شماره را بررسی و دوباره تلاش کنید.");
+        }
+        return;
+      }
+
+      setFormStep('otp');
+      setStatus('idle');
+      setCooldown(60);
+      setMessage(`کد تایید ۶ رقمی به شماره ${phoneValidation.normalizedPhone} پیامک شد.`);
+    } catch {
+      setStatus('error');
+      setMessage("خطا در برقراری ارتباط با سامانه پیامکی. لطفاً اتصال اینترنت خود را بررسی کنید.");
+    }
+  };
+
+  // ارسال مجدد پیامک کد تایید
+  const handleResendOtp = async () => {
+    if (cooldown > 0 || status === 'loading') return;
+    const phoneValidation = validateIranPhoneNumber(phone);
+    if (!phoneValidation.isValid) return;
+
+    setStatus('loading');
+    setMessage("در حال ارسال مجدد پیامک کد تایید...");
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: '+' + phoneValidation.internationalFormat,
+      });
+
+      if (error) {
+        setStatus('error');
+        setMessage("خطا در ارسال مجدد کد تایید. لطفاً کمی صبر کنید.");
+      } else {
+        setStatus('idle');
+        setCooldown(60);
+        setMessage(`کد تایید مجدداً به شماره ${phoneValidation.normalizedPhone} ارسال شد.`);
+      }
+    } catch {
+      setStatus('error');
+      setMessage("خطا در ارتباط با سامانه پیامکی.");
+    }
+  };
+
+  // مرحله ۲: تایید کد پیامک، ثبت در دیتابیس و اعطای بج و ریدیم کد
+  const handleVerifyAndRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage("");
+
+    const cleanOtp = otp.trim();
+    if (cleanOtp.length < 6) {
+      setStatus('error');
+      setMessage("لطفاً کد تایید ۶ رقمی پیامک شده را کامل وارد کنید.");
+      return;
+    }
+
+    const phoneValidation = validateIranPhoneNumber(phone);
+    if (!phoneValidation.isValid) {
+      setStatus('error');
+      setMessage("شماره موبایل نامعتبر است.");
+      return;
+    }
+
+    setStatus('loading');
+
+    try {
+      // 1. تایید کد پیامک در سامانه Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.verifyOtp({
+        phone: '+' + phoneValidation.internationalFormat,
+        token: cleanOtp,
+        type: 'sms',
+      });
+
+      if (authError || !authData.user) {
+        console.error("verifyOtp error:", authError);
+        setStatus('error');
+        setMessage("کد تایید وارد شده نادرست یا منقضی شده است. لطفاً دوباره امتحان کنید.");
+        return;
+      }
+
+      // 2. ذخیره قطعی در لیست انتظار و همگام‌سازی پروفایل
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,6 +383,7 @@ function LandingContent() {
           phone: phoneValidation.normalizedPhone,
           username: username.trim(),
           redeemCode: redeemCode.trim(),
+          userId: authData.user.id,
           consent: true,
         }),
       });
@@ -159,22 +391,23 @@ function LandingContent() {
       const data = await res.json();
 
       if (!res.ok) {
-        if (res.status === 409) {
-          setStatus('error');
-          setMessage("این شماره تماس قبلاً در لیست انتظار ثبت شده است.");
-          if (data.redeemCode) {
-            setAssignedCode(data.redeemCode);
-            setAssignedUsername(data.username || username);
-          }
-          return;
-        }
         setStatus('error');
-        setMessage(data.error || "مشکلی در ثبت‌نام پیش آمد. لطفاً دوباره تلاش کنید.");
+        setMessage(data.error || "مشکلی در نهایی‌سازی ثبت‌نام پیش آمد.");
         return;
       }
 
+      // 3. همگام‌سازی نام کاربری در جدول profiles در صورت موجود بودن کاربر
+      if (authData.user.id && username.trim()) {
+        await supabase.from('profiles').update({
+          username: data.username || username.trim(),
+          phone: phoneValidation.normalizedPhone,
+        }).eq('id', authData.user.id);
+      }
+
+      setUser(authData.user);
+      setFormStep('completed');
       setStatus('success');
-      setMessage(data.message || "تبریک، جایگاه و یوزرنیم شما با موفقیت رزرو شد!");
+      setMessage(data.message || "تبریک! جایگاه و یوزرنیم شما با موفقیت در بینجر رزرو شد!");
       setAssignedCode(data.redeemCode);
       setAssignedUsername(data.username);
       setIsEarlyVip(Boolean(data.isEarlyAdopter));
@@ -361,140 +594,299 @@ function LandingContent() {
         >
           <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-transparent via-[#ccff00] to-transparent" />
           
+          {/* هدر باکس فرم */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-5">
             <div>
               <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                 <Crown size={18} className="text-[#ccff00]" />
-                رزرو زودهنگام آیدی سینمایی + اکانت VIP با هوش مصنوعی
+                {formStep === 'info' && 'رزرو زودهنگام آیدی سینمایی + اکانت VIP با هوش مصنوعی'}
+                {formStep === 'otp' && 'تایید شماره همراه و ثبت نهایی در بینجر'}
+                {formStep === 'completed' && 'جایگاه شما با موفقیت رزرو شد! 🎉'}
               </h2>
-              <span className="text-[11px] text-gray-400">بدون نیاز به پرداخت • دسترسی نامحدود به دکتر بینجر و سالنامه تماشا در روز لانچ</span>
+              <span className="text-[11px] text-gray-400">
+                {formStep === 'info' && 'ارسال کد فعال‌سازی پیامکی ۱۰۰٪ رایگان • دسترسی نامحدود به دکتر بینجر'}
+                {formStep === 'otp' && `کد تایید ۶ رقمی ارسال‌شده به شماره همراه خود را وارد کنید`}
+                {formStep === 'completed' && 'اطلاعات حساب و ریدیم کد اختصاصی شما برای جام دعوت'}
+              </span>
             </div>
-            <span className="text-xs bg-[#ccff00]/15 text-[#ccff00] font-mono font-bold px-2.5 py-1 rounded-lg">
-              ۱۰۰٪ رایگان
+            <span className="text-xs bg-[#ccff00]/15 text-[#ccff00] font-mono font-bold px-2.5 py-1 rounded-lg shrink-0">
+              {formStep === 'completed' ? 'تایید شد ✓' : '۱۰۰٪ رایگان'}
             </span>
           </div>
 
-          <form onSubmit={handleRegister} className="space-y-4">
-            
-            {/* ۱. ورودی شماره موبایل */}
-            <div>
-              <label className="block text-xs font-bold text-gray-300 mb-1.5">
-                شماره همراه شما (جهت پیامک فعال‌سازی و اکانت VIP هوش مصنوعی) <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <input 
-                  type="tel"
-                  dir="ltr"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="09123456789"
-                  disabled={status === 'loading'}
-                  className="w-full bg-[#080808] border border-white/15 rounded-2xl px-4 py-3.5 text-white text-sm font-mono focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/20 focus:outline-none transition-all placeholder:text-gray-600"
-                  required
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
-                  🇮🇷
-                </span>
-              </div>
-            </div>
-
-            {/* ۲. ورودی یوزرنیم دلخواه */}
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className="text-xs font-bold text-gray-300">
-                  نام کاربری سینمایی دلخواه شما در بینجر
+          {/* ========================================================================= */}
+          {/* گام ۱: وارد کردن شماره، آیدی دلخواه و کد معرف */}
+          {/* ========================================================================= */}
+          {formStep === 'info' && (
+            <form onSubmit={handleRequestOtp} className="space-y-4">
+              
+              {/* ۱. ورودی شماره موبایل */}
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">
+                  شماره همراه شما (جهت دریافت پیامک تایید و فعال‌سازی اکانت VIP) <span className="text-red-400">*</span>
                 </label>
-                <span className="text-[10px] text-cyan-400 font-bold">رزرو یکتا و تکرارنشدنی</span>
-              </div>
-              <input 
-                type="text"
-                dir="ltr"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="مثلاً: Heisenberg یا Shelby"
-                disabled={status === 'loading'}
-                className="w-full bg-[#080808] border border-white/15 rounded-2xl px-4 py-3.5 text-white text-sm font-bold focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all placeholder:text-gray-600"
-              />
-
-              {/* پیشنهادهای یوزرنیم‌های محبوب سینما */}
-              <div className="mt-2.5">
-                <span className="text-[10px] text-gray-400 block mb-1.5">پیشنهادهای طلایی دنیای سینما (کلیک کنید تا درج شود):</span>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto no-scrollbar">
-                  {CINEMATIC_USERNAMES.map((item) => (
-                    <button
-                      key={item.name}
-                      type="button"
-                      onClick={() => setUsername(item.name)}
-                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
-                        username === item.name
-                          ? 'bg-[#ccff00] text-black border-[#ccff00] font-black scale-105'
-                          : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
-                      }`}
-                    >
-                      <span>{item.icon}</span>
-                      <span>{item.name}</span>
-                    </button>
-                  ))}
+                <div className="relative">
+                  <input 
+                    type="tel"
+                    dir="ltr"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="09123456789"
+                    disabled={status === 'loading'}
+                    className="w-full bg-[#080808] border border-white/15 rounded-2xl px-4 py-3.5 text-white text-sm font-mono focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/20 focus:outline-none transition-all placeholder:text-gray-600"
+                    required
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
+                    🇮🇷
+                  </span>
                 </div>
               </div>
-            </div>
 
-            {/* ۳. ورودی ریدیم کد (معرف) */}
-            <div>
-              <label className="block text-xs font-bold text-gray-300 mb-1.5">
-                کد معرف یا ریدیم کد (اختیاری)
-              </label>
-              <input 
-                type="text"
-                dir="ltr"
-                value={redeemCode}
-                onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
-                placeholder="BINGER-SHELBY"
-                disabled={status === 'loading'}
-                className="w-full bg-[#080808] border border-white/15 rounded-2xl px-4 py-3 text-white text-xs font-mono uppercase focus:border-amber-400 focus:outline-none transition-all placeholder:text-gray-600"
-              />
-              {redeemCode && (
-                <span className="text-[10px] text-amber-400 font-bold block mt-1">
-                  ✓ با این کد معرف، در جام دعوت امتیاز برای معرف ثبت خواهد شد.
-                </span>
-              )}
-            </div>
+              {/* ۲. ورودی یوزرنیم دلخواه با بررسی زنده یکتایی */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-bold text-gray-300">
+                    نام کاربری سینمایی دلخواه شما در بینجر
+                  </label>
+                  <span className="text-[10px] text-cyan-400 font-bold">رزرو یکتا و ماندگار</span>
+                </div>
+                
+                <div className="relative">
+                  <input 
+                    type="text"
+                    dir="ltr"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="مثلاً: Heisenberg یا Shelby"
+                    disabled={status === 'loading'}
+                    className={`w-full bg-[#080808] border rounded-2xl px-4 py-3.5 text-white text-sm font-bold focus:outline-none transition-all placeholder:text-gray-600 ${
+                      usernameCheckStatus === 'available'
+                        ? 'border-emerald-500/50 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20'
+                        : usernameCheckStatus === 'taken'
+                        ? 'border-rose-500/60 focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20'
+                        : 'border-white/15 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20'
+                    }`}
+                  />
+                  {usernameCheckStatus === 'checking' && (
+                    <Loader2 size={16} className="absolute left-4 top-1/2 -translate-y-1/2 animate-spin text-cyan-400 pointer-events-none" />
+                  )}
+                  {usernameCheckStatus === 'available' && (
+                    <CheckCircle2 size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none" />
+                  )}
+                  {usernameCheckStatus === 'taken' && (
+                    <XCircle size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-400 pointer-events-none" />
+                  )}
+                </div>
 
-            {/* موافقت با پیامک */}
-            <div className="flex items-center gap-2 pt-1">
-              <input 
-                type="checkbox"
-                id="consent-check"
-                checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-                className="rounded border-gray-700 bg-gray-900 text-[#ccff00] focus:ring-[#ccff00] cursor-pointer"
-              />
-              <label htmlFor="consent-check" className="text-[11px] text-gray-400 cursor-pointer">
-                موافقم که هنگام انتشار عمومی اپلیکیشن و اعلام برندگان، از طریق پیامک مطلع شوم.
-              </label>
-            </div>
+                {/* وضعیت استعلام آنلاین نام کاربری */}
+                {username.trim().length >= 2 && (
+                  <div className="mt-1.5 text-[11px] flex items-center gap-1.5">
+                    {usernameCheckStatus === 'checking' && (
+                      <span className="text-cyan-400 flex items-center gap-1">
+                        <Loader2 size={11} className="animate-spin" /> در حال استعلام یکتایی در دیتابیس...
+                      </span>
+                    )}
+                    {usernameCheckStatus === 'available' && (
+                      <span className="text-emerald-400 flex items-center gap-1 font-bold">
+                        <CheckCircle2 size={12} /> {usernameCheckMsg}
+                      </span>
+                    )}
+                    {usernameCheckStatus === 'taken' && (
+                      <span className="text-rose-400 flex items-center gap-1 font-bold">
+                        <XCircle size={12} /> {usernameCheckMsg}
+                      </span>
+                    )}
+                  </div>
+                )}
 
-            {/* دکمه ارسال فرم */}
-            <button 
-              type="submit"
-              disabled={status === 'loading'}
-              className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black text-sm sm:text-base py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(204,255,0,0.35)] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50"
-            >
-              {status === 'loading' ? (
-                <>
-                  <Loader2 className="animate-spin text-black" size={20} />
-                  <span>در حال اعتبارسنجی و رزرو جایگاه...</span>
-                </>
-              ) : (
-                <>
-                  <Zap size={18} strokeWidth={3} className="fill-black" />
-                  <span>رزرو آنی یوزرنیم سینمایی و عضویت VIP با هوش مصنوعی</span>
-                </>
-              )}
-            </button>
-          </form>
+                {/* چیپ‌های داینامیک کاراکترهای سینمایی */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] text-gray-400">
+                      پیشنهادهای طلایی سینما (کلیک کنید تا انتخاب و با کاراکتر بعدی جایگزین شود):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRotatePresets}
+                      className="text-[10px] text-[#ccff00] hover:text-[#e6ff80] flex items-center gap-1 cursor-pointer font-bold transition-colors"
+                    >
+                      <RotateCw size={10} />
+                      <span>پیشنهادهای دیگر</span>
+                    </button>
+                  </div>
 
-          {/* پیام‌های وضعیت */}
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto no-scrollbar">
+                    {visiblePresets.map((item) => (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => handleSelectPreset(item)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                          username === item.name
+                            ? 'bg-[#ccff00] text-black border-[#ccff00] font-black scale-105 shadow-[0_0_10px_rgba(204,255,0,0.3)]'
+                            : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 hover:border-white/20'
+                        }`}
+                        title={`${item.name} از سریال ${item.show}`}
+                      >
+                        <span>{item.icon}</span>
+                        <span className="font-bold">{item.name}</span>
+                        <span className="text-[9px] text-gray-500 font-normal">({item.show})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ۳. ورودی ریدیم کد (معرف) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">
+                  کد معرف یا ریدیم کد دوستان (اختیاری)
+                </label>
+                <input 
+                  type="text"
+                  dir="ltr"
+                  value={redeemCode}
+                  onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
+                  placeholder="BINGER-SHELBY"
+                  disabled={status === 'loading'}
+                  className="w-full bg-[#080808] border border-white/15 rounded-2xl px-4 py-3 text-white text-xs font-mono uppercase focus:border-amber-400 focus:outline-none transition-all placeholder:text-gray-600"
+                />
+                {redeemCode && (
+                  <span className="text-[10px] text-amber-400 font-bold block mt-1">
+                    ✓ با این کد معرف، در جام دعوت امتیاز برای دوست شما ثبت خواهد شد.
+                  </span>
+                )}
+              </div>
+
+              {/* موافقت با پیامک */}
+              <div className="flex items-center gap-2 pt-1">
+                <input 
+                  type="checkbox"
+                  id="consent-check"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="rounded border-gray-700 bg-gray-900 text-[#ccff00] focus:ring-[#ccff00] cursor-pointer"
+                />
+                <label htmlFor="consent-check" className="text-[11px] text-gray-400 cursor-pointer">
+                  موافقم که هنگام انتشار عمومی اپلیکیشن و اعلام برندگان، از طریق پیامک مطلع شوم.
+                </label>
+              </div>
+
+              {/* دکمه درخواست کد پیامکی */}
+              <button 
+                type="submit"
+                disabled={status === 'loading' || usernameCheckStatus === 'taken'}
+                className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black text-sm sm:text-base py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(204,255,0,0.35)] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {status === 'loading' ? (
+                  <>
+                    <Loader2 className="animate-spin text-black" size={20} />
+                    <span>در حال ارسال پیامک تایید...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap size={18} strokeWidth={3} className="fill-black" />
+                    <span>دریافت کد تایید پیامکی و رزرو جایگاه ⚡</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* ========================================================================= */}
+          {/* گام ۲: وارد کردن کد تایید پیامکی (OTP VERIFICATION) */}
+          {/* ========================================================================= */}
+          {formStep === 'otp' && (
+            <form onSubmit={handleVerifyAndRegister} className="space-y-4">
+              
+              {/* کادر خلاصه شماره و دکمه ویرایش */}
+              <div className="flex items-center justify-between bg-black/60 border border-white/10 p-3 rounded-2xl">
+                <div>
+                  <span className="text-xs text-gray-400 block">پیامک تایید به شماره زیر ارسال شد:</span>
+                  <strong className="text-sm font-mono text-white tracking-wider dir-ltr">{phone}</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormStep('info');
+                    setMessage('');
+                  }}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <Edit3 size={13} />
+                  <span>ویرایش شماره</span>
+                </button>
+              </div>
+
+              {/* ورودی کد تایید ۶ رقمی */}
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-2 text-center">
+                  کد تایید ۶ رقمی پیامک شده را وارد کنید:
+                </label>
+                <input 
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  dir="ltr"
+                  autoFocus
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="• • • • • •"
+                  disabled={status === 'loading'}
+                  className="w-full bg-[#080808] border border-[#ccff00]/40 focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/25 rounded-2xl py-4 text-center font-mono text-2xl tracking-[0.5em] font-black text-[#ccff00] focus:outline-none transition-all placeholder:text-gray-700"
+                  required
+                />
+              </div>
+
+              {/* تایمر ارسال مجدد پیامک */}
+              <div className="flex justify-between items-center text-xs pt-1">
+                {cooldown > 0 ? (
+                  <span className="text-gray-400 text-[11px] flex items-center gap-1">
+                    <Clock size={12} className="text-amber-400" />
+                    ارسال مجدد کد پس از <strong className="font-mono text-[#ccff00] mx-0.5">{cooldown}</strong> ثانیه
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={status === 'loading'}
+                    className="text-[#ccff00] hover:text-[#e6ff80] text-[11px] font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <RotateCw size={12} />
+                    <span>ارسال مجدد کد تایید پیامکی</span>
+                  </button>
+                )}
+
+                {username.trim() && (
+                  <span className="text-[11px] text-gray-400">
+                    آیدی درخواستی: <strong className="text-white ltr font-mono">{username}</strong>
+                  </span>
+                )}
+              </div>
+
+              {/* دکمه تایید نهایی */}
+              <button 
+                type="submit"
+                disabled={status === 'loading' || otp.trim().length < 6}
+                className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black text-sm sm:text-base py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(204,255,0,0.35)] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {status === 'loading' ? (
+                  <>
+                    <Loader2 className="animate-spin text-black" size={20} />
+                    <span>در حال اعتبارسنجی و ثبت در دیتابیس...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={18} strokeWidth={3} className="fill-black" />
+                    <span>تایید پیامک و فعال‌سازی اکانت VIP 🚀</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* پیام‌های وضعیت و خطا */}
           {message && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
@@ -505,41 +897,51 @@ function LandingContent() {
                   : 'bg-red-500/15 border-red-500/30 text-red-400'
               }`}
             >
-              {status === 'success' ? <CheckCircle size={16} /> : <Flame size={16} />}
+              {status === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
               <span>{message}</span>
             </motion.div>
           )}
 
-          {/* کارت موفقیت و اشتراک ریدیم کد اختصاصی */}
-          {assignedCode && (
+          {/* ========================================================================= */}
+          {/* کارت موفقیت نهایی و نمایش ریدیم کد اختصاصی */}
+          {/* ========================================================================= */}
+          {formStep === 'completed' && assignedCode && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="mt-5 p-4 rounded-2xl bg-white/[0.04] border border-[#ccff00]/40 space-y-3"
+              className="mt-5 p-5 rounded-2xl bg-white/[0.04] border border-[#ccff00]/40 space-y-4"
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-white flex items-center gap-1.5">
-                  <Trophy size={14} className="text-[#ccff00]" />
-                  ریدیم کد اختصاصی شما برای جام دعوت:
-                </span>
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-black text-white flex items-center gap-1.5">
+                    <Trophy size={15} className="text-[#ccff00]" />
+                    کارت پیش‌ثبت‌نام رسمی شما در بینجر
+                  </span>
+                  <span className="text-[11px] text-gray-400">
+                    آیدی رزرو شده: <strong className="text-[#ccff00] font-mono ltr">{assignedUsername || username}</strong>
+                  </span>
+                </div>
                 {isEarlyVip && (
-                  <span className="text-[10px] bg-gradient-to-r from-amber-400 to-[#ccff00] text-black font-black px-2 py-0.5 rounded-full">
-                    👑 بج VIP فعال شد
+                  <span className="text-[10px] bg-gradient-to-r from-amber-400 to-[#ccff00] text-black font-black px-2.5 py-1 rounded-full shadow-[0_0_12px_rgba(204,255,0,0.4)]">
+                    👑 بج Early Adopter VIP فعال شد
                   </span>
                 )}
               </div>
 
-              {/* کادر کد */}
-              <div className="flex items-center justify-between bg-black/60 border border-white/10 p-2.5 rounded-xl">
-                <span className="font-mono text-sm font-black text-[#ccff00] ltr">{assignedCode}</span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(assignedCode, 'code')}
-                  className="bg-white/10 hover:bg-white/20 text-xs px-3 py-1 rounded-lg text-white font-bold transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  {copiedCode ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                  <span>{copiedCode ? 'کپی شد' : 'کپی کد'}</span>
-                </button>
+              {/* کادر ریدیم کد */}
+              <div>
+                <span className="text-[11px] text-gray-300 block mb-1">کد معرف اختصاصی شما برای جام دعوت:</span>
+                <div className="flex items-center justify-between bg-black/70 border border-white/10 p-3 rounded-xl">
+                  <span className="font-mono text-base font-black text-[#ccff00] ltr tracking-wider">{assignedCode}</span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(assignedCode, 'code')}
+                    className="bg-white/10 hover:bg-white/20 text-xs px-3.5 py-1.5 rounded-lg text-white font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {copiedCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                    <span>{copiedCode ? 'کپی شد' : 'کپی کد'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* لینک دعوت مستقیم */}
@@ -547,24 +949,34 @@ function LandingContent() {
                 <button
                   type="button"
                   onClick={() => copyToClipboard(inviteLink, 'link')}
-                  className="flex-1 bg-[#ccff00] text-black text-xs font-black py-2.5 rounded-xl hover:bg-[#b3e600] transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 bg-[#ccff00] text-black text-xs font-black py-3 rounded-xl hover:bg-[#b3e600] transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(204,255,0,0.3)]"
                 >
                   {copiedLink ? <Check size={14} /> : <Share2 size={14} />}
                   <span>{copiedLink ? 'لینک دعوت کپی شد!' : 'کپی لینک اختصاصی دعوت'}</span>
                 </button>
 
                 <a 
-                  href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`سلام! من در بینجر یوزرنیمم رو رزرو کردم. بیا با کد معرف من ثبت‌نام کن تا هر دو بج و اشتراک رایگان بگیریم: ${assignedCode}`)}`}
+                  href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`سلام! من در بینجر یوزرنیمم رو رزرو کردم و اکانت VIP هوش مصنوعی گرفتم. بیا با کد معرف من ثبت‌نام کن تا هر دو بج و اشتراک رایگان بگیریم: ${assignedCode}`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                  className="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                 >
                   تلگرام
                 </a>
               </div>
-              <p className="text-[10px] text-gray-400 text-center">
-                به ازای هر دوستی که با این لینک یا کد ثبت‌نام کند، ۱ امتیاز در جام بینجر کسب می‌کنید!
-              </p>
+
+              <div className="bg-white/5 p-3 rounded-xl border border-white/5 text-center space-y-1">
+                <p className="text-[11px] text-gray-300">
+                  به ازای هر دوستی که با این لینک یا کد ثبت‌نام کند، ۱ امتیاز در جام بینجر کسب می‌کنید!
+                </p>
+                <a 
+                  href="#leaderboard-section" 
+                  className="inline-flex items-center gap-1 text-[11px] text-[#ccff00] hover:underline font-bold"
+                >
+                  <span>مشاهده جدول رده‌بندی جام بینجر</span>
+                  <ArrowLeft size={12} />
+                </a>
+              </div>
             </motion.div>
           )}
 

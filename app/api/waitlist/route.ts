@@ -11,6 +11,7 @@ const WaitlistSchema = z.object({
   phone: z.string().min(1, 'شماره تماس الزامی است'),
   username: z.string().optional(),
   redeemCode: z.string().optional(),
+  userId: z.string().optional(),
   consent: z.literal(true, {
     message: 'موافقت با دریافت پیامک اطلاع‌رسانی الزامی است',
   }),
@@ -58,14 +59,56 @@ const ipRateLimits = new Map<string, RateLimitTracker>();
 const phoneCooldowns = new Map<string, number>();
 
 const WINDOW_MS = 60 * 1000;
-const MAX_PER_WINDOW = 10;
-const PHONE_COOLDOWN_MS = 30 * 1000;
+const MAX_PER_WINDOW = 30;
+const PHONE_COOLDOWN_MS = 15 * 1000;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const checkUsername = searchParams.get('check_username')?.trim();
+
     const users = getStoredUsers();
-    
-    // Sort descending by invites_count, then by created_at
+
+    // 1. Live username availability check endpoint
+    if (checkUsername) {
+      const cleanTarget = checkUsername.toLowerCase();
+      
+      // Check in prelaunch list
+      const takenInPrelaunch = users.some(u => u.username.toLowerCase() === cleanTarget);
+      if (takenInPrelaunch) {
+        return NextResponse.json({
+          available: false,
+          message: 'این نام کاربری قبلاً رزرو شده است.',
+        });
+      }
+
+      // Check in Supabase profiles
+      try {
+        const supabase = await createClient();
+        const { data: dbProfile } = await supabase
+          .from('profiles')
+          .select('id, username')
+          .ilike('username', checkUsername)
+          .limit(1)
+          .maybeSingle();
+
+        if (dbProfile && dbProfile.username) {
+          return NextResponse.json({
+            available: false,
+            message: 'این نام کاربری قبلاً توسط کاربر دیگری در سامانه ثبت شده است.',
+          });
+        }
+      } catch (err) {
+        console.error('Error checking profile username in supabase:', err);
+      }
+
+      return NextResponse.json({
+        available: true,
+        message: 'این نام کاربری آزاد و قابل رزرو است ✓',
+      });
+    }
+
+    // 2. Default Leaderboard response
     const sorted = [...users].sort((a, b) => {
       if (b.invites_count !== a.invites_count) {
         return b.invites_count - a.invites_count;
@@ -73,7 +116,7 @@ export async function GET() {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
-    const leaderboard = sorted.slice(0, 25).map((u, index) => ({
+    const leaderboard = sorted.slice(0, 50).map((u, index) => ({
       rank: index + 1,
       username: u.username,
       avatar: u.avatar || '🎬',
@@ -85,12 +128,14 @@ export async function GET() {
 
     const totalRegistered = users.length;
     const remainingVipSlots = Math.max(0, 50 - totalRegistered);
+    const takenUsernames = Array.from(new Set(users.map(u => u.username.trim()).filter(Boolean)));
 
     return NextResponse.json({
       success: true,
       totalRegistered,
       remainingVipSlots,
       leaderboard,
+      takenUsernames,
     });
   } catch (err) {
     console.error('Leaderboard API error:', err);
@@ -153,24 +198,46 @@ export async function POST(request: NextRequest) {
     const existingUsers = getStoredUsers();
     const existingUser = existingUsers.find(u => u.phone === normalizedPhone);
 
-    if (dbError) {
-      // 23505 = unique_violation
-      if (dbError.code === '23505' || dbError.message.includes('unique') || dbError.message.includes('duplicate')) {
-        return NextResponse.json({
-          status: 'already_registered',
-          message: 'این شماره تماس قبلاً در لیست انتظار ثبت شده است.',
-          redeemCode: existingUser?.redeem_code || 'BINGER-VIP',
-          username: existingUser?.username,
-          invitesCount: existingUser?.invites_count || 0,
-        }, { status: 409 });
-      }
-
-      console.error('Waitlist insertion error:', dbError);
-      return NextResponse.json({ error: 'خطا در ثبت اطلاعات در لیست انتظار' }, { status: 500 });
+    // If already registered in waitlist or prelaunch
+    if (existingUser) {
+      return NextResponse.json({
+        success: true,
+        alreadyRegistered: true,
+        message: 'این شماره تماس قبلاً در لیست انتظار و بینجر ثبت شده است.',
+        redeemCode: existingUser.redeem_code,
+        username: existingUser.username,
+        invitesCount: existingUser.invites_count,
+        isEarlyAdopter: existingUser.id <= 50,
+        remainingVipSlots: Math.max(0, 50 - existingUsers.length),
+      });
     }
 
-    // 2. Prepare user details
+    // 2. Prepare user details and check username uniqueness
     const rawUsername = (parsed.data.username || '').trim();
+    if (rawUsername) {
+      const cleanTarget = rawUsername.toLowerCase();
+      const isTaken = existingUsers.some(u => u.username.toLowerCase() === cleanTarget);
+      if (isTaken) {
+        return NextResponse.json({
+          error: 'این نام کاربری قبلاً رزرو شده است. لطفاً یک نام کاربری دیگر انتخاب کنید.'
+        }, { status: 400 });
+      }
+
+      // Check Supabase profiles
+      const { data: dbProfile } = await supabase
+        .from('profiles')
+        .select('id, username')
+        .ilike('username', rawUsername)
+        .limit(1)
+        .maybeSingle();
+
+      if (dbProfile && (!parsed.data.userId || dbProfile.id !== parsed.data.userId)) {
+        return NextResponse.json({
+          error: 'این نام کاربری قبلاً توسط کاربر دیگری در بینجر انتخاب شده است.'
+        }, { status: 400 });
+      }
+    }
+
     const cleanedUsername = rawUsername
       ? rawUsername.replace(/[^\w\u0600-\u06FF]/g, '_').slice(0, 20)
       : `Binger_${Math.floor(1000 + Math.random() * 9000)}`;
@@ -185,7 +252,29 @@ export async function POST(request: NextRequest) {
     const CINEMATIC_AVATARS = ['🎬', '🍿', '🕶️', '👑', '🎩', '🔥', '⚡', '🏆', '💎', '🚀'];
     const randomAvatar = CINEMATIC_AVATARS[Math.floor(Math.random() * CINEMATIC_AVATARS.length)];
 
-    // 3. Handle Referral Code if provided
+    const totalCount = existingUsers.length + 1;
+    const isEarlyAdopter = totalCount <= 50;
+
+    // 3. Update Supabase profiles table if userId is present
+    if (parsed.data.userId) {
+      const updateData: Record<string, unknown> = {
+        username: cleanedUsername,
+        phone: normalizedPhone,
+      };
+      if (isEarlyAdopter) {
+        updateData.is_vip = true;
+      }
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', parsed.data.userId);
+
+      if (profileErr) {
+        console.error('Supabase profile update warning:', profileErr);
+      }
+    }
+
+    // 4. Handle Referral Code if provided
     const inputRefCode = (parsed.data.redeemCode || '').trim().toUpperCase();
     if (inputRefCode) {
       const inviterIndex = existingUsers.findIndex(u => u.redeem_code.toUpperCase() === inputRefCode);
@@ -194,7 +283,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Save new user record
+    // 5. Save new user record
     const newUserRecord: PrelaunchUser = {
       id: Date.now(),
       phone: normalizedPhone,
@@ -208,9 +297,7 @@ export async function POST(request: NextRequest) {
     existingUsers.push(newUserRecord);
     saveStoredUsers(existingUsers);
 
-    const totalCount = existingUsers.length;
-    const isEarlyAdopter = totalCount <= 50;
-    const remainingVipSlots = Math.max(0, 50 - totalCount);
+    const remainingVipSlots = Math.max(0, 50 - existingUsers.length);
 
     return NextResponse.json({
       success: true,
