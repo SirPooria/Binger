@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Users, Sparkles, ArrowLeft, Loader2, CheckCircle, Trophy, 
-  Crown, Flame, Star, Gift, Share2, Copy, Check, Tv, Play, 
-  Clock, ShieldCheck, ChevronDown, MessageSquare, Heart, 
+import {
+  Users, Sparkles, ArrowLeft, Loader2, CheckCircle, Trophy,
+  Crown, Flame, Star, Gift, Share2, Copy, Check, Tv, Play,
+  Clock, ShieldCheck, ChevronDown, MessageSquare, Heart,
   Zap, Award, Compass, Search, Smartphone, ExternalLink,
   BarChart3, ListPlus, ThumbsUp, Calendar, Bot, Film, CheckCircle2,
   XCircle, RotateCw, Edit3, KeyRound
@@ -16,6 +16,7 @@ import type { User } from '@supabase/supabase-js';
 import Link from 'next/link';
 import Image from 'next/image';
 import confetti from 'canvas-confetti';
+import { VipUsername } from '../dashboard/components/VipBadge';
 
 interface LeaderboardUser {
   rank: number;
@@ -25,6 +26,7 @@ interface LeaderboardUser {
   invites_count: number;
   phone_masked: string;
   prize: string;
+  is_vip?: boolean;
 }
 
 export interface CinematicCharacter {
@@ -498,8 +500,8 @@ function LandingContent() {
   const filteredLeaderboard = useMemo(() => {
     if (!leaderboardSearch.trim()) return leaderboard;
     const q = leaderboardSearch.trim().toLowerCase();
-    return leaderboard.filter(item => 
-      item.username.toLowerCase().includes(q) || 
+    return leaderboard.filter(item =>
+      item.username.toLowerCase().includes(q) ||
       item.redeem_code.toLowerCase().includes(q)
     );
   }, [leaderboard, leaderboardSearch]);
@@ -533,7 +535,7 @@ function LandingContent() {
 
   return (
     <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] overflow-x-hidden selection:bg-[#ccff00] selection:text-black flex flex-col relative">
-      
+
       {/* هاله‌های نور نئونی پس‌زمینه */}
       <div className="fixed top-[-15%] right-[-10%] w-[600px] h-[600px] bg-[#ccff00]/10 rounded-full blur-[140px] pointer-events-none z-0" />
       <div className="fixed top-[30%] left-[-15%] w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[150px] pointer-events-none z-0" />
@@ -545,13 +547,13 @@ function LandingContent() {
       <header className="sticky top-0 w-full z-50 backdrop-blur-xl bg-[#050505]/75 border-b border-white/5 px-4 sm:px-8 py-3.5 flex justify-between items-center transition-all">
         <div className="flex items-center gap-3">
           <Link href="/" className="flex items-center gap-2 group cursor-pointer">
-            <Image 
-              src="/Logo.png" 
-              alt="بینجر" 
-              width={120} 
-              height={40} 
-              className="h-8 sm:h-9 w-auto object-contain drop-shadow-[0_0_15px_rgba(204,255,0,0.3)] transition-transform group-hover:scale-105" 
-              priority 
+            <Image
+              src="/Logo.png"
+              alt="بینجر"
+              width={120}
+              height={40}
+              className="h-8 sm:h-9 w-auto object-contain drop-shadow-[0_0_15px_rgba(204,255,0,0.3)] transition-transform group-hover:scale-105"
+              priority
             />
           </Link>
           <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#ccff00]/10 text-[#ccff00] border border-[#ccff00]/20 px-2.5 py-0.5 rounded-full">
@@ -574,16 +576,16 @@ function LandingContent() {
           {authLoading ? (
             <div className="h-9 w-24 bg-white/10 rounded-full animate-pulse" />
           ) : user ? (
-            <Link 
-              href="/dashboard" 
+            <Link
+              href="/dashboard"
               className="bg-[#ccff00] text-black text-xs font-black px-4 py-2 rounded-full hover:bg-[#b3e600] transition-all flex items-center gap-1.5 shadow-[0_0_20px_rgba(204,255,0,0.4)] cursor-pointer"
             >
               <span>ورود به داشبورد</span>
               <ArrowLeft size={14} strokeWidth={2.5} />
             </Link>
           ) : (
-            <a 
-              href="#register-box" 
+            <a
+              href="#register-box"
               className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2 rounded-full border border-white/15 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>رزرو یوزرنیم</span>
@@ -597,9 +599,9 @@ function LandingContent() {
       {/* بخش هیرو (HERO SECTION) */}
       {/* ========================================================================= */}
       <section className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-16 flex flex-col items-center text-center">
-        
+
         {/* نشانگر زنده سقف ۵۰ نفر */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/10 via-[#ccff00]/10 to-amber-500/10 border border-[#ccff00]/30 rounded-full px-4 py-1.5 mb-6 shadow-[0_0_25px_rgba(204,255,0,0.2)]"
@@ -612,7 +614,7 @@ function LandingContent() {
         </motion.div>
 
         {/* عنوان جذاب و هوک لندینگ */}
-        <motion.h1 
+        <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -626,7 +628,7 @@ function LandingContent() {
         </motion.h1>
 
         {/* توضیحات هدف */}
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
@@ -644,7 +646,7 @@ function LandingContent() {
         {/* ========================================================================= */}
         {/* کادر تعاملی پیش‌ثبت‌نام (FORM BOX) */}
         {/* ========================================================================= */}
-        <motion.div 
+        <motion.div
           id="register-box"
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -652,7 +654,7 @@ function LandingContent() {
           className="w-full max-w-xl mt-8 sm:mt-10 bg-[#121212]/90 border border-white/15 rounded-3xl p-5 sm:p-8 shadow-2xl backdrop-blur-2xl text-right relative overflow-hidden"
         >
           <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-transparent via-[#ccff00] to-transparent" />
-          
+
           {/* هدر باکس فرم */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-5">
             <div>
@@ -678,14 +680,14 @@ function LandingContent() {
           {/* ========================================================================= */}
           {formStep === 'info' && (
             <form onSubmit={handleRequestOtp} className="space-y-4">
-              
+
               {/* ۱. ورودی شماره موبایل */}
               <div>
                 <label className="block text-xs font-bold text-gray-300 mb-1.5">
                   شماره همراه شما (جهت دریافت پیامک تایید و فعال‌سازی اکانت VIP) <span className="text-red-400">*</span>
                 </label>
                 <div className="relative">
-                  <input 
+                  <input
                     type="tel"
                     dir="ltr"
                     value={phone}
@@ -709,22 +711,21 @@ function LandingContent() {
                   </label>
                   <span className="text-[10px] text-cyan-400 font-bold">رزرو یکتا و ماندگار</span>
                 </div>
-                
+
                 <div className="relative">
-                  <input 
+                  <input
                     type="text"
                     dir="ltr"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="مثلاً: Heisenberg یا Shelby"
                     disabled={status === 'loading'}
-                    className={`w-full bg-[#080808] border rounded-2xl px-4 py-3.5 text-white text-sm font-bold focus:outline-none transition-all placeholder:text-gray-600 ${
-                      usernameCheckStatus === 'available'
-                        ? 'border-emerald-500/50 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20'
-                        : usernameCheckStatus === 'taken'
+                    className={`w-full bg-[#080808] border rounded-2xl px-4 py-3.5 text-white text-sm font-bold focus:outline-none transition-all placeholder:text-gray-600 ${usernameCheckStatus === 'available'
+                      ? 'border-emerald-500/50 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20'
+                      : usernameCheckStatus === 'taken'
                         ? 'border-rose-500/60 focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20'
                         : 'border-white/15 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20'
-                    }`}
+                      }`}
                   />
                   {usernameCheckStatus === 'checking' && (
                     <Loader2 size={16} className="absolute left-4 top-1/2 -translate-y-1/2 animate-spin text-cyan-400 pointer-events-none" />
@@ -780,11 +781,10 @@ function LandingContent() {
                         key={item.name}
                         type="button"
                         onClick={() => handleSelectPreset(item)}
-                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
-                          username === item.name
-                            ? 'bg-[#ccff00] text-black border-[#ccff00] font-black scale-105 shadow-[0_0_10px_rgba(204,255,0,0.3)]'
-                            : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 hover:border-white/20'
-                        }`}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${username === item.name
+                          ? 'bg-[#ccff00] text-black border-[#ccff00] font-black scale-105 shadow-[0_0_10px_rgba(204,255,0,0.3)]'
+                          : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 hover:border-white/20'
+                          }`}
                         title={`${item.name} از سریال ${item.show}`}
                       >
                         <span>{item.icon}</span>
@@ -801,7 +801,7 @@ function LandingContent() {
                 <label className="block text-xs font-bold text-gray-300 mb-1.5">
                   کد معرف یا ریدیم کد دوستان (اختیاری)
                 </label>
-                <input 
+                <input
                   type="text"
                   dir="ltr"
                   value={redeemCode}
@@ -819,7 +819,7 @@ function LandingContent() {
 
               {/* موافقت با پیامک */}
               <div className="flex items-center gap-2 pt-1">
-                <input 
+                <input
                   type="checkbox"
                   id="consent-check"
                   checked={consent}
@@ -832,7 +832,7 @@ function LandingContent() {
               </div>
 
               {/* دکمه درخواست کد پیامکی */}
-              <button 
+              <button
                 type="submit"
                 disabled={status === 'loading' || usernameCheckStatus === 'taken'}
                 className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black text-sm sm:text-base py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(204,255,0,0.35)] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -857,7 +857,7 @@ function LandingContent() {
           {/* ========================================================================= */}
           {formStep === 'otp' && (
             <form onSubmit={handleVerifyAndRegister} className="space-y-4">
-              
+
               {/* کادر خلاصه شماره و دکمه ویرایش */}
               <div className="flex items-center justify-between bg-black/60 border border-white/10 p-3 rounded-2xl">
                 <div>
@@ -882,7 +882,7 @@ function LandingContent() {
                 <label className="block text-xs font-bold text-gray-300 mb-2 text-center">
                   کد تایید ۶ رقمی پیامک شده را وارد کنید:
                 </label>
-                <input 
+                <input
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
@@ -934,7 +934,7 @@ function LandingContent() {
               </div>
 
               {/* دکمه تایید نهایی */}
-              <button 
+              <button
                 type="submit"
                 disabled={status === 'loading' || otp.trim().length < 6}
                 className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black text-sm sm:text-base py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(204,255,0,0.35)] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -956,14 +956,13 @@ function LandingContent() {
 
           {/* پیام‌های وضعیت و خطا */}
           {message && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`mt-4 p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2 ${
-                status === 'success' 
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' 
-                  : 'bg-red-500/15 border-red-500/30 text-red-400'
-              }`}
+              className={`mt-4 p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2 ${status === 'success'
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/15 border-red-500/30 text-red-400'
+                }`}
             >
               {status === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
               <span>{message}</span>
@@ -974,7 +973,7 @@ function LandingContent() {
           {/* کارت موفقیت نهایی و نمایش ریدیم کد اختصاصی */}
           {/* ========================================================================= */}
           {formStep === 'completed' && assignedCode && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="mt-5 p-5 rounded-2xl bg-white/[0.04] border border-[#ccff00]/40 space-y-4"
@@ -1038,7 +1037,7 @@ function LandingContent() {
                   <span>{copiedLink ? 'لینک دعوت کپی شد!' : 'کپی لینک اختصاصی دعوت'}</span>
                 </button>
 
-                <a 
+                <a
                   href={`https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(`سلام! من در بینجر یوزرنیمم رو رزرو کردم و اکانت VIP هوش مصنوعی گرفتم. بیا با کد معرف من ثبت‌نام کن تا هر دو بج و اشتراک رایگان بگیریم: ${assignedCode}`)}`}
                   target="_blank"
                   rel="noreferrer"
@@ -1052,8 +1051,8 @@ function LandingContent() {
                 <p className="text-[11px] text-gray-300">
                   به ازای هر دوستی که با این لینک یا کد ثبت‌نام کند، ۱ امتیاز در جام بینجر کسب می‌کنید!
                 </p>
-                <a 
-                  href="#leaderboard-section" 
+                <a
+                  href="#leaderboard-section"
                   className="inline-flex items-center gap-1 text-[11px] text-[#ccff00] hover:underline font-bold"
                 >
                   <span>مشاهده جدول رده‌بندی جام بینجر</span>
@@ -1104,7 +1103,7 @@ function LandingContent() {
       {/* اسکرین‌ها و ویژگی‌های اپلیکیشن (INTERACTIVE FEATURE TOUR) */}
       {/* ========================================================================= */}
       <section id="features-section" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
-        
+
         <div className="text-center space-y-3 mb-10">
           <span className="text-xs font-black text-[#ccff00] uppercase tracking-wider block flex items-center justify-center gap-1.5">
             <Sparkles size={14} /> قدرت گرفته از هوش مصنوعی سینمایی
@@ -1117,14 +1116,13 @@ function LandingContent() {
 
         {/* سوییچ تب‌های تعاملی */}
         <div className="flex justify-center gap-2 sm:gap-3 mb-8 overflow-x-auto pb-2 no-scrollbar">
-          
+
           <button
             onClick={() => setActiveTab('tracker')}
-            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'tracker'
-                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
-                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
-            }`}
+            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${activeTab === 'tracker'
+              ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
+              : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
           >
             <Clock size={15} />
             <span>ما بهت می‌گیم تا کجا دیدی!</span>
@@ -1132,11 +1130,10 @@ function LandingContent() {
 
           <button
             onClick={() => setActiveTab('insights')}
-            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'insights'
-                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
-                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
-            }`}
+            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${activeTab === 'insights'
+              ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
+              : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
           >
             <BarChart3 size={15} />
             <span>آمار پیشرفته و سالنامه تماشا</span>
@@ -1144,11 +1141,10 @@ function LandingContent() {
 
           <button
             onClick={() => setActiveTab('ai_doctor')}
-            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'ai_doctor'
-                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
-                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
-            }`}
+            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${activeTab === 'ai_doctor'
+              ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
+              : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
           >
             <Bot size={15} />
             <span>هوش مصنوعی و دکتر بینجر</span>
@@ -1156,11 +1152,10 @@ function LandingContent() {
 
           <button
             onClick={() => setActiveTab('spoiler_proof')}
-            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'spoiler_proof'
-                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
-                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
-            }`}
+            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${activeTab === 'spoiler_proof'
+              ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
+              : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
           >
             <ShieldCheck size={15} />
             <span>تالار نقد ۱۰۰٪ ضد اسپویل</span>
@@ -1168,11 +1163,10 @@ function LandingContent() {
 
           <button
             onClick={() => setActiveTab('custom_lists')}
-            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'custom_lists'
-                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
-                : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
-            }`}
+            className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${activeTab === 'custom_lists'
+              ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.3)] font-black scale-105'
+              : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white border border-white/5'
+              }`}
           >
             <ListPlus size={15} />
             <span>ساخت لیست و رای به ستاره‌ها</span>
@@ -1183,10 +1177,10 @@ function LandingContent() {
         {/* محتوای تب فعال با شبیه‌ساز واقعی اپ */}
         <div className="bg-[#121212]/90 border border-white/10 rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-xl">
           <AnimatePresence mode="wait">
-            
+
             {/* تب ۱: ما بهت می‌گیم تا کجا دیدی! */}
             {activeTab === 'tracker' && (
-              <motion.div 
+              <motion.div
                 key="tracker-view"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1221,7 +1215,7 @@ function LandingContent() {
 
                 {/* موکاپ زنده ردیابی سریال و شمارش معکوس */}
                 <div className="lg:col-span-7 space-y-3.5 bg-[#0a0a0a] border border-white/10 rounded-2xl p-4 sm:p-6 shadow-inner">
-                  
+
                   {/* نمونه کارت ۱: سریال در حال تماشا */}
                   <div className="p-4 rounded-2xl bg-[#161616] border border-[#ccff00]/30 hover:border-[#ccff00]/60 transition-all space-y-3">
                     <div className="flex items-center justify-between">
@@ -1293,7 +1287,7 @@ function LandingContent() {
 
             {/* تب ۲: آمار پیشرفته و سالنامه تماشا (Insights & Wrapped) */}
             {activeTab === 'insights' && (
-              <motion.div 
+              <motion.div
                 key="insights-view"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1329,7 +1323,7 @@ function LandingContent() {
                 {/* موکاپ گرافیکی شبیه کارت Binger Wrapped */}
                 <div className="lg:col-span-7 bg-[#0d0d0d] border border-white/15 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-[#ccff00] via-cyan-400 to-purple-500" />
-                  
+
                   <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
                     <div className="flex items-center gap-2">
                       <Sparkles size={16} className="text-[#ccff00]" />
@@ -1358,7 +1352,7 @@ function LandingContent() {
                       <span className="text-lg font-black text-[#ccff00] font-mono block">۳۸۴ ساعت</span>
                       <span className="text-[10px] text-gray-500">معادل ۱۶ روز خالص زندگی</span>
                     </div>
-                    
+
                     <div className="bg-[#161616] p-3 rounded-2xl border border-white/5">
                       <span className="text-[10px] text-gray-400 block mb-1">🎭 بازیگر شماره یک شما:</span>
                       <span className="text-sm font-black text-white block">Bryan Cranston</span>
@@ -1392,7 +1386,7 @@ function LandingContent() {
 
             {/* تب ۳: دکتر بینجر و هوش مصنوعی سینمایی */}
             {activeTab === 'ai_doctor' && (
-              <motion.div 
+              <motion.div
                 key="ai-view"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1426,7 +1420,7 @@ function LandingContent() {
                 </div>
 
                 <div className="lg:col-span-7 space-y-3.5">
-                  
+
                   {/* نسخه تجویزی دکتر بینجر */}
                   <div className="bg-[#0a0a0a] border border-[#ccff00]/30 rounded-2xl p-5 space-y-3 shadow-xl">
                     <div className="border-b border-white/10 pb-3 flex justify-between items-center">
@@ -1478,7 +1472,7 @@ function LandingContent() {
 
             {/* تب ۴: تالار نقد ۱۰۰٪ ضد اسپویل */}
             {activeTab === 'spoiler_proof' && (
-              <motion.div 
+              <motion.div
                 key="hub-view"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1572,7 +1566,7 @@ function LandingContent() {
 
             {/* تب ۵: ساخت لیست و رای به ستاره‌ها */}
             {activeTab === 'custom_lists' && (
-              <motion.div 
+              <motion.div
                 key="lists-view"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1667,7 +1661,7 @@ function LandingContent() {
       {/* جدول جام دعوت و مسابقه ریدیم کدها (CUP & LEADERBOARD SECTION) */}
       {/* ========================================================================= */}
       <section id="leaderboard-section" className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 py-16">
-        
+
         <div className="text-center space-y-3 mb-10">
           <div className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 to-[#ccff00]/20 border border-[#ccff00]/30 px-3.5 py-1.5 rounded-full text-xs font-bold text-gray-200">
             <Trophy size={14} className="text-amber-400" /> جام بزرگ پیش‌ثبت‌نام بینجر
@@ -1682,7 +1676,7 @@ function LandingContent() {
 
         {/* کارت‌های ۳ سطح جوایز */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-          
+
           {/* جایزه نفرات ۱ تا ۳ */}
           <div className="bg-gradient-to-b from-amber-500/20 to-[#121212] border border-amber-500/40 rounded-3xl p-5 text-center relative overflow-hidden shadow-xl">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-3 text-2xl font-black">
@@ -1725,7 +1719,7 @@ function LandingContent() {
         {/* جدول لیدربورد زنده */}
         {/* ========================================================================= */}
         <div className="bg-[#121212] border border-white/10 rounded-3xl p-5 sm:p-7 shadow-2xl">
-          
+
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/10 pb-4 mb-5">
             <div>
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
@@ -1738,7 +1732,7 @@ function LandingContent() {
             {/* جستجو در جدول */}
             <div className="relative w-full sm:w-64">
               <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input 
+              <input
                 type="text"
                 value={leaderboardSearch}
                 onChange={(e) => setLeaderboardSearch(e.target.value)}
@@ -1766,11 +1760,10 @@ function LandingContent() {
                   const isTop13 = item.rank > 3 && item.rank <= 13;
 
                   return (
-                    <tr 
+                    <tr
                       key={item.redeem_code}
-                      className={`hover:bg-white/[0.03] transition-colors ${
-                        item.rank === 1 ? 'bg-amber-500/5' : ''
-                      }`}
+                      className={`hover:bg-white/[0.03] transition-colors ${item.rank === 1 ? 'bg-amber-500/5' : ''
+                        }`}
                     >
                       {/* رتبه */}
                       <td className="py-3 px-3 font-mono font-bold">
@@ -1794,7 +1787,12 @@ function LandingContent() {
                       {/* کاربر */}
                       <td className="py-3 px-3 font-bold text-white flex items-center gap-2">
                         <span className="text-base">{item.avatar}</span>
-                        <span className="ltr font-bold text-left">{item.username}</span>
+                        <VipUsername 
+                          username={item.username} 
+                          isVip={Boolean(item.is_vip || item.rank <= 3)} 
+                          badgeSize={14} 
+                          className="ltr font-bold text-left" 
+                        />
                       </td>
 
                       {/* ریدیم کد */}
@@ -1811,13 +1809,12 @@ function LandingContent() {
 
                       {/* جایزه */}
                       <td className="py-3 px-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          isTop3 
-                            ? 'bg-amber-400/15 text-amber-400 border border-amber-400/30' 
-                            : isTop13 
-                            ? 'bg-cyan-400/15 text-cyan-400 border border-cyan-400/30' 
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isTop3
+                          ? 'bg-amber-400/15 text-amber-400 border border-amber-400/30'
+                          : isTop13
+                            ? 'bg-cyan-400/15 text-cyan-400 border border-cyan-400/30'
                             : 'bg-white/10 text-gray-300'
-                        }`}>
+                          }`}>
                           {item.prize}
                         </span>
                       </td>
@@ -1838,8 +1835,8 @@ function LandingContent() {
 
           <div className="mt-5 pt-4 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-gray-400">
             <span>تعداد کل ثبت‌نام‌کنندگان فعلی: <strong className="text-white font-mono">{totalRegistered}</strong> نفر</span>
-            <a 
-              href="#register-box" 
+            <a
+              href="#register-box"
               className="text-[#ccff00] font-bold hover:underline flex items-center gap-1"
             >
               <span>می‌خواهی وارد جدول شوی؟ همین حالا ثبت‌نام کن</span>
@@ -1864,7 +1861,7 @@ function LandingContent() {
           {FAQS.map((faq, index) => {
             const isOpen = openFaq === index;
             return (
-              <div 
+              <div
                 key={faq.q}
                 className="bg-[#121212] border border-white/10 rounded-2xl overflow-hidden transition-all"
               >
@@ -1874,15 +1871,14 @@ function LandingContent() {
                   className="w-full p-4 sm:p-5 flex justify-between items-center text-right text-xs sm:text-sm font-bold text-white hover:text-[#ccff00] transition-colors cursor-pointer"
                 >
                   <span>{faq.q}</span>
-                  <ChevronDown 
-                    size={16} 
-                    className={`transition-transform duration-300 text-gray-400 ${
-                      isOpen ? 'rotate-180 text-[#ccff00]' : ''
-                    }`} 
+                  <ChevronDown
+                    size={16}
+                    className={`transition-transform duration-300 text-gray-400 ${isOpen ? 'rotate-180 text-[#ccff00]' : ''
+                      }`}
                   />
                 </button>
                 {isOpen && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}

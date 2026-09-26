@@ -2,15 +2,22 @@
 
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { getShowDetailsLite, getBackdropUrl, getImageUrl } from '@/lib/tmdbClient';
+import { getShowDetailsLite, getBackdropUrl, getImageUrl, getReleasedEpisodeCount } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Loader2, Zap, MessageSquare, Heart, 
   Plus, Award, X, Clock, Play, User as UserIcon, 
-  Lock, CheckCircle, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck,
-  BarChart3, Sparkles, Pin
+  Lock, CheckCircle, CheckCircle2, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck,
+  BarChart3, Sparkles, Pin, Feather
 } from 'lucide-react';
+import { VipUsername, CriticBadge } from '../components/VipBadge';
+import { WatchlistButton } from '../components/WatchlistButton';
+import { 
+  checkCriticEligibility, 
+  fetchCriticReviewsByUser, 
+  type CriticReviewData 
+} from '@/lib/criticReviews';
 import { 
   ALL_ACHIEVEMENTS, 
   getBadgeProgress as calculateBadgeProgress, 
@@ -30,7 +37,7 @@ export default function ProfilePage() {
   const router = useRouter();
   
   const [user, setUser] = useState<any>(null);
-  const [profileInfo, setProfileInfo] = useState({ username: '', bio: '', avatar_url: '😎', is_vip: false });
+  const [profileInfo, setProfileInfo] = useState<{ username: string; bio: string; avatar_url: string; is_vip: boolean; role?: string }>({ username: '', bio: '', avatar_url: '😎', is_vip: false });
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   
@@ -55,7 +62,14 @@ export default function ProfilePage() {
   const [watchedShows, setWatchedShows] = useState<any[]>([]);
   const [customLists, setCustomLists] = useState<any[]>([]);
   const [savedLists, setSavedLists] = useState<any[]>([]);
+  const [criticReviews, setCriticReviews] = useState<CriticReviewData[]>([]);
   const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // Modals
   const [activeModal, setActiveModal] = useState<'followers' | 'following' | 'comments' | null>(null);
@@ -86,7 +100,8 @@ export default function ProfilePage() {
           username: profileRes.data.username || '',
           bio: profileRes.data.bio || '',
           avatar_url: profileRes.data.avatar_url || currentUser.user_metadata?.avatar_url || '😎',
-          is_vip: profileRes.data.is_vip === true,
+          is_vip: profileRes.data.is_vip === true || profileRes.data.role === 'admin',
+          role: profileRes.data.role,
         });
       }
       setSocialStats({ followers: followersRes.count || 0, following: followingRes.count || 0, comments: commentsRes.count || 0 });
@@ -95,8 +110,19 @@ export default function ProfilePage() {
       const savedIds = (savedRowsRes.data || []).map((row: any) => String(row.list_id));
       if (savedIds.length > 0) {
         const { data: savedData } = await supabase.from('user_lists').select('*, list_items ( id, show_id, show_name, poster_path )').in('id', savedIds).eq('is_public', true);
+        const creatorIds = Array.from(new Set((savedData || []).map((l: any) => l.user_id)));
+        const { data: creatorProfiles } = await supabase.from('profiles').select('id, username, avatar_url, is_vip, role').in('id', creatorIds);
+        const creatorMap = new Map((creatorProfiles || []).map((p: any) => [p.id, {
+          username: p.username,
+          avatar_url: p.avatar_url,
+          is_vip: p.is_vip === true || p.role === 'admin'
+        }]));
         const order = new Map<string, number>(savedIds.map((id: string, index: number) => [id, index]));
-        setSavedLists((savedData || []).sort((first: any, second: any) => (order.get(String(first.id)) || 0) - (order.get(String(second.id)) || 0)));
+        const enriched = (savedData || []).map((l: any) => ({
+          ...l,
+          creator: creatorMap.get(l.user_id) || null
+        }));
+        setSavedLists(enriched.sort((first: any, second: any) => (order.get(String(first.id)) || 0) - (order.get(String(second.id)) || 0)));
       } else {
         setSavedLists([]);
       }
@@ -165,7 +191,8 @@ export default function ProfilePage() {
                   username: profileData.username || '',
                   bio: profileData.bio || '',
                   avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎',
-                  is_vip: profileData.is_vip === true,
+                  is_vip: profileData.is_vip === true || profileData.role === 'admin',
+                  role: profileData.role,
               };
               payload.profileInfo = nextProfileInfo;
               setProfileInfo(nextProfileInfo);
@@ -280,8 +307,9 @@ export default function ProfilePage() {
             const d = showsDetailsMap[String(id)];
             if (!d) return null;
 
-            const totalEps = d.number_of_episodes || 1;
-            const watchedCount = watchedData.filter((w: any) => String(w.show_id) === String(id)).length;
+            const totalEps = getReleasedEpisodeCount(d) || 1;
+            const rawCount = watchedData.filter((w: any) => String(w.show_id) === String(id)).length;
+            const watchedCount = Math.min(rawCount, totalEps);
             const progress = Math.min(100, Math.round((watchedCount / totalEps) * 100));
 
             return { ...d, progress, watchedCount, totalEps };
@@ -308,8 +336,9 @@ export default function ProfilePage() {
             }
             if (!d) return null;
 
-            const totalEps = d.number_of_episodes || 1;
-            const watchedCount = watchedData ? watchedData.filter((w: any) => String(w.show_id) === String(f.show_id)).length : 0;
+            const totalEps = getReleasedEpisodeCount(d) || 1;
+            const rawCount = watchedData ? watchedData.filter((w: any) => String(w.show_id) === String(f.show_id)).length : 0;
+            const watchedCount = Math.min(rawCount, totalEps);
             const progress = Math.min(100, Math.round((watchedCount / totalEps) * 100));
 
             return { ...d, progress, watchedCount, totalEps };
@@ -349,14 +378,37 @@ export default function ProfilePage() {
             .select('*, list_items ( id, show_id, show_name, poster_path )')
             .in('id', savedListIds)
             .eq('is_public', true);
+
+          const creatorIds = Array.from(new Set((savedListData || []).map((l: any) => l.user_id).filter(Boolean)));
+          let creatorsMap = new Map();
+          if (creatorIds.length > 0) {
+            const { data: creators } = await supabase
+              .from('profiles')
+              .select('id, username, avatar_url, is_vip, role')
+              .in('id', creatorIds);
+            creatorsMap = new Map((creators || []).map((c: any) => [c.id, c]));
+          }
+          const savedListsWithCreator = (savedListData || []).map((list: any) => ({
+            ...list,
+            creator: creatorsMap.get(list.user_id) || null
+          }));
           const savedOrder = new Map<string, number>(savedListIds.map((id: string, index: number) => [id, index]));
-          const sortedSavedLists = (savedListData || []).sort((first: any, second: any) => (savedOrder.get(String(first.id)) || 0) - (savedOrder.get(String(second.id)) || 0));
+          const sortedSavedLists = savedListsWithCreator.sort((first: any, second: any) => (savedOrder.get(String(first.id)) || 0) - (savedOrder.get(String(second.id)) || 0));
           payload.savedLists = sortedSavedLists;
           setSavedLists(sortedSavedLists);
         } else {
           payload.savedLists = [];
           setSavedLists([]);
         }
+
+        // ۶. خواندن نقدهای تخصصی ثبت‌شده توسط این کاربر
+        try {
+          const myCriticReviews = await fetchCriticReviewsByUser(user.id);
+          setCriticReviews(myCriticReviews || []);
+        } catch {
+          // ignore
+        }
+
         writeProfileCache(user.id, payload);
       } catch (err) {
         console.error("Error loading profile:", err);
@@ -378,10 +430,40 @@ export default function ProfilePage() {
     try {
       if (type === 'followers') {
         const res = await supabase.from('follows').select('follower_id, follower_email').eq('following_id', user.id);
-        data = res.data?.map((d: any) => ({ id: d.follower_id, title: d.follower_email?.split('@')[0] || 'User', subtitle: 'Follower' })) || [];
+        const followerIds = (res.data || []).map((d: any) => d.follower_id).filter(Boolean);
+        let profilesMap = new Map();
+        if (followerIds.length > 0) {
+          const { data: profs } = await supabase.from('profiles').select('id, username, avatar_url, is_vip, role').in('id', followerIds);
+          profilesMap = new Map((profs || []).map((p: any) => [p.id, p]));
+        }
+        data = (res.data || []).map((d: any) => {
+          const prof = profilesMap.get(d.follower_id);
+          return {
+            id: d.follower_id,
+            title: prof?.username || d.follower_email?.split('@')[0] || 'User',
+            subtitle: 'Follower',
+            avatar_url: prof?.avatar_url,
+            is_vip: prof?.is_vip === true || prof?.role === 'admin'
+          };
+        });
       } else if (type === 'following') {
         const res = await supabase.from('follows').select('following_id, following_email').eq('follower_id', user.id);
-        data = res.data?.map((d: any) => ({ id: d.following_id, title: d.following_email?.split('@')[0] || 'User', subtitle: 'Following' })) || [];
+        const followingIds = (res.data || []).map((d: any) => d.following_id).filter(Boolean);
+        let profilesMap = new Map();
+        if (followingIds.length > 0) {
+          const { data: profs } = await supabase.from('profiles').select('id, username, avatar_url, is_vip, role').in('id', followingIds);
+          profilesMap = new Map((profs || []).map((p: any) => [p.id, p]));
+        }
+        data = (res.data || []).map((d: any) => {
+          const prof = profilesMap.get(d.following_id);
+          return {
+            id: d.following_id,
+            title: prof?.username || d.following_email?.split('@')[0] || 'User',
+            subtitle: 'Following',
+            avatar_url: prof?.avatar_url,
+            is_vip: prof?.is_vip === true || prof?.role === 'admin'
+          };
+        });
       } else if (type === 'comments') {
         const res = await supabase.from('comments').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
         if (res.data) {
@@ -431,6 +513,8 @@ export default function ProfilePage() {
     followersCount: socialStats.followers,
   };
 
+  const criticStatus = checkCriticEligibility(profileInfo, totalEpisodes, socialStats.comments);
+
   const getBadgeProgress = (badge: AchievementBadge) => {
     return calculateBadgeProgress(badge, badgeStats);
   };
@@ -473,7 +557,7 @@ export default function ProfilePage() {
       }).catch(console.error);
     } else {
       navigator.clipboard.writeText(window.location.href);
-      alert("لینک پروفایل کپی شد!");
+      showToast("لینک پروفایل کپی شد! 📋");
     }
   };
 
@@ -556,7 +640,7 @@ export default function ProfilePage() {
             </div>
             
             {/* نمایش نام کاربری و بیو */}
-            <div className="flex items-center justify-center gap-2 mt-4">
+            <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
               <h1 className={`text-2xl md:text-3xl font-black ltr tracking-tight ${
                 ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
                   ? 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]'
@@ -570,6 +654,11 @@ export default function ProfilePage() {
                 <span title="حساب تایید شده VIP" className="inline-flex items-center text-sky-400">
                   <BadgeCheck size={24} className="fill-sky-400 text-white drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]" />
                 </span>
+              )}
+
+              {/* نشان منتقد رسمی */}
+              {criticStatus.isCritic && (
+                <CriticBadge size="sm" className="mr-1" />
               )}
             </div>
             
@@ -623,6 +712,126 @@ export default function ProfilePage() {
         {/* --- CONTENT --- */}
         <div className="max-w-5xl mx-auto px-4 mt-16 sm:mt-20 space-y-8 sm:space-y-12 mb-20">
           
+          {/* کارت وضعیت یا نقدهای منتقد رسمی */}
+          {criticStatus.isCritic ? (
+            <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/5 to-transparent border border-amber-400/40 rounded-3xl p-6 relative overflow-hidden shadow-[0_0_35px_rgba(245,158,11,0.12)]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-[0_0_15px_rgba(245,158,11,0.25)]">
+                    <Feather size={22} className="text-amber-400" />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase tracking-wider text-amber-400">عضو رسمی انجمن منتقدین بینجر</span>
+                      <CriticBadge size="xs" />
+                    </div>
+                    <h3 className="text-xl font-black text-white mt-0.5">نقدهای تخصصی ثبت‌شده شما</h3>
+                  </div>
+                </div>
+
+                <Link
+                  href="/dashboard/critics"
+                  className="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 self-start sm:self-auto shadow-md"
+                >
+                  <Award size={14} />
+                  <span>باشگاه منتقدین</span>
+                </Link>
+              </div>
+
+              {criticReviews.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                  {criticReviews.map((rev) => (
+                    <Link
+                      key={rev.id}
+                      href={`/dashboard/tv/${rev.show_id}`}
+                      className="bg-black/40 border border-white/10 hover:border-amber-400/40 p-4 rounded-2xl transition-all block group"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                          امتیاز: {rev.rating} از ۱۰
+                        </span>
+                        <span className="text-[10px] text-gray-500">
+                          {new Date(rev.created_at).toLocaleDateString('fa-IR')}
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors line-clamp-1">
+                        {rev.title}
+                      </h4>
+                      <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                        {rev.text}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 bg-black/30 rounded-2xl border border-white/5 text-center text-xs text-gray-400 mt-3">
+                  شما واجد شرایط منتقد رسمی هستید اما هنوز نقدی برای سریالی ثبت نکرده‌اید. با ورود به صفحه هر سریال، نقد تخصصی خود را ثبت کنید.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-white/[0.04] to-transparent border border-white/10 rounded-3xl p-6 relative overflow-hidden">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="p-2.5 rounded-2xl bg-white/5 text-gray-400 border border-white/10">
+                    <Feather size={20} />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-black text-white">مسیر پیوستن به منتقدین رسمی بینجر</h3>
+                    <p className="text-xs text-gray-400">با تکمیل ۳ شرط زیر، نشان منتقد رسمی را در پروفایل دریافت کنید و در صفحه سریال‌ها نقد تخصصی بنویسید:</p>
+                  </div>
+                </div>
+
+                <Link
+                  href="/dashboard/critics"
+                  className="text-xs text-amber-400 hover:underline font-bold shrink-0"
+                >
+                  راهنمای منتقدین ←
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-gray-300">۱. اشتراک VIP</span>
+                    {criticStatus.vipPassed ? (
+                      <CheckCircle size={15} className="text-green-400" />
+                    ) : (
+                      <Lock size={13} className="text-gray-500" />
+                    )}
+                  </div>
+                  <span className={`text-[11px] font-bold ${criticStatus.vipPassed ? 'text-green-400' : 'text-amber-400'}`}>
+                    {criticStatus.vipPassed ? 'فعال ✓' : 'نیاز به فعال‌سازی'}
+                  </span>
+                </div>
+
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-gray-300">۲. ثبت ۱۰۰ کامنت</span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {criticStatus.commentsCount} / ۱۰۰
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-2">
+                    <div className="h-full bg-amber-400 rounded-full" style={{ width: `${criticStatus.commentsProgress}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-gray-300">۳. تماشای ۳۰۰۰ اپیزود</span>
+                    <span className="text-[10px] text-gray-400 font-mono">
+                      {criticStatus.watchedCount} / ۳۰۰۰
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-2">
+                    <div className="h-full bg-[#ccff00] rounded-full" style={{ width: `${criticStatus.watchedProgress}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* کالکشن پین‌شده در بالای پروفایل (مخصوص VIP) */}
           {customLists.find((l: any) => l.is_pinned) && (() => {
             const pinnedList = customLists.find((l: any) => l.is_pinned);
@@ -664,13 +873,14 @@ export default function ProfilePage() {
                       <Link
                         key={item.id}
                         href={`/dashboard/tv/${item.show_id}`}
-                        className="w-16 h-24 sm:w-20 sm:h-28 rounded-xl overflow-hidden shrink-0 border border-amber-400/20 hover:border-amber-400 bg-black/50 transition-all hover:scale-105 group/item"
+                        className="relative w-16 h-24 sm:w-20 sm:h-28 rounded-xl overflow-hidden shrink-0 border border-amber-400/20 hover:border-amber-400 bg-black/50 transition-all hover:scale-105 group/item block"
                       >
                         <img
                           src={getImageUrl(item.poster_path)}
                           alt={item.show_name}
                           className="w-full h-full object-cover group-hover/item:brightness-110"
                         />
+                        <WatchlistButton showId={item.show_id} showName={item.show_name} iconSize={10} className="p-1 top-1 left-1" />
                       </Link>
                     ))}
                   </div>
@@ -871,6 +1081,19 @@ export default function ProfilePage() {
                       </div>
                       <h4 className="text-base font-black text-white group-hover:text-[#ccff00] transition-colors">{list.title}</h4>
                       {list.description && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{list.description}</p>}
+                      {list.creator && (
+                        <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-gray-500">
+                          <span className="flex items-center gap-1.5">
+                            <span>سازنده:</span>
+                            <VipUsername 
+                              username={list.creator.username || 'کاربر بینجر'} 
+                              isVip={list.creator.is_vip || list.creator.role === 'admin'} 
+                              badgeSize={13} 
+                              className="text-xs" 
+                            />
+                          </span>
+                        </div>
+                      )}
                     </Link>
                   );
                 })}
@@ -1005,12 +1228,19 @@ export default function ProfilePage() {
                       </>
                     ) : (
                       <>
-                        <div className="w-12 h-12 bg-gradient-to-br from-gray-700 to-gray-900 rounded-full flex items-center justify-center text-xl shadow-inner border border-white/10">👤</div>
-                        <div className="flex-1 flex flex-col justify-center h-12">
-                          <span className="text-base font-bold text-white ltr text-left">{item.title}</span>
+                        <div className="w-12 h-12 bg-gradient-to-br from-gray-700 to-gray-900 rounded-full flex items-center justify-center text-xl shadow-inner border border-white/10 shrink-0">
+                          {item.avatar_url || '👤'}
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center h-12 min-w-0">
+                          <VipUsername 
+                            username={item.title} 
+                            isVip={item.is_vip} 
+                            badgeSize={14} 
+                            className="text-base font-bold ltr text-left truncate" 
+                          />
                           <span className="text-xs text-gray-500 ltr text-left">{item.subtitle}</span>
                         </div>
-                        <button className="text-xs border border-white/20 px-4 py-2 rounded-full hover:bg-[#ccff00] hover:text-black hover:border-[#ccff00] transition-all font-bold">مشاهده</button>
+                        <button className="text-xs border border-white/20 px-4 py-2 rounded-full hover:bg-[#ccff00] hover:text-black hover:border-[#ccff00] transition-all font-bold shrink-0">مشاهده</button>
                       </>
                     )}
                   </div>
@@ -1020,6 +1250,13 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1c1c1c] text-[#ccff00] border border-[#ccff00]/40 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4">
+          <CheckCircle2 size={16} />
+          <span>{toastMessage}</span>
         </div>
       )}
       
@@ -1098,8 +1335,11 @@ function ShowCard({ show, router }: any) {
           alt={show.name} 
         />
         
+        {/* دکمه افزودن به لیست انتظار */}
+        <WatchlistButton showId={show.id} showName={show.name} />
+
         {/* بج درصد در بالای پوستر */}
-        <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md border border-white/10 rounded-lg px-2 py-0.5 text-[10px] font-black ltr">
+        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md border border-white/10 rounded-lg px-2 py-0.5 text-[10px] font-black ltr">
           {isCompleted ? (
             <span className="text-[#ccff00]">۱۰۰٪</span>
           ) : (

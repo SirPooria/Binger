@@ -4,11 +4,11 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { getPopularShows, getImageUrl } from '@/lib/tmdbClient';
-import { Check, Loader2, ArrowLeft, Sparkles } from 'lucide-react';
+import { Check, Loader2, ArrowLeft, Sparkles, AlertCircle, Bookmark } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function Onboarding() {
-  const supabase = createClient();
+  const supabase = createClient() as any;
   const router = useRouter();
   
   const [user, setUser] = useState<any>(null);
@@ -18,6 +18,7 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
@@ -91,8 +92,12 @@ export default function Onboarding() {
 
   const toggleSelect = (id: number) => {
     const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setErrorBanner(null);
     setSelectedIds(next);
   };
 
@@ -106,8 +111,9 @@ export default function Onboarding() {
             show_id: id
         }));
         
+        // ثبت در جدول watchlist به عنوان لیست انتظار کاربر
         const { error: dbError } = await supabase
-            .from('favorites')
+            .from('watchlist')
             .upsert(records, { onConflict: 'user_id, show_id' });
 
         if (dbError) throw dbError;
@@ -129,7 +135,7 @@ export default function Onboarding() {
 
     } catch (error: any) {
         console.error("Error saving data:", error);
-        alert("خطا در ذخیره اطلاعات: " + (error.message || "مشکل ناشناخته"));
+        setErrorBanner("خطا در ذخیره اطلاعات: " + (error.message || "مشکل ناشناخته"));
         setSubmitting(false);
     }
   };
@@ -142,10 +148,17 @@ export default function Onboarding() {
       {/* Header */}
       <div className="max-w-4xl mx-auto text-center mt-6 sm:mt-10 mb-8 sm:mb-12 space-y-3 sm:space-y-4 animate-in fade-in slide-in-from-bottom-4">
           <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#ccff00]/10 rounded-full flex items-center justify-center mx-auto border border-[#ccff00]/20 mb-4 sm:mb-6">
-              <Sparkles size={28} className="text-[#ccff00]" />
+              <Bookmark size={28} className="text-[#ccff00]" />
           </div>
-          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black">چی دوست داری؟</h1>
-          <p className="text-gray-400 text-sm sm:text-lg">چند تا از سریال‌های مورد علاقه‌ت رو انتخاب کن تا هوش مصنوعی بینجر دستش بیاد چی بهت پیشنهاد بده.</p>
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black">انتخاب سریال‌ها</h1>
+          <p className="text-gray-400 text-sm sm:text-lg">سریال‌هایی که می‌خوای به لیست سریال‌هات اضافه کنی رو انتخاب کن تا به لیست انتظارت اضافه بشن.</p>
+
+          {errorBanner && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-300 p-3 rounded-2xl text-xs max-w-md mx-auto flex items-center gap-2 justify-center">
+              <AlertCircle size={16} className="text-red-400 shrink-0" />
+              <span>{errorBanner}</span>
+            </div>
+          )}
       </div>
 
       {/* Grid */}
@@ -199,7 +212,7 @@ export default function Onboarding() {
           >
               {submitting ? <Loader2 className="animate-spin" /> : (
                   <>
-                      <span>{selectedIds.size} تا انتخاب شد، بریم؟</span>
+                      <span>{selectedIds.size > 0 ? `${selectedIds.size} سریال انتخاب شد، بریم؟` : 'سریال‌ها رو انتخاب کن'}</span>
                       <ArrowLeft strokeWidth={3} />
                   </>
               )}

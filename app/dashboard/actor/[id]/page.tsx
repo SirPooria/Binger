@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowRight, Calendar, Loader2, MapPin, Tv, UserRound } from 'lucide-react';
 import { getImageUrl, getPersonDetails } from '@/lib/tmdbClient';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
+import { WatchlistButton } from '../../components/WatchlistButton';
 
 export default function ActorPage() {
   const params = useParams();
@@ -64,14 +65,7 @@ export default function ActorPage() {
 
   return (
     <main dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-20">
-      <div className="max-w-7xl mx-auto px-4 md:px-8">
-        <button
-          onClick={() => router.back()}
-          className="mb-6 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-        >
-          <ArrowRight size={18} />
-          بازگشت
-        </button>
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-4">
 
         <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] p-5 md:p-8">
           <div className="absolute inset-0 bg-gradient-to-l from-[#ccff00]/10 via-transparent to-transparent pointer-events-none" />
@@ -122,11 +116,13 @@ export default function ActorPage() {
                 >
                   <div className="relative aspect-[2/3] rounded-2xl overflow-hidden border border-white/10 bg-white/5 group-hover:border-[#ccff00]/60 group-hover:-translate-y-1 transition-all">
                     <img src={getImageUrl(show.poster_path)} alt={show.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    {/* دکمه افزودن به لیست انتظار */}
+                    <WatchlistButton showId={show.id} showName={show.name} />
                     {/* نشانگر درصد پیشرفت در بالای پوستر */}
-                    <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+                    <ShowCardProgress showId={show.id} show={show} showBar={false} />
                   </div>
                   {/* نوار پیشرفت زیر پوستر */}
-                  <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
+                  <ShowCardProgress showId={show.id} show={show} showBadge={false} />
                   <h3 className="text-sm font-bold text-gray-200 mt-2 line-clamp-1 group-hover:text-[#ccff00]">{show.name}</h3>
                   <p className="text-[10px] text-gray-500 line-clamp-1 mt-1">{show.character || 'بازیگر'}</p>
                 </button>

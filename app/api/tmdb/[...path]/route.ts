@@ -71,6 +71,7 @@ const ALLOWED_QUERY_PARAMS = new Set([
   'with_genres',
   'without_genres',
   'with_origin_country',
+  'with_original_language',
   'vote_count.gte',
   'vote_average.gte',
   'first_air_date.gte',

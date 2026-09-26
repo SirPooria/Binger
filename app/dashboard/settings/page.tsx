@@ -113,7 +113,8 @@ export default function SettingsPage() {
   // درخواست اجازه ارسال نوتیفیکیشن از مرورگر
   const requestNotificationPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
-      alert('مرورگر شما از نوتیفیکیشن پشتیبانی نمی‌کند.');
+      setMessage('مرورگر شما از نوتیفیکیشن پشتیبانی نمی‌کند.');
+      setIsError(true);
       return;
     }
 

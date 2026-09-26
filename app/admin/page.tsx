@@ -8,6 +8,7 @@ import {
   Loader2, Sparkles, Shield
 } from 'lucide-react';
 import Link from 'next/link';
+import ConfirmModal from '../dashboard/components/ConfirmModal';
 
 interface AdminStats {
   totalUsers: number;
@@ -57,6 +58,7 @@ export default function AdminPage() {
 
   const [commentsList, setCommentsList] = useState<AdminCommentItem[]>([]);
   const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
+  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<number | null>(null);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -132,9 +134,9 @@ export default function AdminPage() {
     initAdmin();
   }, [loadUsers, loadComments]);
 
-  const handleDeleteComment = async (commentId: number) => {
-    if (!window.confirm('آیا از حذف این نظر مطمئن هستید؟')) return;
-
+  const handleConfirmDeleteComment = async () => {
+    if (!confirmDeleteCommentId) return;
+    const commentId = confirmDeleteCommentId;
     setDeletingCommentId(commentId);
     try {
       const res = await fetch(`/api/admin/comments?id=${commentId}`, {
@@ -145,6 +147,7 @@ export default function AdminPage() {
 
       setCommentsList((prev) => prev.filter((c) => c.id !== commentId));
       showToast('نظر با موفقیت حذف شد.');
+      setConfirmDeleteCommentId(null);
     } catch (err) {
       console.error(err);
       showToast('خطا در حذف نظر.');
@@ -459,7 +462,7 @@ export default function AdminPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleDeleteComment(c.id)}
+                        onClick={() => setConfirmDeleteCommentId(c.id)}
                         disabled={deletingCommentId === c.id}
                         aria-label={`حذف نظر کاربر ${c.authorName}`}
                         className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0 disabled:opacity-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400"
@@ -478,6 +481,20 @@ export default function AdminPage() {
           </section>
         )}
       </main>
+      {/* مدال اختصاصی تأیید حذف نظر */}
+      <ConfirmModal
+        isOpen={Boolean(confirmDeleteCommentId)}
+        onClose={() => {
+          if (!deletingCommentId) setConfirmDeleteCommentId(null);
+        }}
+        onConfirm={handleConfirmDeleteComment}
+        title="حذف نظر کاربر"
+        description="آیا از حذف دائمی این نظر مطمئن هستید؟ این عملیات غیرقابل بازگشت است."
+        confirmText="بله، حذف نظر"
+        cancelText="انصراف"
+        variant="danger"
+        loading={Boolean(deletingCommentId)}
+      />
     </div>
   );
 }

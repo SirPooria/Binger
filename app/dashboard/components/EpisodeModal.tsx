@@ -8,8 +8,9 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { getSeasonDetails, getImageUrl, getShowDetails } from '@/lib/tmdbClient';
+import { getSeasonDetails, getImageUrl, getShowDetails, getReleasedEpisodeCount } from '@/lib/tmdbClient';
 import confetti from 'canvas-confetti';
+import { VipUsername } from './VipBadge';
 
 interface EpisodeModalProps {
   showId: string;
@@ -68,7 +69,7 @@ export default function EpisodeModal({
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [submittingComment, setSubmittingComment] = useState(false);
-  const [commentAuthors, setCommentAuthors] = useState<Record<string, { username: string; avatar_url: string; percent: number }>>({});
+  const [commentAuthors, setCommentAuthors] = useState<Record<string, { username: string; avatar_url: string; percent: number; is_vip?: boolean }>>({});
   const [friendsWatchedCount, setFriendsWatchedCount] = useState(0);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -83,6 +84,11 @@ export default function EpisodeModal({
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
     } catch { }
   };
+
+  // همگام‌سازی شماره اپیزود با تغییر فصل یا اپیزود ورودی
+  useEffect(() => {
+    setCurrentEpNum(initialEpNum);
+  }, [initialEpNum, seasonNum]);
 
   // ۱. دریافت فصل و بازیگران اصلی
   useEffect(() => {
@@ -252,7 +258,7 @@ export default function EpisodeModal({
         const commentIds = cData.map((comment: any) => comment.id);
 
         const [profilesRes, watchedRes, showRes, likesRes] = await Promise.all([
-          supabase.from('profiles').select('id, username, avatar_url').in('id', userIds),
+          supabase.from('profiles').select('id, username, avatar_url, is_vip, role').in('id', userIds),
           supabase.from('watched').select('user_id').eq('show_id', Number(showId)).in('user_id', userIds),
           getShowDetails(String(showId)),
           supabase.from('comment_likes').select('comment_id, user_id').in('comment_id', commentIds)
@@ -269,19 +275,21 @@ export default function EpisodeModal({
 
         const profiles = profilesRes.data || [];
         const watchedList = watchedRes.data || [];
-        const totalEps = showRes?.number_of_episodes || (seasonEpisodes.length > 0 ? seasonEpisodes.length : 1);
+        const totalEps = getReleasedEpisodeCount(showRes) || (seasonEpisodes.length > 0 ? seasonEpisodes.length : 1);
 
-        const authorsMap: Record<string, { username: string; avatar_url: string; percent: number }> = {};
+        const authorsMap: Record<string, { username: string; avatar_url: string; percent: number; is_vip?: boolean }> = {};
 
         userIds.forEach((uId: any) => {
           const prof = profiles.find((p: any) => p.id === uId);
-          const userCount = watchedList.filter((w: any) => w.user_id === uId).length;
+          const rawCount = watchedList.filter((w: any) => w.user_id === uId).length;
+          const userCount = Math.min(rawCount, totalEps);
           const percent = totalEps > 0 ? Math.min(100, Math.round((userCount / totalEps) * 100)) : 100;
 
           authorsMap[uId] = {
             username: prof?.username || (uId === user?.id ? (user?.user_metadata?.full_name || 'شما') : 'کاربر بینجر'),
             avatar_url: prof?.avatar_url || '😎',
-            percent: percent
+            percent: percent,
+            is_vip: prof?.is_vip === true || prof?.role === 'admin'
           };
         });
 
@@ -481,16 +489,20 @@ export default function EpisodeModal({
         .eq('show_id', Number(showId));
 
       const showData = await getShowDetails(String(showId));
-      const totalEps = showData?.number_of_episodes || (seasonEpisodes.length > 0 ? seasonEpisodes.length : 1);
-      const userCount = userWatched?.length || 0;
+      const totalEps = getReleasedEpisodeCount(showData) || (seasonEpisodes.length > 0 ? seasonEpisodes.length : 1);
+      const userCount = Math.min(userWatched?.length || 0, totalEps);
       const myPercent = totalEps > 0 ? Math.min(100, Math.round((userCount / totalEps) * 100)) : 100;
+
+      const { data: myProf } = await supabase.from('profiles').select('is_vip, role').eq('id', user.id).maybeSingle();
+      const isMyVip = myProf?.is_vip === true || myProf?.role === 'admin';
 
       setCommentAuthors(prev => ({
         ...prev,
         [user.id]: {
           username: user.user_metadata?.full_name || user.user_metadata?.name || 'شما',
           avatar_url: user.user_metadata?.avatar_url || '😎',
-          percent: myPercent
+          percent: myPercent,
+          is_vip: isMyVip
         }
       }));
 
@@ -978,12 +990,12 @@ export default function EpisodeModal({
                               {author.avatar_url}
                             </div>
                             <div>
-                              <span className="text-xs font-bold text-white block">
-                                {author.username}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <VipUsername username={author.username} isVip={author.is_vip} badgeSize={13} className="text-xs" />
                                 {comment.user_id === user?.id && (
-                                  <span className="text-[9px] bg-[#ccff00] text-black px-1.5 py-0.2 rounded font-black mr-1.5">شما</span>
+                                  <span className="text-[9px] bg-[#ccff00] text-black px-1.5 py-0.2 rounded font-black">شما</span>
                                 )}
-                              </span>
+                              </div>
                             </div>
                           </div>
 
@@ -1103,12 +1115,12 @@ export default function EpisodeModal({
                                     <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs">
                                       {repAuthor.avatar_url}
                                     </div>
-                                    <span className="text-xs font-bold text-gray-200">
-                                      {repAuthor.username}
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <VipUsername username={repAuthor.username} isVip={repAuthor.is_vip} badgeSize={12} className="text-xs" />
                                       {rep.user_id === user?.id && (
-                                        <span className="text-[8px] bg-[#ccff00] text-black px-1.5 py-0.2 rounded font-black mr-1">شما</span>
+                                        <span className="text-[8px] bg-[#ccff00] text-black px-1.5 py-0.2 rounded font-black">شما</span>
                                       )}
-                                    </span>
+                                    </div>
                                   </div>
 
                                   <span className="text-[10px] text-gray-500 ltr font-mono">

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useWatched, type WatchedShowProgress } from '@/lib/watchedContext';
+import { type TMDBShow } from '@/lib/tmdbClient';
 import { Check } from 'lucide-react';
 
 interface ShowProgressBarProps {
@@ -69,6 +70,7 @@ export function ShowProgressBar({
 interface ShowCardProgressProps {
   showId: number | string | undefined;
   totalEpisodes?: number;
+  show?: Partial<TMDBShow>;
   position?: 'bottom' | 'bottom-bar' | 'floating';
   showBadge?: boolean;
   showPercentageBadge?: boolean;
@@ -83,6 +85,7 @@ interface ShowCardProgressProps {
 export function ShowCardProgress({
   showId,
   totalEpisodes,
+  show,
   position = 'bottom',
   showBadge = true,
   showPercentageBadge,
@@ -90,7 +93,7 @@ export function ShowCardProgress({
   className = "",
 }: ShowCardProgressProps) {
   const { getShowProgress } = useWatched();
-  const info: WatchedShowProgress = getShowProgress(showId, totalEpisodes);
+  const info: WatchedShowProgress = getShowProgress(showId, show || totalEpisodes);
 
   if (!info.isWatched) return null;
 

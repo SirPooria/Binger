@@ -2,16 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link'; 
-import { 
-  Home, Search, List, User, LogOut, 
-  X, Sparkles, Menu, Loader2, Star, ChevronRight, SlidersHorizontal, 
-  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check, Compass
+import Link from 'next/link';
+import {
+  Home, Search, List, User, LogOut,
+  X, Sparkles, Menu, Loader2, Star, ChevronRight, SlidersHorizontal,
+  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check, Compass, Feather
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { searchShows, advancedDiscoverShows, getPopularShows, getImageUrl } from '@/lib/tmdbClient';
 import { WatchedProvider } from '@/lib/watchedContext';
 import { ShowCardProgress } from './components/ShowProgressBar';
+import { WatchlistButton } from './components/WatchlistButton';
 
 // ژانرهای برتر برای فیلتر سریع
 const QUICK_GENRES = [
@@ -39,12 +40,40 @@ const MIN_RATINGS = [
 ];
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
+  const supabase = createClient() as any;
   const router = useRouter();
   const pathname = usePathname();
-  
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); 
+
+  // تب‌های اصلی اپلیکیشن (هیچ‌وقت دکمه برگشت ندارند)
+  const ROOT_TABS = ['/dashboard', '/dashboard/explore', '/dashboard/lists', '/dashboard/mood', '/dashboard/profile'];
+  const isRootTab = ROOT_TABS.includes(pathname);
+
+  // بازگشت هوشمند با مقصد پشتیبان در صورت باز شدن مستقیم لینک
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      if (pathname.startsWith('/dashboard/tv')) router.push('/dashboard/explore');
+      else if (pathname.startsWith('/dashboard/custom-lists/')) router.push('/dashboard/custom-lists/explore');
+      else if (pathname.startsWith('/dashboard/custom-lists')) router.push('/dashboard/profile');
+      else if (pathname.startsWith('/dashboard/user/')) router.push('/dashboard/explore');
+      else if (pathname.startsWith('/dashboard/category/')) router.push('/dashboard/explore');
+      else if (pathname.startsWith('/dashboard/actor/')) router.push('/dashboard/explore');
+      else router.push('/dashboard');
+    }
+  };
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSearchOverlay, setShowSearchOverlay] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // استیت‌های جستجو
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,8 +89,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     const fetchUserWatchlist = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase.from('favorites').select('show_id').eq('user_id', user.id);
-        if (data) setWatchlistIds(new Set(data.map((item) => Number(item.show_id))));
+        const { data } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
+        if (data) setWatchlistIds(new Set(data.map((item: any) => Number(item.show_id))));
       }
     };
     fetchUserWatchlist();
@@ -76,11 +105,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     if (nextSet.has(showId)) {
       nextSet.delete(showId);
       setWatchlistIds(nextSet);
-      await supabase.from('favorites').delete().eq('user_id', user.id).eq('show_id', showId);
+      await supabase.from('watchlist').delete().eq('user_id', user.id).eq('show_id', showId);
     } else {
       nextSet.add(showId);
       setWatchlistIds(nextSet);
-      await supabase.from('favorites').insert({ user_id: user.id, show_id: showId });
+      await supabase.from('watchlist').insert({ user_id: user.id, show_id: showId });
     }
   };
 
@@ -227,7 +256,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] flex flex-col relative overflow-x-hidden">
-      
+
       {/* ================= پنجره سرچ پیشرفته ================= */}
       {showSearchOverlay && (
         <div className="fixed inset-0 z-[200] bg-[#050505]/95 backdrop-blur-2xl p-4 sm:p-6 animate-in fade-in duration-200 overflow-y-auto">
@@ -237,10 +266,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <div className="bg-[#121212] p-4 sm:p-5 rounded-3xl border border-white/10 shadow-2xl sticky top-2 z-20">
               <div className="flex items-center gap-3">
                 <Search className="text-[#ccff00] shrink-0" size={22} />
-                <input 
+                <input
                   autoFocus
-                  type="text" 
-                  placeholder="نام سریال را تایپ کنید..." 
+                  type="text"
+                  placeholder="نام سریال را تایپ کنید..."
                   className="bg-transparent text-white text-base sm:text-lg font-bold flex-1 outline-none placeholder:text-gray-600"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -248,11 +277,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`p-2 sm:px-3.5 sm:py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    hasActiveFilters || showFilters
+                  className={`p-2 sm:px-3.5 sm:py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${hasActiveFilters || showFilters
                       ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.3)]'
                       : 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border-white/10'
-                  }`}
+                    }`}
                 >
                   <SlidersHorizontal size={16} />
                   <span className="hidden sm:inline">فیلترهای پیشرفته</span>
@@ -261,11 +289,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   )}
                 </button>
 
-                <button 
+                <button
                   onClick={() => {
-                    setShowSearchOverlay(false); 
+                    setShowSearchOverlay(false);
                     resetFilters();
-                  }} 
+                  }}
                   className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-gray-400 hover:text-white transition-all cursor-pointer"
                 >
                   <X size={20} />
@@ -284,11 +312,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                           <button
                             key={g.id}
                             onClick={() => setSelectedGenre(isSelected ? null : g.id)}
-                            className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                              isSelected
+                            className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${isSelected
                                 ? 'bg-[#ccff00] text-black shadow-md'
                                 : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'
-                            }`}
+                              }`}
                           >
                             {g.name}
                           </button>
@@ -309,11 +336,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                             <button
                               key={c.code}
                               onClick={() => setSelectedCountry(isSelected ? null : c.code)}
-                              className={`text-xs px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                                isSelected
+                              className={`text-xs px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${isSelected
                                   ? 'bg-cyan-400 text-black shadow-md'
                                   : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'
-                              }`}
+                                }`}
                             >
                               {c.label}
                             </button>
@@ -333,11 +359,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                             <button
                               key={r.value}
                               onClick={() => setSelectedRating(isSelected ? null : r.value)}
-                              className={`text-xs px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                                isSelected
+                              className={`text-xs px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${isSelected
                                   ? 'bg-amber-400 text-black shadow-md'
                                   : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'
-                              }`}
+                                }`}
                             >
                               {r.label}
                             </button>
@@ -405,44 +430,35 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   {/* گرید سریال‌ها */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 pb-8">
                     {searchResults.map((show, idx) => (
-                      <div 
-                        key={`${show.id}-${idx}`} 
-                        onClick={() => { 
-                          setShowSearchOverlay(false); 
-                          router.push(`/dashboard/tv/${show.id}`); 
-                        }} 
+                      <div
+                        key={`${show.id}-${idx}`}
+                        onClick={() => {
+                          setShowSearchOverlay(false);
+                          router.push(`/dashboard/tv/${show.id}`);
+                        }}
                         className="group relative aspect-[2/3] bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer border border-white/5 hover:border-[#ccff00]/50 transition-all hover:scale-105 shadow-xl"
                       >
-                        <img 
-                          src={getImageUrl(show.poster_path)} 
-                          className="w-full h-full object-cover" 
+                        <img
+                          src={getImageUrl(show.poster_path)}
+                          className="w-full h-full object-cover"
                           alt={show.name}
                         />
-                        <button
-                          onClick={(e) => toggleWatchlist(e, Number(show.id))}
-                          className={`absolute top-2 left-2 p-2 rounded-full backdrop-blur-md transition-all shadow-md cursor-pointer z-10 ${
-                            watchlistIds.has(Number(show.id))
-                              ? 'bg-[#ccff00] text-black shadow-[0_0_12px_rgba(204,255,0,0.6)]'
-                              : 'bg-black/60 text-white hover:bg-[#ccff00] hover:text-black border border-white/15 opacity-80 sm:opacity-0 group-hover:opacity-100'
-                          }`}
-                          title={watchlistIds.has(Number(show.id)) ? "در لیست شماست" : "افزودن به لیست من"}
-                        >
-                          {watchlistIds.has(Number(show.id)) ? <Check size={14} strokeWidth={3} /> : <Plus size={14} strokeWidth={2.5} />}
-                        </button>
+                        {/* دکمه افزودن به لیست انتظار */}
+                        <WatchlistButton showId={show.id} showName={show.name} />
 
                         {/* نشانگر درصد پیشرفت در بالای پوستر */}
-                        <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+                        <ShowCardProgress showId={show.id} show={show} showBar={false} />
 
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-3 opacity-90 group-hover:opacity-100 transition-opacity">
                           <h3 className="text-xs font-bold text-white line-clamp-1">{show.name}</h3>
                           <div className="flex items-center justify-between mt-1 text-[10px] text-gray-400">
                             <span className="text-[#ccff00] font-bold flex items-center gap-1">
-                              <Star size={10} fill="currentColor"/> {show.vote_average ? show.vote_average.toFixed(1) : '-'}
+                              <Star size={10} fill="currentColor" /> {show.vote_average ? show.vote_average.toFixed(1) : '-'}
                             </span>
                             <span>{show.first_air_date ? show.first_air_date.substring(0, 4) : ''}</span>
                           </div>
                           {/* نوار پیشرفت زیر کارت در بخش سرچ و پیشنهاد بینجر */}
-                          <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
+                          <ShowCardProgress showId={show.id} show={show} showBadge={false} />
                         </div>
                       </div>
                     ))}
@@ -485,13 +501,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       )}
 
       {/* SIDEBAR OVERLAY */}
-      <div 
+      <div
         className={`fixed inset-0 bg-black/90 backdrop-blur-sm z-[150] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         onClick={() => setIsSidebarOpen(false)}
       />
 
       {/* SIDEBAR */}
-      <aside 
+      <aside
         className={`fixed top-0 right-0 h-full w-72 bg-[#0a0a0a] border-l border-white/10 z-[160] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col py-6 px-4 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="flex items-center justify-between mb-8 px-2">
@@ -502,10 +518,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <X size={20} />
           </button>
         </div>
-        
+
         <nav className="flex-1 w-full space-y-2">
           <MenuItem icon={<Home size={20} />} label="صفحه اصلی" active={pathname === '/dashboard'} onClick={() => router.push('/dashboard')} />
           <MenuItem icon={<Compass size={20} />} label="اکسپلور" active={pathname === '/dashboard/explore'} onClick={() => router.push('/dashboard/explore')} />
+          <MenuItem icon={<Feather size={20} className="text-amber-400" />} label="باشگاه منتقدین" active={pathname === '/dashboard/critics'} onClick={() => router.push('/dashboard/critics')} />
           <MenuItem icon={<List size={20} />} label="سریال های من" active={pathname === '/dashboard/lists'} onClick={() => router.push('/dashboard/lists')} />
           <MenuItem icon={<Sparkles size={20} className="text-purple-400" />} label=" پیشنهاد سریال " active={pathname === '/dashboard/mood'} onClick={() => router.push('/dashboard/mood')} />
           <MenuItem icon={<User size={20} />} label="پروفایل" active={pathname === '/dashboard/profile'} onClick={() => router.push('/dashboard/profile')} />
@@ -518,35 +535,52 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* TOP HEADER */}
-      <header className="fixed top-0 left-0 right-0 z-[100] w-full px-3 py-3 md:px-8 md:py-6 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/60 to-transparent transition-all h-20 md:h-24 pointer-events-none">
-        <div className="flex items-center gap-2.5 md:gap-4 pointer-events-auto">
-          {!isMainPage && (
-            <button onClick={() => router.back()} className="md:hidden p-2 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer">
-              <ChevronRight size={22} className="text-white group-hover:text-[#ccff00]" />
+      {/* TOP FLOATING / NO-BOX HEADER */}
+      <header 
+        className={`fixed top-0 left-0 right-0 z-[100] w-full px-3 py-3 md:px-8 md:py-4 flex items-center justify-between transition-all duration-300 pointer-events-none ${
+          isScrolled 
+            ? 'bg-gradient-to-b from-black/85 via-black/35 to-transparent' 
+            : 'bg-transparent'
+        }`}
+      >
+        {/* سمت راست: دکمه بازگشت (در صفحات داخلی)، منوی همبرگری و لوگو */}
+        <div className="flex items-center gap-2.5 md:gap-3 pointer-events-auto">
+          {!isRootTab && (
+            <button 
+              onClick={handleBack} 
+              className="p-2.5 bg-black/40 hover:bg-black/70 backdrop-blur-md rounded-2xl border border-white/10 hover:border-[#ccff00]/50 transition-all active:scale-95 group shadow-lg cursor-pointer" 
+              title="بازگشت"
+              aria-label="بازگشت"
+            >
+              <ChevronRight size={20} className="text-white group-hover:text-[#ccff00] transition-colors" />
             </button>
           )}
-          <button onClick={() => setIsSidebarOpen(true)} className="p-2 md:p-2.5 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer block">
-            <Menu size={22} className="text-white group-hover:text-[#ccff00] md:w-6 md:h-6" />
+          <button 
+            onClick={() => setIsSidebarOpen(true)} 
+            className="p-2.5 bg-black/40 hover:bg-black/70 backdrop-blur-md rounded-2xl border border-white/10 transition-all active:scale-95 group shadow-lg cursor-pointer block" 
+            title="منوی اصلی"
+          >
+            <Menu size={20} className="text-white group-hover:text-[#ccff00] md:w-5 md:h-5" />
           </button>
           <Link href="/dashboard" className="flex items-center gap-2 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-xl" aria-label="صفحه اصلی بینجر">
-            <img src="/Logo.png" alt="لوگوی بینجر" className="w-14 h-14 md:w-20 md:h-20 object-contain" />
+            <img src="/Logo.png" alt="لوگوی بینجر" className="h-10 md:h-12 w-auto object-contain drop-shadow-lg" />
           </Link>
         </div>
         
+        {/* سمت چپ: دکمه سرچ شناور بدون باکس (بهینه برای اپلیکیشن موبایل) */}
         <div className="pointer-events-auto">
           <button 
             type="button"
             onClick={() => setShowSearchOverlay(true)} 
-            className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 bg-black/40 hover:bg-white/10 backdrop-blur-md rounded-full border border-white/10 hover:border-[#ccff00]/50 transition-all group cursor-pointer shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
+            className="flex items-center gap-2 px-3.5 py-2.5 md:px-4 md:py-2.5 bg-black/40 hover:bg-black/70 backdrop-blur-md rounded-full border border-white/10 hover:border-[#ccff00]/50 transition-all group cursor-pointer shadow-lg focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
           >
-            <Search size={18} className="text-gray-400 group-hover:text-[#ccff00] transition-colors md:w-5 md:h-5" />
-            <span className="text-xs text-gray-400 font-bold hidden md:inline group-hover:text-white">جستجوی سریال...</span>
+            <Search size={16} className="text-gray-300 group-hover:text-[#ccff00] transition-colors md:w-4 md:h-4" />
+            <span className="text-xs text-gray-300 font-bold hidden md:inline group-hover:text-white">جستجوی سریال...</span>
           </button>
         </div>
       </header>
 
-      <main className="flex-1 w-full relative pt-20 md:pt-24 pb-28 md:pb-12">
+      <main className="flex-1 w-full relative pt-16 md:pt-20 pb-28 md:pb-12">
         {children}
       </main>
 
@@ -569,14 +603,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="absolute left-1/2 -translate-x-1/2 bottom-8 z-10">
-          <Link 
-            href="/dashboard/mood" 
+          <Link
+            href="/dashboard/mood"
             aria-label="دستیار مود سینمایی"
-            className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-              pathname === '/dashboard/mood' 
-                ? "bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.5)] scale-110" 
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${pathname === '/dashboard/mood'
+                ? "bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.5)] scale-110"
                 : "bg-[#1a1a1a] text-[#ccff00] border border-[#ccff00]/30 shadow-lg hover:border-[#ccff00]"
-            }`}
+              }`}
           >
             <Sparkles size={28} strokeWidth={pathname === '/dashboard/mood' ? 2.5 : 2} />
           </Link>
@@ -596,14 +629,13 @@ interface MenuItemProps {
 
 function MenuItem({ icon, label, active = false, onClick }: MenuItemProps) {
   return (
-    <button 
-      type="button" 
-      onClick={onClick} 
-      className={`w-full flex items-center gap-3 p-3 mx-2 rounded-xl text-right transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-        active 
-          ? 'bg-[#ccff00] text-black font-bold shadow-lg shadow-[#ccff00]/20' 
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 p-3 mx-2 rounded-xl text-right transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${active
+          ? 'bg-[#ccff00] text-black font-bold shadow-lg shadow-[#ccff00]/20'
           : 'text-gray-400 hover:bg-white/5 hover:text-white'
-      }`}
+        }`}
     >
       <span className={`transition-transform group-hover:scale-110 ${active ? 'scale-110' : ''}`}>{icon}</span>
       <span className="text-sm">{label}</span>

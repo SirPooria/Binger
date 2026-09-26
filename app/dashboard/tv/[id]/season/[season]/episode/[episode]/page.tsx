@@ -5,7 +5,7 @@ import { getEpisodeDetails, getImageUrl } from '@/lib/tmdbClient';
 import { createClient } from '@/lib/supabase';
 import { 
   X, Loader2, Check, Calendar, Share2, 
-  ChevronLeft, ChevronRight, Lock 
+  ChevronLeft, ChevronRight, Lock, CheckCircle2 
 } from 'lucide-react';
 
 export default function EpisodeModal({ showId, seasonNum, episodeNum, onClose, onWatchedChange }: any) {
@@ -20,6 +20,7 @@ export default function EpisodeModal({ showId, seasonNum, episodeNum, onClose, o
   // Actions
   const [isWatched, setIsWatched] = useState(false);
   const [isReleased, setIsReleased] = useState(true);
+  const [copiedToast, setCopiedToast] = useState(false);
 
   // --- Main Logic ---
   useEffect(() => {
@@ -82,7 +83,9 @@ export default function EpisodeModal({ showId, seasonNum, episodeNum, onClose, o
               console.log('Error sharing', error);
           }
       } else {
-          alert("لینک کپی شد (اشتراک‌گذاری نیتیو روی این مرورگر پشتیبانی نمی‌شود)");
+          navigator.clipboard.writeText(window.location.href);
+          setCopiedToast(true);
+          setTimeout(() => setCopiedToast(false), 2500);
       }
   };
 
@@ -98,6 +101,14 @@ export default function EpisodeModal({ showId, seasonNum, episodeNum, onClose, o
         
         {/* CLOSE BUTTON */}
         <button onClick={onClose} className="absolute top-4 left-4 z-[60] bg-black/50 hover:bg-white hover:text-black text-white p-2 rounded-full transition-all cursor-pointer border border-white/10"><X size={20} /></button>
+
+        {/* TOAST */}
+        {copiedToast && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[70] bg-[#1c1c1c] text-[#ccff00] border border-[#ccff00]/40 px-4 py-2 rounded-full text-xs font-bold shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+            <CheckCircle2 size={15} />
+            <span>لینک اپیزود کپی شد!</span>
+          </div>
+        )}
 
         {/* --- HERO IMAGE --- */}
         <div className="relative h-56 md:h-72 group shrink-0">

@@ -3,18 +3,21 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  getShowDetails, getSeasonDetails, getImageUrl, getBackdropUrl, 
-  getSimilarShows 
+import {
+  getShowDetails, getSeasonDetails, getImageUrl, getBackdropUrl,
+  getSimilarShows, getReleasedEpisodeCount
 } from '@/lib/tmdbClient';
 import { createClient } from '@/lib/supabase';
-import { 
-  Star, Loader2, Check, Plus, Share2, Play, Info, RotateCcw, 
-  ChevronDown, ChevronUp, Tag, CheckCircle2, Search, Users, ArrowRight 
+import {
+  Star, Loader2, Check, Plus, Share2, Play, Info, RotateCcw,
+  ChevronDown, ChevronUp, Tag, CheckCircle2, Search, Users,
+  Feather, Award
 } from 'lucide-react';
 import EpisodeModal from '../../components/EpisodeModal';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
-import confetti from 'canvas-confetti'; 
+import { WatchlistButton } from '../../components/WatchlistButton';
+import CriticReviewsSection from './CriticReviewsSection';
+import confetti from 'canvas-confetti';
 
 // --- اسکلت لودینگ (Skeleton Loader) ---
 const SkeletonPage = () => (
@@ -44,10 +47,10 @@ const PlatformIcon = ({ name, color, icon }: any) => (
 
 const getGenreColor = (index: number) => {
   const colors = [
-    'from-pink-500 to-rose-500', 
-    'from-purple-500 to-indigo-500', 
-    'from-cyan-500 to-blue-500', 
-    'from-emerald-500 to-green-500', 
+    'from-pink-500 to-rose-500',
+    'from-purple-500 to-indigo-500',
+    'from-cyan-500 to-blue-500',
+    'from-emerald-500 to-green-500',
     'from-amber-500 to-orange-500'
   ];
   return colors[index % colors.length];
@@ -78,7 +81,7 @@ export default function ShowDetailsPage() {
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [allSeasonsData, setAllSeasonsData] = useState<any>({});
   const [watchedEpisodes, setWatchedEpisodes] = useState<number[]>([]);
-  const [activeTab, setActiveTab] = useState<'about' | 'episodes'>('about');
+  const [activeTab, setActiveTab] = useState<'about' | 'episodes' | 'critics'>('about');
   const [loading, setLoading] = useState(true);
 
   // استیت‌های مدال گپ اپیزودها
@@ -92,7 +95,7 @@ export default function ShowDetailsPage() {
   // استیت‌های UI
   const [selectedEp, setSelectedEp] = useState<any>(null);
   const [showShareModal, setShowShareModal] = useState(false);
-  const [showConfirmAll, setShowConfirmAll] = useState(false); 
+  const [showConfirmAll, setShowConfirmAll] = useState(false);
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set());
   const carouselRef = useRef<HTMLDivElement>(null);
   const watchedEpisodesRef = useRef<number[]>([]);
@@ -100,13 +103,13 @@ export default function ShowDetailsPage() {
   const seasonActionQueue = useRef(Promise.resolve());
 
   // استیت‌های لودینگ
-  const [seasonLoading, setSeasonLoading] = useState<{[key: number]: boolean}>({}); 
+  const [seasonLoading, setSeasonLoading] = useState<{ [key: number]: boolean }>({});
   const [wholeShowLoading, setWholeShowLoading] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
 
   // امتیازها و آثار مشابه
   const [similarShows, setSimilarShows] = useState<any[]>([]);
-  const [myRating, setMyRating] = useState(0); 
+  const [myRating, setMyRating] = useState(0);
   const [bingerStats, setBingerStats] = useState({ avg: 0, count: 0 });
   const [inWatchlist, setInWatchlist] = useState(false);
 
@@ -115,14 +118,14 @@ export default function ShowDetailsPage() {
     const animationEnd = Date.now() + duration;
     const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 };
     const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
-    const interval: any = setInterval(function() {
+    const interval: any = setInterval(function () {
       const timeLeft = animationEnd - Date.now();
       if (timeLeft <= 0) return clearInterval(interval);
       const particleCount = 40 * (timeLeft / duration);
       try {
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-      } catch (e) {}
+      } catch (e) { }
     }, 250);
   };
 
@@ -130,7 +133,7 @@ export default function ShowDetailsPage() {
     if (!dateString) return false;
     return new Date(dateString) <= new Date();
   };
-  
+
   const getStatusText = (status: string) => {
     switch (status) {
       case "Ended": return "پایان یافته";
@@ -143,7 +146,7 @@ export default function ShowDetailsPage() {
   const scrollToActiveEpisode = () => {
     if (carouselRef.current) {
       const firstUnwatched = episodes.find(ep => !watchedEpisodes.includes(ep.id));
-      const targetId = firstUnwatched ? `ep-${firstUnwatched.id}` : (episodes.length > 0 ? `ep-${episodes[episodes.length-1].id}` : null);
+      const targetId = firstUnwatched ? `ep-${firstUnwatched.id}` : (episodes.length > 0 ? `ep-${episodes[episodes.length - 1].id}` : null);
       if (targetId) {
         const el = document.getElementById(targetId);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -206,14 +209,14 @@ export default function ShowDetailsPage() {
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser) { router.replace('/login'); return; }
-        setUser(currentUser); 
+        setUser(currentUser);
 
         // اجرای همزمان تمام درخواست‌ها در یک ثانیه
         const [
-          details, 
-          detailsEn, 
-          similarData, 
-          platformRes, 
+          details,
+          detailsEn,
+          similarData,
+          platformRes,
           watchlistRes
         ] = await Promise.all([
           getShowDetails(showId),
@@ -273,7 +276,7 @@ export default function ShowDetailsPage() {
     supabase.from('outbound_clicks').insert({
       show_id: Number(showId),
       platform: platform
-    } as any).then(() => {});
+    } as any).then(() => { });
 
     if (platformLinks) {
       if (platform === 'filimo' && platformLinks.filimo_url) { window.open(platformLinks.filimo_url, '_blank'); return; }
@@ -281,13 +284,13 @@ export default function ShowDetailsPage() {
       if (platform === 'filmnet' && platformLinks.filmnet_url) { window.open(platformLinks.filmnet_url, '_blank'); return; }
     }
 
-    const query = encodeURIComponent(show.name); 
+    const query = encodeURIComponent(show.name);
     let url = "";
     if (platform === 'filimo') url = `https://www.filimo.com/search/${query}`;
     if (platform === 'namava') url = `https://www.namava.ir/search?query=${query}`;
     if (platform === 'filmnet') url = `https://filmnet.ir/contents?query=${query}`;
     if (platform === 'google') url = `https://www.google.com/search?q=دانلود+سریال+${query}`;
-    
+
     if (url) window.open(url, '_blank');
   };
 
@@ -318,7 +321,7 @@ export default function ShowDetailsPage() {
 
   const toggleWatched = async (episodeId: number, forceSingle: boolean = false) => {
     if (!user) return;
-    
+
     const isWatched = watchedEpisodes.includes(episodeId);
 
     if (isWatched || forceSingle) {
@@ -346,7 +349,7 @@ export default function ShowDetailsPage() {
           return;
         }
         setWatchedEpisodes(newWatchedList);
-        
+
         const released = episodes.filter(ep => isReleased(ep.air_date)).map(e => e.id);
         if (released.every(id => newWatchedList.includes(id))) triggerCelebration();
       }
@@ -376,9 +379,9 @@ export default function ShowDetailsPage() {
 
   const handleGapConfirm = async () => {
     if (!user || !targetGapEpisode) return;
-    
+
     const allIds = [...gapEpisodesToMark, targetGapEpisode];
-    
+
     setShowGapModal(false);
 
     const records = allIds.map(id => ({
@@ -386,7 +389,7 @@ export default function ShowDetailsPage() {
       show_id: Number(showId),
       episode_id: id
     }));
-    
+
     const { error } = await supabase.from('watched').upsert(records, { onConflict: 'user_id, episode_id' } as any);
     if (error) {
       console.error('Gap update failed', error);
@@ -473,7 +476,7 @@ export default function ShowDetailsPage() {
       if (failedSeasonIndex !== -1) {
         throw new Error(`Season ${show.seasons[failedSeasonIndex].season_number} could not be loaded`);
       }
-      
+
       const newSeasonsData = { ...allSeasonsData };
       allSeasonsResults.forEach((s: any) => {
         if (s?.season_number && s?.episodes) {
@@ -502,14 +505,14 @@ export default function ShowDetailsPage() {
         show_id: Number(showId),
         episode_id: id
       }));
-      
-      const chunkSize = 50; 
+
+      const chunkSize = 50;
       for (let i = 0; i < records.length; i += chunkSize) {
         const chunk = records.slice(i, i + chunkSize);
         const { error } = await supabase.from('watched').upsert(chunk, { onConflict: 'user_id, episode_id' } as any);
         if (error) throw error;
       }
-      
+
       setWatchedEpisodes(prev => Array.from(new Set([...prev, ...idsToMark])));
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
@@ -523,7 +526,7 @@ export default function ShowDetailsPage() {
       setShowConfirmAll(false);
     }
   };
-  
+
   const toggleWatchlist = async () => {
     if (!user) return;
     setWatchlistLoading(true);
@@ -547,33 +550,25 @@ export default function ShowDetailsPage() {
   if (loading) return <SkeletonPage />;
   if (!show) return <div className="text-white text-center mt-28">سریال پیدا نشد!</div>;
 
-  const totalReleasedEpisodes = show.number_of_episodes || 1;
-  const progressPercent = Math.min(100, Math.round((watchedEpisodes.length / totalReleasedEpisodes) * 100)) || 0;
+  const totalReleasedEpisodes = getReleasedEpisodeCount(show) || 1;
+  const clampedWatched = Math.min(watchedEpisodes.length, totalReleasedEpisodes);
+  const progressPercent = Math.min(100, Math.round((clampedWatched / totalReleasedEpisodes) * 100)) || 0;
   const isShowCompleted = progressPercent === 100;
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-32 md:pb-20">
-      
-      {/* دکمه بازگشت هوشمند شناور روی کاور (با رعایت فاصله هدر) */}
-      <div className="absolute top-20 md:top-24 right-4 md:right-12 z-30">
-        <button 
-          onClick={() => router.back()}
-          className="p-2.5 sm:px-4 bg-black/60 hover:bg-black/90 backdrop-blur-md rounded-full border border-white/20 text-gray-300 hover:text-white transition-all flex items-center gap-2 text-xs font-bold cursor-pointer shadow-2xl"
-          title="بازگشت"
-        >
-          <ArrowRight size={18} />
-          <span className="hidden sm:inline">بازگشت</span>
-        </button>
-      </div>
+
+
 
       {selectedEp && (
-        <EpisodeModal 
+        <EpisodeModal
+          key={`${selectedEp.season_number ?? activeSeason}-${selectedEp.episode_number}`}
           showId={showId}
-          seasonNum={activeSeason}
+          seasonNum={selectedEp.season_number ?? activeSeason}
           episodeNum={selectedEp.episode_number}
           watchedEpisodeIds={watchedEpisodes} // 👈 ارسال لیست آماده برای سرعت برق‌آسا
           onClose={() => setSelectedEp(null)}
-          onWatchedChange={() => user && refreshWatched(user.id)} 
+          onWatchedChange={() => user && refreshWatched(user.id)}
         />
       )}
 
@@ -588,7 +583,7 @@ export default function ShowDetailsPage() {
               این کار تمام فصل‌ها و اپیزودهای پخش‌شده‌ی <span className="text-[#ccff00] font-bold">{show.name}</span> رو به لیست دیده‌شده‌ها اضافه می‌کنه.
             </p>
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={handleMarkShowAsWatched}
                 disabled={wholeShowLoading}
                 className="flex-1 bg-[#ccff00] hover:bg-[#b3e600] text-black font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -614,17 +609,17 @@ export default function ShowDetailsPage() {
               شما روی قسمت <span className="text-[#ccff00] font-bold">{episodes.find(e => e.id === targetGapEpisode)?.episode_number}</span> کلیک کردید، اما {gapEpisodesToMark.length} قسمت قبلی هنوز تیک نخورده. اون‌ها رو هم تیک بزنم؟
             </p>
             <div className="flex gap-3 flex-col">
-              <button 
+              <button
                 onClick={handleGapConfirm}
                 className="w-full bg-[#ccff00] hover:bg-[#b3e600] text-black font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 آره، همشو دیدم (ثبت {gapEpisodesToMark.length + 1} قسمت)
               </button>
-              <button 
+              <button
                 onClick={() => {
                   if (targetGapEpisode) toggleWatched(targetGapEpisode, true);
                   setShowGapModal(false);
-                }} 
+                }}
                 className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all border border-white/10 cursor-pointer"
               >
                 نه، فقط همین قسمت رو تیک بزن
@@ -644,7 +639,7 @@ export default function ShowDetailsPage() {
           <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent"></div>
           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent"></div>
         </div>
-        
+
         <div className="relative w-full p-4 sm:p-6 md:p-12 flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-end z-10 pt-20 pb-8 md:pb-16">
           <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -667,26 +662,25 @@ export default function ShowDetailsPage() {
             <h2 className="text-base sm:text-lg md:text-2xl text-gray-300 font-bold rtl text-right opacity-90">
               {show.name !== show.original_name ? show.name : ''}
             </h2>
-            
+
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-gray-300 font-bold ltr">
-              <button 
+              <button
                 onClick={toggleWatchlist}
                 disabled={watchlistLoading}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold transition-all border cursor-pointer active:scale-95 text-xs sm:text-sm ${
-                  inWatchlist ? 'bg-[#ccff00] text-black border-[#ccff00]' : 'bg-white/20 text-white border-white/30 hover:bg-white/30'
-                }`}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-bold transition-all border cursor-pointer active:scale-95 text-xs sm:text-sm ${inWatchlist ? 'bg-[#ccff00] text-black border-[#ccff00]' : 'bg-white/20 text-white border-white/30 hover:bg-white/30'
+                  }`}
               >
                 {watchlistLoading ? <Loader2 className="animate-spin" size={16} /> : (inWatchlist ? <Check size={16} /> : <Plus size={16} />)}
                 <span>{inWatchlist ? 'در لیست انتظار' : 'افزودن به لیست'}</span>
               </button>
-              
+
               {progressPercent === 100 ? (
                 <span className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold bg-green-500/20 text-green-400 border border-green-500/30 cursor-default select-none text-xs sm:text-sm">
                   <CheckCircle2 size={16} />
                   <span>کامل تماشا شده</span>
                 </span>
               ) : (
-                <button 
+                <button
                   onClick={() => setShowConfirmAll(true)}
                   className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all active:scale-95 text-xs sm:text-sm cursor-pointer"
                 >
@@ -712,31 +706,39 @@ export default function ShowDetailsPage() {
       {/* --- TABS --- */}
       <div className="sticky top-20 md:top-24 z-40 bg-[#050505]/95 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-6 sm:gap-8">
-          <button 
+          <button
             onClick={() => setActiveTab('about')}
             className={`py-4 text-sm font-bold relative transition-colors cursor-pointer ${activeTab === 'about' ? 'text-[#ccff00]' : 'text-gray-400 hover:text-white'}`}
           >
             درباره سریال
             {activeTab === 'about' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#ccff00] rounded-t-full"></div>}
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('episodes')}
             className={`py-4 text-sm font-bold relative transition-colors cursor-pointer ${activeTab === 'episodes' ? 'text-[#ccff00]' : 'text-gray-400 hover:text-white'}`}
           >
             اپیزودها
             {activeTab === 'episodes' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#ccff00] rounded-t-full"></div>}
           </button>
+          <button
+            onClick={() => setActiveTab('critics')}
+            className={`py-4 text-sm font-bold relative transition-colors cursor-pointer flex items-center gap-1.5 ${activeTab === 'critics' ? 'text-amber-400' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Feather size={15} className={activeTab === 'critics' ? 'text-amber-400' : 'text-gray-400'} />
+            <span>نقد منتقدین</span>
+            {activeTab === 'critics' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-yellow-300 rounded-t-full"></div>}
+          </button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 mt-8 pb-20">
-        
+
         {/* ================= TAB 1: ABOUT ================= */}
         {activeTab === 'about' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4">
-            
-            <div className="lg:col-span-2 space-y-8 order-2 lg:order-1">
-              
+
+            <div className="lg:col-span-2 space-y-8 order-1 lg:order-1">
+
               {/* خلاصه داستان */}
               <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
                 <h3 className="font-bold text-gray-200 mb-4 flex items-center gap-2">
@@ -758,8 +760,8 @@ export default function ShowDetailsPage() {
                       className="flex flex-col items-center w-20 shrink-0 cursor-pointer group"
                     >
                       {actor.profile_path ? (
-                        <img 
-                          src={getImageUrl(actor.profile_path)} 
+                        <img
+                          src={getImageUrl(actor.profile_path)}
                           className="w-16 h-16 rounded-full object-cover mb-2 border border-white/10 group-hover:border-[#ccff00] group-hover:scale-105 transition-all"
                           alt={actor.original_name}
                         />
@@ -784,6 +786,7 @@ export default function ShowDetailsPage() {
                     <Link key={sim.id} href={`/dashboard/tv/${sim.id}`} className="group relative w-[120px] shrink-0 block focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-xl">
                       <div className="relative rounded-lg overflow-hidden">
                         <img src={getImageUrl(sim.poster_path)} className="w-full rounded-lg shadow-md group-hover:scale-105 transition-transform" alt={sim.name} />
+                        <WatchlistButton showId={sim.id} showName={sim.name} iconSize={11} className="p-1.5 top-1.5 left-1.5" />
                         <ShowCardProgress showId={sim.id} />
                       </div>
                       <h4 className="text-[10px] text-center mt-2 text-gray-400 line-clamp-1">{sim.name}</h4>
@@ -795,24 +798,46 @@ export default function ShowDetailsPage() {
 
             </div>
 
-            {/* سایدبار راست */}
-            <div className="space-y-6 order-1 lg:order-2">
-              
+            {/* سایدبار اطلاعات، نقد و امتیازدهی */}
+            <div className="space-y-6 order-2 lg:order-2">
+
+              {/* تالار نقد منتقدین بینجر */}
+              <div
+                onClick={() => setActiveTab('critics')}
+                className="bg-gradient-to-br from-amber-500/15 via-yellow-500/5 to-transparent border border-amber-500/30 hover:border-amber-400 rounded-3xl p-5 cursor-pointer transition-all hover:scale-[1.02] shadow-[0_0_25px_rgba(245,158,11,0.08)] group"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <Feather size={13} className="text-amber-400" />
+                    <span>تالار نقد منتقدین</span>
+                  </span>
+                  <span className="text-[9px] bg-amber-400/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-400/30">
+                    VIP Critics
+                  </span>
+                </div>
+                <h4 className="text-sm font-black text-white group-hover:text-amber-300 transition-colors">
+                  نقد و ارزیابی منتقدین تاییدشده
+                </h4>
+                <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                  مشاهده نظرات تحلیلی، امتیازدهی و نقد تخصصی منتقدین رسمی بینجر →
+                </p>
+              </div>
+
               {/* امتیازدهی */}
               <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
                 <h3 className="font-bold text-gray-200 mb-4 flex items-center gap-2">
                   <Star className="text-[#ccff00]" size={18} /> امتیازدهی
                 </h3>
-                
+
                 <div className="mb-6">
                   <p className="text-xs text-gray-400 mb-2 font-bold">امتیاز شما:</p>
-                  <div className="flex items-center justify-between" dir="ltr"> 
+                  <div className="flex items-center justify-between" dir="ltr">
                     <div className="flex gap-1">
                       {[1, 2, 3, 4, 5].map((star) => (
-                        <Star 
-                          key={star} 
-                          size={24} 
-                          fill={star <= myRating ? "#ccff00" : "none"} 
+                        <Star
+                          key={star}
+                          size={24}
+                          fill={star <= myRating ? "#ccff00" : "none"}
                           className={`cursor-pointer transition-all hover:scale-110 ${star <= myRating ? 'text-[#ccff00]' : 'text-gray-600 hover:text-gray-400'}`}
                           onClick={() => handleRateShow(star)}
                         />
@@ -828,7 +853,7 @@ export default function ShowDetailsPage() {
                   <p className="text-xs text-gray-400 mb-2 font-bold flex items-center gap-2">
                     میانگین کاربران Binger <Users size={14} />
                   </p>
-                  <div className="flex items-center gap-4" dir="ltr"> 
+                  <div className="flex items-center gap-4" dir="ltr">
                     <div className="flex items-end gap-1">
                       <span className="text-3xl font-black text-white">{bingerStats.avg > 0 ? bingerStats.avg.toFixed(1) : '-'}</span>
                       <span className="text-sm text-gray-500 mb-1">/ 5</span>
@@ -850,7 +875,7 @@ export default function ShowDetailsPage() {
                     <PlatformIcon name="فیلیمو" color={platformLinks?.filimo_url ? "bg-yellow-500 border-yellow-400" : "bg-gray-800 grayscale opacity-70 hover:grayscale-0 hover:opacity-100"} />
                     {platformLinks?.filimo_url && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>}
                   </button>
-                  
+
                   <button type="button" onClick={() => handlePlatformClick('namava')} className="relative group focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-2xl" aria-label="تماشا در نماوا">
                     <PlatformIcon name="نماوا" color={platformLinks?.namava_url ? "bg-blue-600 border-blue-400" : "bg-gray-800 grayscale opacity-70 hover:grayscale-0 hover:opacity-100"} />
                     {platformLinks?.namava_url && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>}
@@ -888,7 +913,7 @@ export default function ShowDetailsPage() {
         {/* ================= TAB 2: EPISODES ================= */}
         {activeTab === 'episodes' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 space-y-12">
-            
+
             {/* ادامه تماشا */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -896,7 +921,7 @@ export default function ShowDetailsPage() {
                   <Play size={20} className="text-[#ccff00]" /> ادامه تماشا
                 </h3>
                 <div className="flex items-center gap-2">
-                  <button 
+                  <button
                     onClick={scrollToActiveEpisode}
                     className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-[#ccff00] hover:border-[#ccff00] transition-all ml-2 cursor-pointer"
                     title="بازگشت به آخرین قسمت دیده شده"
@@ -904,8 +929,8 @@ export default function ShowDetailsPage() {
                     <RotateCcw size={16} />
                   </button>
                   <div className="relative">
-                    <select 
-                      value={activeSeason} 
+                    <select
+                      value={activeSeason}
                       onChange={(e) => handleSeasonChange(Number(e.target.value))}
                       className="appearance-none bg-[#1a1a1a] border border-white/10 text-white text-xs font-bold py-1.5 pl-8 pr-3 rounded-lg cursor-pointer focus:outline-none focus:border-[#ccff00]"
                     >
@@ -929,11 +954,11 @@ export default function ShowDetailsPage() {
                   const isWatched = watchedEpisodes.includes(ep.id);
                   return (
                     <div id={`ep-${ep.id}`} key={ep.id} className={`snap-start shrink-0 w-64 h-24 bg-[#1a1a1a] rounded-xl border flex items-center overflow-hidden transition-all group relative ${isWatched ? 'border-[#ccff00]/50' : 'border-white/10 hover:border-white/30'}`}>
-                      <div className="w-24 h-full relative cursor-pointer bg-[#111]" onClick={() => setSelectedEp(ep)}>
+                      <div className="w-24 h-full relative cursor-pointer bg-[#111]" onClick={() => setSelectedEp({ ...ep, season_number: ep.season_number ?? activeSeason })}>
                         {ep.still_path ? (
-                          <img 
-                            src={getImageUrl(ep.still_path)} 
-                            className={`w-full h-full object-cover ${isWatched ? '' : 'grayscale opacity-60'}`} 
+                          <img
+                            src={getImageUrl(ep.still_path)}
+                            className={`w-full h-full object-cover ${isWatched ? '' : 'grayscale opacity-60'}`}
                             loading="lazy"
                             alt={ep.name}
                           />
@@ -944,14 +969,14 @@ export default function ShowDetailsPage() {
                         )}
                       </div>
 
-                      <div className="flex-1 px-3 flex flex-col justify-center cursor-pointer" onClick={() => setSelectedEp(ep)}>
+                      <div className="flex-1 px-3 flex flex-col justify-center cursor-pointer" onClick={() => setSelectedEp({ ...ep, season_number: ep.season_number ?? activeSeason })}>
                         <span className="text-[10px] text-gray-500 font-bold tracking-wider mb-1">E{ep.episode_number}</span>
                         <h4 className={`text-xs font-bold line-clamp-2 ${isWatched ? 'text-[#ccff00]' : 'text-gray-200'}`}>{ep.name}</h4>
                       </div>
 
                       {isReleased(ep.air_date) && (
                         <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); toggleWatched(ep.id); }}
                             className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all active:scale-75 cursor-pointer ${isWatched ? 'bg-[#ccff00] border-[#ccff00]' : 'border-white/30 hover:border-white opacity-80 md:opacity-0 md:group-hover:opacity-100'}`}
                           >
@@ -994,13 +1019,13 @@ export default function ShowDetailsPage() {
                   const isExpanded = expandedSeasons.has(season.season_number);
                   const isLoading = seasonLoading[season.season_number];
                   const loadedSeasonEpisodes = allSeasonsData[season.season_number] || [];
-                  
+
                   const releasedSeasonEpisodes = loadedSeasonEpisodes.filter((ep: any) => isReleased(ep.air_date));
                   const isFullyWatched = releasedSeasonEpisodes.length > 0 && releasedSeasonEpisodes.every((ep: any) => watchedEpisodes.includes(ep.id));
 
                   return (
                     <div key={season.id} className="border border-white/10 rounded-2xl overflow-hidden bg-[#111]">
-                      <div 
+                      <div
                         className="p-4 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
                         onClick={() => toggleAccordion(season.season_number)}
                       >
@@ -1021,14 +1046,13 @@ export default function ShowDetailsPage() {
                         </div>
 
                         <div className="flex items-center gap-2 sm:gap-4">
-                          <button 
+                          <button
                             onClick={(e) => { e.stopPropagation(); toggleSeasonWatched(season.season_number, allSeasonsData[season.season_number]); }}
                             disabled={isLoading}
-                            className={`text-xs font-bold border px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                              isFullyWatched 
-                                ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.2)]' 
+                            className={`text-xs font-bold border px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${isFullyWatched
+                                ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.2)]'
                                 : 'text-gray-400 hover:text-[#ccff00] border-white/10 hover:border-[#ccff00]'
-                            }`}
+                              }`}
                           >
                             {isLoading ? (
                               <Loader2 className="animate-spin" size={14} />
@@ -1052,16 +1076,16 @@ export default function ShowDetailsPage() {
                               const isWatched = watchedEpisodes.includes(ep.id);
                               return (
                                 <div key={ep.id} className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-4 hover:bg-white/5 border-b border-white/5 last:border-0 group">
-                                  <button 
-                                    type="button" 
-                                    onClick={() => setSelectedEp(ep)} 
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedEp({ ...ep, season_number: ep.season_number ?? season.season_number })}
                                     className="flex-1 flex items-center gap-3 sm:gap-4 text-right focus:outline-none focus:ring-1 focus:ring-[#ccff00] rounded-lg"
                                   >
                                     <div className="w-14 sm:w-16 h-9 sm:h-10 bg-gray-800 rounded overflow-hidden shrink-0">
                                       {ep.still_path ? (
-                                        <img 
-                                          src={getImageUrl(ep.still_path)} 
-                                          className={`w-full h-full object-cover ${isWatched ? '' : 'grayscale'}`} 
+                                        <img
+                                          src={getImageUrl(ep.still_path)}
+                                          className={`w-full h-full object-cover ${isWatched ? '' : 'grayscale'}`}
                                           loading="lazy"
                                           alt={ep.name}
                                         />
@@ -1080,7 +1104,7 @@ export default function ShowDetailsPage() {
                                       </div>
                                     </div>
                                   </button>
-                                  <button 
+                                  <button
                                     type="button"
                                     aria-label="تغییر وضعیت تماشا"
                                     onClick={(e) => { e.stopPropagation(); toggleWatched(ep.id); }}
@@ -1101,7 +1125,17 @@ export default function ShowDetailsPage() {
                 })}
               </div>
             </div>
+          </div>
+        )}
 
+        {/* ================= TAB 3: CRITICS ================= */}
+        {activeTab === 'critics' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4">
+            <CriticReviewsSection
+              showId={showId}
+              showName={showEn?.name || show.name}
+              user={user}
+            />
           </div>
         )}
 

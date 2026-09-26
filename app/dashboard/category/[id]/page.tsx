@@ -8,6 +8,7 @@ import {
 } from '@/lib/tmdbClient';
 import { Loader2, ArrowRight, Star, Calendar } from 'lucide-react';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
+import { WatchlistButton } from '../../components/WatchlistButton';
 
 export default function CategoryPage() {
   const params = useParams();
@@ -83,13 +84,7 @@ export default function CategoryPage() {
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8 animate-in fade-in duration-500">
       
       {/* --- HEADER --- */}
-      <div className="flex items-center gap-4 mb-8 border-b border-white/10 pb-6">
-        <button 
-          onClick={() => router.back()} 
-          className="bg-white/5 hover:bg-[#ccff00] hover:text-black p-3 rounded-xl transition-all active:scale-95 cursor-pointer border border-white/10"
-        >
-          <ArrowRight size={20} />
-        </button>
+      <div className="flex items-center gap-4 mb-8 border-b border-white/10 pb-6 pt-2">
         <div>
            <h1 className="text-xl md:text-3xl font-black text-[#ccff00] drop-shadow-lg">{pageTitle}</h1>
            <p className="text-gray-500 text-xs md:text-sm mt-1">مشاهده لیست کامل</p>
@@ -120,8 +115,11 @@ export default function CategoryPage() {
               {/* گرادینت روی عکس */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-[#000000]/40 to-transparent opacity-80"></div>
               
+              {/* دکمه افزودن به لیست انتظار */}
+              <WatchlistButton showId={show.id} showName={show.name} />
+
               {/* نشانگر درصد پیشرفت در بالای پوستر */}
-              <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+              <ShowCardProgress showId={show.id} show={show} showBar={false} />
 
               {/* اطلاعات کارت */}
               <div className="absolute bottom-0 p-3 w-full flex flex-col gap-1">
@@ -141,7 +139,7 @@ export default function CategoryPage() {
                 </div>
 
                 {/* نوار پیشرفت زیر اطلاعات کارت */}
-                <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
+                <ShowCardProgress showId={show.id} show={show} showBadge={false} />
               </div>
 
               {/* برچسب کشور (اختیاری) */}

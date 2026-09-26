@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { getShowWithCredits, getImageUrl, type TMDBShow } from '@/lib/tmdbClient';
+import { VipUsername } from '../components/VipBadge';
 
 interface WatchedRow {
   show_id: number;
@@ -1063,8 +1064,8 @@ export default function InsightsPage() {
                     {profile.avatar_url || '😎'}
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-gray-400 block">پروفایل بینجر</span>
-                    <strong className="text-xs text-white font-black">{profile.username}</strong>
+                    <span className="text-[10px] text-gray-400 block mb-0.5">پروفایل بینجر</span>
+                    <VipUsername username={profile.username} isVip={isVip} badgeSize={13} className="text-xs font-black" />
                   </div>
                 </div>
 

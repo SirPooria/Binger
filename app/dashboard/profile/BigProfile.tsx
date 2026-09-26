@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { getShowDetails, getBackdropUrl, getImageUrl } from '@/lib/tmdbClient';
+import { getShowDetails, getBackdropUrl, getImageUrl, getReleasedEpisodeCount } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import { 
   Loader2, Zap, Settings, MessageSquare, Heart, 
@@ -10,6 +10,7 @@ import {
   Lock, CheckCircle, LogOut, Share2, Trophy, Globe, Users, Instagram, Twitter, Github
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
+import { WatchlistButton } from '../components/WatchlistButton';
 
 // --- مدال‌ها ---
 const ALL_ACHIEVEMENTS = [
@@ -95,8 +96,9 @@ export default function ProfilePage() {
             const d = showsDetailsMap[String(id)];
             if (!d) return null;
 
-            const totalEps = d.number_of_episodes || 1; 
-            const watchedCount = watchedData.filter((w: any) => w.show_id === id).length;
+            const totalEps = getReleasedEpisodeCount(d) || 1; 
+            const rawCount = watchedData.filter((w: any) => w.show_id === id).length;
+            const watchedCount = Math.min(rawCount, totalEps);
             const progress = Math.min(100, Math.round((watchedCount / totalEps) * 100));
             
             return { ...d, progress };
@@ -345,6 +347,7 @@ const openListModal = async (type: 'followers' | 'following' | 'comments' | 'lea
                         {favorites.map((s) => (
                             <div key={s.id} onClick={() => router.push(`/dashboard/tv/${s.id}`)} className="group relative aspect-[2/3] rounded-2xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 ring-1 ring-white/10 hover:ring-[#ccff00]/50">
                                 <img src={getImageUrl(s.poster_path)} className="w-full h-full object-cover" />
+                                <WatchlistButton showId={s.id} showName={s.name} />
                                 <ShowCardProgress showId={s.id} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3"><span className="text-xs font-bold text-white text-center">{s.name}</span></div>
                             </div>
@@ -364,6 +367,7 @@ const openListModal = async (type: 'followers' | 'following' | 'comments' | 'lea
                             <div key={s.id} onClick={() => router.push(`/dashboard/tv/${s.id}`)} className="snap-center shrink-0 w-[120px] md:w-[140px] group cursor-pointer">
                                 <div className="relative aspect-[2/3] rounded-2xl overflow-hidden mb-3 ring-1 ring-white/10 group-hover:ring-cyan-400/50 transition-all">
                                     <img src={getImageUrl(s.poster_path)} className="w-full h-full object-cover" />
+                                    <WatchlistButton showId={s.id} showName={s.name} iconSize={11} className="p-1.5 top-1.5 left-1.5" />
                                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20"><div className="h-full bg-cyan-400" style={{ width: `${s.progress}%` }}></div></div>
                                 </div>
                                 <p className="text-xs font-bold text-center truncate px-1 group-hover:text-cyan-400 transition-colors">{s.name}</p>

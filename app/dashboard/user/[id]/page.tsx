@@ -3,16 +3,19 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
-import { getShowDetails, getBackdropUrl, getImageUrl, type TMDBShow } from '@/lib/tmdbClient';
+import { getShowDetails, getBackdropUrl, getImageUrl, getReleasedEpisodeCount, type TMDBShow } from '@/lib/tmdbClient';
 import { ALL_ACHIEVEMENTS, getBadgeProgress, type AchievementBadge, type AchievementUserStats } from '@/lib/achievements';
 import Link from 'next/link';
 import Image from 'next/image';
-import { 
-  Loader2, Zap, MessageSquare, Heart, Award, X, Clock, Play, 
-  Lock, CheckCircle, Share2, Trophy, Tv, 
-  Layers, ArrowRight, UserPlus, UserCheck, CheckCircle2, Pin
+import {
+  Loader2, Zap, MessageSquare, Heart, Award, X, Clock, Play,
+  Lock, CheckCircle, Share2, Trophy, Tv,
+  Layers, ArrowRight, UserPlus, UserCheck, CheckCircle2, Pin, Feather
 } from 'lucide-react';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
+import { WatchlistButton } from '../../components/WatchlistButton';
+import { VipUsername, VipCheckmark, CriticBadge } from '../../components/VipBadge';
+import { checkCriticEligibility, fetchCriticReviewsByUser, type CriticReviewData } from '@/lib/criticReviews';
 import type { Database } from '@/lib/database.types';
 
 type PublicProfile = {
@@ -21,6 +24,7 @@ type PublicProfile = {
   bio: string | null;
   avatar_url: string | null;
   is_vip: boolean | null;
+  role?: string | null;
   created_at: string;
 };
 
@@ -57,6 +61,7 @@ export default function UserPublicProfilePage() {
   const [favorites, setFavorites] = useState<WatchedShowWithProgress[]>([]);
   const [watchedShows, setWatchedShows] = useState<WatchedShowWithProgress[]>([]);
   const [publicLists, setPublicLists] = useState<PublicListWithItems[]>([]);
+  const [targetCriticReviews, setTargetCriticReviews] = useState<CriticReviewData[]>([]);
   const [coverImage, setCoverImage] = useState<string | null>(null);
 
   // Badge filter & modal
@@ -97,11 +102,14 @@ export default function UserPublicProfilePage() {
         // 1. Fetch public profile fields strictly without PII (no phone, no email, no select('*'))
         const { data: profile } = await supabase
           .from('profiles')
-          .select('id, username, bio, avatar_url, is_vip, created_at')
+          .select('id, username, bio, avatar_url, is_vip, role, created_at')
           .eq('id', targetUserId)
           .maybeSingle();
 
-        setTargetProfile(profile || {
+        setTargetProfile(profile ? {
+          ...profile,
+          is_vip: profile.is_vip === true || profile.role === 'admin',
+        } : {
           id: targetUserId,
           username: 'کاربر بینجر',
           avatar_url: '😎',
@@ -187,8 +195,9 @@ export default function UserPublicProfilePage() {
             .map((id) => {
               const d = showsDetailsMap[String(id)];
               if (!d) return null;
-              const totalEps = d.number_of_episodes || 1;
-              const watchedCount = allTargetWatched.filter((w) => w.show_id === id).length;
+              const totalEps = getReleasedEpisodeCount(d) || 1;
+              const rawCount = allTargetWatched.filter((w) => w.show_id === id).length;
+              const watchedCount = Math.min(rawCount, totalEps);
               const progress = Math.min(100, Math.round((watchedCount / totalEps) * 100));
               return { ...d, progress, watchedCount, totalEps };
             })
@@ -226,8 +235,9 @@ export default function UserPublicProfilePage() {
               if (!d) d = (await getShowDetails(String(showId))) as TMDBShow;
               if (!d) return null;
 
-              const totalEps = d.number_of_episodes || 1;
-              const watchedCount = allTargetWatched.filter((w) => w.show_id === showId).length;
+              const totalEps = getReleasedEpisodeCount(d) || 1;
+              const rawCount = allTargetWatched.filter((w) => w.show_id === showId).length;
+              const watchedCount = Math.min(rawCount, totalEps);
               const progress = Math.min(100, Math.round((watchedCount / totalEps) * 100));
               return { ...d, progress, watchedCount, totalEps };
             })
@@ -236,7 +246,7 @@ export default function UserPublicProfilePage() {
         }
 
         // 6. Public user lists
-        const { data: listsData } = await supabase
+        let listsRes = await supabase
           .from('user_lists')
           .select('*, list_items(*)')
           .eq('user_id', targetUserId)
@@ -245,7 +255,17 @@ export default function UserPublicProfilePage() {
           .order('order_index', { ascending: true })
           .order('created_at', { ascending: false });
 
-        setPublicLists((listsData as unknown as PublicListWithItems[]) || []);
+        if (listsRes.error && (listsRes.error.message?.includes('is_pinned') || listsRes.error.code === '42703')) {
+          listsRes = await supabase
+            .from('user_lists')
+            .select('*, list_items(*)')
+            .eq('user_id', targetUserId)
+            .eq('is_public', true)
+            .order('order_index', { ascending: true })
+            .order('created_at', { ascending: false });
+        }
+
+        setPublicLists((listsRes.data as unknown as PublicListWithItems[]) || []);
 
         setAchievementStats({
           watchedRows: allTargetWatched,
@@ -260,6 +280,14 @@ export default function UserPublicProfilePage() {
           followingCount: folCount,
           commentsCount: cCount,
         });
+
+        // 7. Critic reviews by target user
+        try {
+          const revs = await fetchCriticReviewsByUser(targetUserId);
+          setTargetCriticReviews(revs || []);
+        } catch {
+          // ignore
+        }
       } catch (err) {
         console.error('Error loading user profile:', err);
       } finally {
@@ -326,6 +354,8 @@ export default function UserPublicProfilePage() {
     );
   }
 
+  const isTargetCritic = checkCriticEligibility(targetProfile, totalEpisodes, socialStats.comments).isCritic;
+
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-12 overflow-x-hidden flex flex-col selection:bg-[#ccff00] selection:text-black">
       {/* Toast */}
@@ -338,29 +368,28 @@ export default function UserPublicProfilePage() {
 
       {/* Badge Modal */}
       {selectedBadge && (
-        <div 
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-6" 
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-6"
           onClick={() => setSelectedBadge(null)}
           role="dialog"
           aria-modal="true"
         >
-          <div 
-            className="bg-[#1a1a1a] border border-white/10 w-full max-w-sm rounded-3xl p-8 flex flex-col items-center text-center relative shadow-2xl" 
+          <div
+            className="bg-[#1a1a1a] border border-white/10 w-full max-w-sm rounded-3xl p-8 flex flex-col items-center text-center relative shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button 
+            <button
               type="button"
-              onClick={() => setSelectedBadge(null)} 
+              onClick={() => setSelectedBadge(null)}
               className="absolute top-4 left-4 bg-white/5 p-2 rounded-full hover:bg-white/10 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
               aria-label="بستن"
             >
               <X size={20} />
             </button>
-            <div className={`w-32 h-32 rounded-full flex items-center justify-center text-6xl mb-6 border-4 ${
-              getBadgeProgress(selectedBadge, achievementStats, targetProfile?.created_at).isUnlocked 
-                ? 'bg-[#ccff00]/10 border-[#ccff00] shadow-[0_0_30px_rgba(204,255,0,0.3)]' 
+            <div className={`w-32 h-32 rounded-full flex items-center justify-center text-6xl mb-6 border-4 ${getBadgeProgress(selectedBadge, achievementStats, targetProfile?.created_at).isUnlocked
+                ? 'bg-[#ccff00]/10 border-[#ccff00] shadow-[0_0_30px_rgba(204,255,0,0.3)]'
                 : 'bg-white/5 border-white/10 grayscale opacity-50'
-            }`}>
+              }`}>
               {selectedBadge.icon}
             </div>
             <h3 className="text-2xl font-black mb-2">{selectedBadge.title}</h3>
@@ -390,16 +419,8 @@ export default function UserPublicProfilePage() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent" />
         </div>
 
-        <div className="absolute top-20 md:top-24 w-full px-6 flex justify-between items-center z-20">
-          <button 
-            type="button"
-            onClick={() => router.back()}
-            className="bg-white/10 hover:bg-white/20 backdrop-blur-md px-4 py-2 rounded-full transition-all border border-white/10 flex items-center gap-2 text-xs font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
-          >
-            <ArrowRight size={16} /> بازگشت
-          </button>
-
-          <button 
+        <div className="absolute top-20 md:top-24 left-6 z-20">
+          <button
             type="button"
             onClick={handleShare}
             className="bg-white/10 hover:bg-white/20 backdrop-blur-md p-2.5 rounded-full transition-all border border-white/10 flex items-center text-gray-300 hover:text-white cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
@@ -413,23 +434,33 @@ export default function UserPublicProfilePage() {
         {/* Profile Info Overlay */}
         <div className="absolute bottom-0 w-full px-6 pb-6 flex flex-col items-center z-20 translate-y-8">
           <div className="relative group">
-            <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden relative z-10">
-              {targetProfile?.avatar_url || '😎'}
+            <div className={`rounded-full transition-all relative z-10 ${targetProfile?.is_vip
+                ? 'p-1 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 shadow-[0_0_35px_rgba(245,158,11,0.6)]'
+                : 'p-0'
+              }`}>
+              <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden relative z-10">
+                {targetProfile?.avatar_url || '😎'}
+              </div>
             </div>
-            <div className="absolute inset-0 bg-[#ccff00] blur-2xl opacity-20 rounded-full" />
+            <div className={`absolute inset-0 blur-2xl rounded-full ${targetProfile?.is_vip ? 'bg-amber-400 opacity-40' : 'bg-[#ccff00] opacity-20'
+              }`} />
           </div>
-          
-          <div className="flex items-center gap-2 mt-4">
-            <h1 className="text-2xl md:text-3xl font-black ltr tracking-tight text-white">
+
+          <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">
+            <h1 className={`text-2xl md:text-3xl font-black ltr tracking-tight ${targetProfile?.is_vip
+                ? 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]'
+                : 'text-white'
+              }`}>
               {targetProfile?.username || 'کاربر بینجر'}
             </h1>
             {targetProfile?.is_vip && (
-              <span className="text-[10px] bg-[#ccff00] text-black font-black px-2 py-0.5 rounded-full">
-                VIP
-              </span>
+              <VipCheckmark size={24} className="mr-0.5" />
+            )}
+            {isTargetCritic && (
+              <CriticBadge size="sm" className="mr-1" />
             )}
           </div>
-          
+
           {targetProfile?.bio && (
             <p className="text-sm text-gray-400 mt-2 max-w-md text-center leading-relaxed px-4">
               {targetProfile.bio}
@@ -442,11 +473,10 @@ export default function UserPublicProfilePage() {
               type="button"
               disabled={followLoading}
               onClick={handleToggleFollow}
-              className={`px-6 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-                isFollowing 
-                  ? 'bg-white/10 hover:bg-red-500/20 text-white hover:text-red-400 border border-white/20 hover:border-red-500/30' 
+              className={`px-6 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${isFollowing
+                  ? 'bg-white/10 hover:bg-red-500/20 text-white hover:text-red-400 border border-white/20 hover:border-red-500/30'
                   : 'bg-[#ccff00] hover:bg-[#b3e600] text-black shadow-[#ccff00]/20'
-              }`}
+                }`}
             >
               {followLoading ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -497,11 +527,56 @@ export default function UserPublicProfilePage() {
           </div>
         </section>
 
+        {/* نقدهای تخصصی منتقد رسمی */}
+        {isTargetCritic && targetCriticReviews.length > 0 && (
+          <section className="bg-gradient-to-r from-amber-500/10 via-yellow-500/5 to-transparent border border-amber-400/40 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-sm">
+                  <Feather size={20} className="text-amber-400" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-black text-white">نقدهای تخصصی منتقد رسمی</h2>
+                    <CriticBadge size="xs" />
+                  </div>
+                  <p className="text-xs text-gray-400">تحلیل‌ها و نمره‌دهی این منتقد در صفحه سریال‌ها ({targetCriticReviews.length} نقد)</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              {targetCriticReviews.map((rev) => (
+                <Link
+                  key={rev.id}
+                  href={`/dashboard/tv/${rev.show_id}`}
+                  className="bg-black/40 border border-white/10 hover:border-amber-400/40 p-4 rounded-2xl transition-all block group"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                      امتیاز: {rev.rating} از ۱۰
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      {new Date(rev.created_at).toLocaleDateString('fa-IR')}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors line-clamp-1">
+                    {rev.title}
+                  </h4>
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                    {rev.text}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Showcase / Achievements */}
         <section aria-labelledby="badges-heading" className="bg-[#121212] border border-white/5 rounded-3xl p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <h2 id="badges-heading" className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-              <Award className="text-pink-500" size={16} /> 
+              <Award className="text-pink-500" size={16} />
               ویترین افتخارات ({ALL_ACHIEVEMENTS.filter((b) => getBadgeProgress(b, achievementStats, targetProfile?.created_at).isUnlocked).length} از {ALL_ACHIEVEMENTS.length})
             </h2>
 
@@ -511,11 +586,10 @@ export default function UserPublicProfilePage() {
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(cat)}
-                  className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-                    selectedCategory === cat 
-                      ? 'bg-[#ccff00] text-black shadow-md' 
+                  className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${selectedCategory === cat
+                      ? 'bg-[#ccff00] text-black shadow-md'
                       : 'bg-white/5 text-gray-400 hover:text-white'
-                  }`}
+                    }`}
                 >
                   {cat}
                 </button>
@@ -529,13 +603,12 @@ export default function UserPublicProfilePage() {
               .map((badge) => {
                 const { isUnlocked, progressPercent } = getBadgeProgress(badge, achievementStats, targetProfile?.created_at);
                 return (
-                  <button 
+                  <button
                     key={badge.id}
                     type="button"
                     onClick={() => setSelectedBadge(badge)}
-                    className={`shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border min-w-[110px] cursor-pointer transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-                      isUnlocked ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5 opacity-50 grayscale'
-                    }`}
+                    className={`shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border min-w-[110px] cursor-pointer transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${isUnlocked ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5 opacity-50 grayscale'
+                      }`}
                   >
                     <div className="text-4xl drop-shadow-md mb-1">{badge.icon}</div>
                     <span className={`text-[10px] font-bold ${isUnlocked ? 'text-white' : 'text-gray-500'}`}>
@@ -598,12 +671,12 @@ export default function UserPublicProfilePage() {
                         {items.slice(0, 5).map((item) => (
                           <div key={item.id} className="w-10 h-14 rounded-md overflow-hidden bg-black shrink-0 border border-white/10 relative">
                             {item.poster_path ? (
-                              <Image 
-                                src={getImageUrl(item.poster_path)} 
-                                alt={item.show_name || 'پوستر سریال'} 
-                                fill 
+                              <Image
+                                src={getImageUrl(item.poster_path)}
+                                alt={item.show_name || 'پوستر سریال'}
+                                fill
                                 sizes="40px"
-                                className="object-cover" 
+                                className="object-cover"
                               />
                             ) : (
                               <div className="w-full h-full bg-gray-800" />
@@ -612,6 +685,13 @@ export default function UserPublicProfilePage() {
                         ))}
                       </div>
                     )}
+
+                    <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-gray-500">
+                      <span className="flex items-center gap-1.5">
+                        <span>سازنده:</span>
+                        <VipUsername username={targetProfile?.username} isVip={targetProfile?.is_vip} badgeSize={12} className="text-xs" />
+                      </span>
+                    </div>
                   </Link>
                 );
               })}
@@ -635,19 +715,20 @@ export default function UserPublicProfilePage() {
                 >
                   <div className="aspect-[2/3] relative w-full overflow-hidden bg-black">
                     {show.poster_path ? (
-                      <Image 
-                        src={getImageUrl(show.poster_path)} 
-                        alt={show.name} 
-                        fill 
+                      <Image
+                        src={getImageUrl(show.poster_path)}
+                        alt={show.name}
+                        fill
                         sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 20vw"
-                        className="object-cover group-hover:scale-105 transition-transform duration-300" 
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
                       <div className="w-full h-full bg-gray-800 flex items-center justify-center text-gray-500 text-xs">
                         بدون پوستر
                       </div>
                     )}
-                    <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} />
+                    <WatchlistButton showId={show.id} showName={show.name} />
+                    <ShowCardProgress showId={show.id} show={show} />
                   </div>
                   <div className="p-3">
                     <h3 className="font-bold text-xs text-white truncate group-hover:text-[#ccff00] transition-colors">

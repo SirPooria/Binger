@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import { getShowDetailsLite } from '@/lib/tmdbClient';
+import { getShowDetailsLite, getReleasedEpisodeCount, type TMDBShow } from '@/lib/tmdbClient';
 
 export interface WatchedShowProgress {
   isWatched: boolean;
@@ -21,7 +21,7 @@ interface WatchedShowSummary {
 interface WatchedContextType {
   watchedMap: Map<number, WatchedShowSummary>;
   isLoaded: boolean;
-  getShowProgress: (showId: number | string | undefined, showTotalEpisodes?: number) => WatchedShowProgress;
+  getShowProgress: (showId: number | string | undefined, showOrTotal?: number | Partial<TMDBShow>) => WatchedShowProgress;
   refreshWatched: () => Promise<void>;
 }
 
@@ -110,8 +110,9 @@ export function WatchedProvider({ children }: { children: React.ReactNode }) {
           missingTotalIds.slice(0, 20).map(async (id) => {
             try {
               const details = await getShowDetailsLite(String(id));
-              if (details?.number_of_episodes) {
-                totalEpisodesCache.set(id, details.number_of_episodes);
+              const released = getReleasedEpisodeCount(details);
+              if (released > 0) {
+                totalEpisodesCache.set(id, released);
               }
             } catch {
               // ignore background fetch error
@@ -152,7 +153,7 @@ export function WatchedProvider({ children }: { children: React.ReactNode }) {
   }, [fetchWatchedData]);
 
   const getShowProgress = useCallback(
-    (showId: number | string | undefined, showTotalEpisodes?: number): WatchedShowProgress => {
+    (showId: number | string | undefined, showOrTotal?: number | Partial<TMDBShow>): WatchedShowProgress => {
       if (!showId) return defaultProgress;
       const numId = Number(showId);
       if (!numId) return defaultProgress;
@@ -162,16 +163,27 @@ export function WatchedProvider({ children }: { children: React.ReactNode }) {
         return defaultProgress;
       }
 
-      // Determine total episodes
-      const total = showTotalEpisodes || summary.totalEpisodes || totalEpisodesCache.get(numId) || 0;
+      let passedTotal = 0;
+      if (typeof showOrTotal === 'object' && showOrTotal !== null) {
+        passedTotal = getReleasedEpisodeCount(showOrTotal);
+      } else if (typeof showOrTotal === 'number' && showOrTotal > 0) {
+        passedTotal = showOrTotal;
+      }
+
+      // Determine total episodes: prefer released episodes count
+      const cachedTotal = totalEpisodesCache.get(numId) || summary.totalEpisodes || 0;
+      const total = cachedTotal > 0 && passedTotal > 0
+        ? Math.min(passedTotal, cachedTotal)
+        : (passedTotal || cachedTotal || 0);
 
       // If total is known
       if (total > 0) {
-        const progress = Math.min(100, Math.round((summary.watchedCount / total) * 100));
+        const clampedWatched = Math.min(summary.watchedCount, total);
+        const progress = Math.min(100, Math.round((clampedWatched / total) * 100));
         const isCompleted = progress >= 100;
         return {
           isWatched: true,
-          watchedCount: summary.watchedCount,
+          watchedCount: clampedWatched,
           totalEpisodes: total,
           progress,
           isCompleted,
@@ -182,13 +194,14 @@ export function WatchedProvider({ children }: { children: React.ReactNode }) {
       if (!totalEpisodesCache.has(numId)) {
         totalEpisodesCache.set(numId, 0); // mark in-flight
         getShowDetailsLite(String(numId)).then((details) => {
-          if (details?.number_of_episodes) {
-            totalEpisodesCache.set(numId, details.number_of_episodes);
+          const released = getReleasedEpisodeCount(details);
+          if (released > 0) {
+            totalEpisodesCache.set(numId, released);
             setWatchedMap((prev) => {
               const prevItem = prev.get(numId);
               if (prevItem) {
                 const updated = new Map(prev);
-                updated.set(numId, { ...prevItem, totalEpisodes: details.number_of_episodes });
+                updated.set(numId, { ...prevItem, totalEpisodes: released });
                 return updated;
               }
               return prev;

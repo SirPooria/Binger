@@ -6,6 +6,7 @@ import {
   Trophy, ArrowRight, Loader2, MessageSquare, 
   Tv, Crown, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { VipUsername } from '../components/VipBadge';
 import type { LeaderboardUser } from '@/app/api/leaderboard/route';
 
 interface PaginationState {
@@ -119,9 +120,14 @@ export default function LeaderboardPage() {
                         </div>
                       </div>
 
-                      <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-slate-300 transition-colors truncate max-w-[100px] text-center mt-2">
-                        {top2.username}
-                      </h3>
+                      <div className="mt-2 text-center flex justify-center w-full">
+                        <VipUsername 
+                          username={top2.username} 
+                          isVip={top2.is_vip} 
+                          badgeSize={13} 
+                          className="text-xs sm:text-sm font-bold truncate max-w-[110px]" 
+                        />
+                      </div>
                       <span className="text-xs font-black text-slate-300 ltr mt-0.5">{top2.score.toLocaleString('fa-IR')} امتیاز</span>
 
                       <div className="w-full h-24 sm:h-28 bg-gradient-to-t from-slate-900/60 to-slate-800/40 border-t-2 border-slate-400 rounded-t-2xl mt-3 flex items-center justify-center text-slate-400/30 font-black text-2xl">
@@ -148,9 +154,14 @@ export default function LeaderboardPage() {
                         </div>
                       </div>
 
-                      <h3 className="text-sm sm:text-base font-black text-white group-hover:text-[#ccff00] transition-colors truncate max-w-[120px] text-center mt-2">
-                        {top1.username}
-                      </h3>
+                      <div className="mt-2 text-center flex justify-center w-full">
+                        <VipUsername 
+                          username={top1.username} 
+                          isVip={top1.is_vip} 
+                          badgeSize={15} 
+                          className="text-sm sm:text-base font-black truncate max-w-[130px]" 
+                        />
+                      </div>
                       <span className="text-xs sm:text-sm font-black text-[#ccff00] ltr mt-0.5">{top1.score.toLocaleString('fa-IR')} امتیاز</span>
 
                       <div className="w-full h-32 sm:h-36 bg-gradient-to-t from-[#ccff00]/20 to-[#ccff00]/10 border-t-4 border-[#ccff00] rounded-t-2xl mt-3 flex items-center justify-center text-[#ccff00]/40 font-black text-3xl shadow-[0_-10px_30px_rgba(204,255,0,0.1)]">
@@ -174,9 +185,14 @@ export default function LeaderboardPage() {
                         </div>
                       </div>
 
-                      <h3 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-500 transition-colors truncate max-w-[100px] text-center mt-2">
-                        {top3.username}
-                      </h3>
+                      <div className="mt-2 text-center flex justify-center w-full">
+                        <VipUsername 
+                          username={top3.username} 
+                          isVip={top3.is_vip} 
+                          badgeSize={13} 
+                          className="text-xs sm:text-sm font-bold truncate max-w-[110px]" 
+                        />
+                      </div>
                       <span className="text-xs font-black text-amber-500 ltr mt-0.5">{top3.score.toLocaleString('fa-IR')} امتیاز</span>
 
                       <div className="w-full h-20 sm:h-24 bg-gradient-to-t from-amber-950/60 to-amber-900/30 border-t-2 border-amber-700 rounded-t-2xl mt-3 flex items-center justify-center text-amber-700/30 font-black text-2xl">
@@ -213,13 +229,12 @@ export default function LeaderboardPage() {
                         </div>
 
                         <div>
-                          <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-[#ccff00] transition-colors flex items-center gap-1.5">
-                            <span>{u.username}</span>
-                            {u.is_vip && (
-                              <span className="text-[9px] bg-[#ccff00]/20 text-[#ccff00] border border-[#ccff00]/30 px-1.5 py-0.2 rounded font-black">
-                                VIP
-                              </span>
-                            )}
+                          <h4 className="text-xs sm:text-sm font-bold text-white transition-colors flex items-center gap-1.5">
+                            <VipUsername 
+                              username={u.username} 
+                              isVip={u.is_vip} 
+                              badgeSize={14} 
+                            />
                           </h4>
                           <div className="flex items-center gap-3 text-[10px] text-gray-500 mt-0.5">
                             <span className="flex items-center gap-1"><Tv size={11} /> {u.episodesCount} اپیزود</span>

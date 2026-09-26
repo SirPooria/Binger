@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase';
-import { getShowDetails, getImageUrl } from '@/lib/tmdbClient';
+import { getShowDetails, getImageUrl, getReleasedEpisodeCount } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import { Loader2, ArrowRight, ListChecks, Bookmark, Eye, Clock, Tv, CheckCircle } from 'lucide-react';
+import { WatchlistButton } from '../components/WatchlistButton';
 
 export default function MyListsPage() {
   const supabase = createClient() as any;
@@ -110,21 +111,8 @@ export default function MyListsPage() {
           const waitingShows = validShows.filter(show => waitingShowIds.includes(Number(show.id)));
 
           watchedShows.forEach(show => {
-              // محاسبه مجموع اپیزودهای منتشر شده (بدون فصل صفر)
-              const nextEpisode = show.next_episode_to_air;
-              const nextEpisodeIsUpcoming = nextEpisode?.air_date && new Date(nextEpisode.air_date) > new Date();
-              const totalReleasedEps = show.seasons?.reduce((sum: number, season: any) => {
-                if (season.season_number === 0) return sum;
-                if (!season.air_date || new Date(season.air_date) > new Date()) {
-                  return sum;
-                }
-                if (nextEpisodeIsUpcoming && season.season_number === nextEpisode.season_number) {
-                  // اگر قسمت بعدی داخل همین فصل است، قسمت‌های اعلام‌شده اما پخش‌نشده هم باید در مخرج باشند.
-                  // قسمت اول فصل آینده هنوز بخشی از فصل فعلی کاربر محسوب نمی‌شود.
-                  return nextEpisode.episode_number > 1 ? sum + season.episode_count : sum;
-                }
-                return sum + season.episode_count;
-              }, 0) || 0;
+              // محاسبه مجموع اپیزودهای منتشر شده (بدون فصل‌های آینده و بدون فصل صفر)
+              const totalReleasedEps = getReleasedEpisodeCount(show);
               
               // تعداد اپیزودهای تماشا شده کاربر
               let watchedCount = watchedIds.filter((ep: any) => Number(ep.show_id) === Number(show.id)).length;
@@ -206,6 +194,9 @@ export default function MyListsPage() {
           className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
         />
         
+        {/* دکمه افزودن / وضعیت در لیست انتظار */}
+        <WatchlistButton showId={show.id} showName={show.name} />
+
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
         
         <div className="absolute bottom-0 p-4 w-full">
@@ -258,10 +249,7 @@ export default function MyListsPage() {
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] p-4 md:p-8 pb-28 md:pb-20">
       
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => router.back()} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all cursor-pointer">
-          <ArrowRight size={20} />
-        </button>
+      <div className="flex items-center gap-3 mb-8">
         <h1 className="text-2xl font-black flex items-center gap-2">
           <ListChecks className="text-[#ccff00]" />
           سریال‌های من

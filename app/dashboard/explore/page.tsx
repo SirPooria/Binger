@@ -8,9 +8,9 @@ import { createClient } from '@/lib/supabase';
 import { 
   getTrendingShows, getImageUrl, getBackdropUrl, 
   getShowDetails, getIranianShows, getTopRatedShows,
-  getKoreanShows, getTeenShows, getMiniSeries,
+  getKoreanShows, getTeenShows, getMiniSeries, getAnimeShows,
   searchShows, advancedDiscoverShows,
-  getShowsByGenre
+  getShowsByGenre, getReleasedEpisodeCount
 } from '@/lib/tmdbClient';
 import { 
   AlertTriangle, Plus, Info, Check, Bookmark, 
@@ -19,6 +19,8 @@ import {
   X, Layers, Globe, Eye, Tv, Share2, Lock, Clapperboard, Loader2
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
+import { VipUsername } from '../components/VipBadge';
+import { WatchlistButton } from '../components/WatchlistButton';
 
 // --- GENRE TRANSLATIONS ---
 const GENRE_MAP: Record<number, string> = {
@@ -91,7 +93,7 @@ export default function Dashboard() {
 }
 
 function DashboardContent() {
-  const supabase = createClient();
+  const supabase = createClient() as any;
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -109,6 +111,7 @@ function DashboardContent() {
     trending: any[];
     topRated: any[];
     korean: any[];
+    anime: any[];
     teen: any[];
     miniSeries: any[];
   }>({
@@ -116,6 +119,7 @@ function DashboardContent() {
     trending: [],
     topRated: [],
     korean: [],
+    anime: [],
     teen: [],
     miniSeries: [],
   });
@@ -218,7 +222,7 @@ function DashboardContent() {
         setUser(user);
 
         // ۱. دریافت دیتای کاربر از دیتابیس
-        const { data: wList } = await supabase.from('favorites').select('show_id').eq('user_id', user.id);
+        const { data: wList } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
 
         let allWatchedRows: any[] = [];
         let page = 0;
@@ -263,13 +267,7 @@ function DashboardContent() {
           const continueWatchingShows: any[] = [];
 
           validShows.forEach((show: any) => {
-            const totalReleasedEps = show.seasons?.reduce((sum: number, season: any) => {
-              if (season.season_number === 0) return sum;
-              if (season.air_date && new Date(season.air_date) <= new Date()) {
-                return sum + season.episode_count;
-              }
-              return sum;
-            }, 0) || 0;
+            const totalReleasedEps = getReleasedEpisodeCount(show);
             
             let watchedCount = wEdIds.filter((id: number) => id === show.id).length;
             watchedCount = Math.min(watchedCount, totalReleasedEps);
@@ -298,14 +296,15 @@ function DashboardContent() {
           try { return await fn(); } catch (e) { return fallback; }
         };
 
-        const [iranian, trending, topRated, korean, teen, miniSeries, customListsRes] = await Promise.all([
+        const [iranian, trending, topRated, korean, anime, teen, miniSeries, customListsRes] = await Promise.all([
           fetchSafely(getIranianShows, []),
           fetchSafely(getTrendingShows, []),
           fetchSafely(getTopRatedShows, []),
           fetchSafely(getKoreanShows, []),
+          fetchSafely(getAnimeShows, []),
           fetchSafely(getTeenShows, []),
           fetchSafely(getMiniSeries, []),
-          // دریافت لیست‌های عمومی کاربران از سوپابیس
+          // دریافت لیست‌های عمومی کاربران از سوپابیس برای کاروسل اکسپلور
           supabase
             .from('user_lists')
             .select(`
@@ -319,7 +318,7 @@ function DashboardContent() {
             `)
             .eq('is_public', true)
             .order('created_at', { ascending: false })
-            .limit(10),
+            .limit(50),
         ]);
 
         if (isCancelled) return;
@@ -329,25 +328,53 @@ function DashboardContent() {
           trending: trending ? trending.slice(0, 15) : [],
           topRated: topRated ? topRated.slice(0, 15) : [],
           korean: korean ? korean.slice(0, 15) : [],
+          anime: anime ? anime.slice(0, 15) : [],
           teen: teen ? teen.slice(0, 15) : [],
           miniSeries: miniSeries ? miniSeries.slice(0, 15) : [],
         });
 
-        // غنی‌سازی اطلاعات سازندگان لیست‌های عمومی
+        // غنی‌سازی اطلاعات سازندگان و تعداد ذخیره‌شدن‌های هر لیست عمومی
         const rawLists = customListsRes?.data || [];
         if (rawLists.length > 0) {
           const userIds = Array.from(new Set(rawLists.map((l: any) => l.user_id)));
-          const { data: profilesData } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_url')
-            .in('id', userIds);
+          const listIds = rawLists.map((l: any) => String(l.id));
 
-          const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p]));
+          const [profilesRes, savesRes] = await Promise.all([
+            userIds.length > 0
+              ? supabase.from('profiles').select('id, username, avatar_url, is_vip, role').in('id', userIds)
+              : Promise.resolve({ data: [] }),
+            listIds.length > 0
+              ? supabase.from('list_saves').select('list_id').in('list_id', listIds)
+              : Promise.resolve({ data: [] }),
+          ]);
+
+          const saveCounts: Record<string, number> = {};
+          (savesRes.data || []).forEach((save: any) => {
+            const id = String(save.list_id);
+            saveCounts[id] = (saveCounts[id] || 0) + 1;
+          });
+
+          const profileMap = new Map((profilesRes.data || []).map((p: any) => [p.id, {
+            username: p.username,
+            avatar_url: p.avatar_url,
+            is_vip: p.is_vip === true || p.role === 'admin'
+          }]));
+
           const enrichedLists = rawLists.map((l: any) => ({
             ...l,
             creator: profileMap.get(l.user_id) || null,
+            save_count: saveCounts[String(l.id)] || 0,
           }));
-          setUserCustomLists(enrichedLists);
+
+          // سورت دقیق بر اساس تعداد ذخیره‌شدن‌ها به ترتیب نزولی (پرطرفدارترین‌ها اول)
+          enrichedLists.sort((a: any, b: any) => {
+            if ((b.save_count || 0) !== (a.save_count || 0)) {
+              return (b.save_count || 0) - (a.save_count || 0);
+            }
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          });
+
+          setUserCustomLists(enrichedLists.slice(0, 15));
         }
 
         // ۴. الگوریتم هوشمند پیشنهاد ویژه بالا کنار DNA سینمایی
@@ -490,8 +517,8 @@ function DashboardContent() {
     setTimeout(() => setToastMsg(null), 3000);
     
     if (user) {
-      if (isAdded) await supabase.from('favorites').delete().eq('user_id', user.id).eq('show_id', showId);
-      else await supabase.from('favorites').insert({ user_id: user.id, show_id: showId });
+      if (isAdded) await supabase.from('watchlist').delete().eq('user_id', user.id).eq('show_id', showId);
+      else await supabase.from('watchlist').insert({ user_id: user.id, show_id: showId });
     }
   };
 
@@ -818,7 +845,17 @@ function DashboardContent() {
               badge="🇰🇷 کره‌ای"
             />
 
-            {/* ۵. سریال‌های تینیجری */}
+            {/* ۵. ترندترین انیمه‌های دنیا */}
+            <CarouselSection 
+              title="ترندترین انیمه‌های دنیا" 
+              items={categories.anime} 
+              watchlistIds={watchlistIds} 
+              router={router} 
+              onToggle={toggleWatchlist} 
+              badge="🎌 انیمه"
+            />
+
+            {/* ۶. سریال‌های تینیجری */}
             <CarouselSection 
               title="سریال‌های محبوب تینیجری و درام جوانان" 
               items={categories.teen} 
@@ -869,17 +906,26 @@ function DashboardContent() {
                         className="shrink-0 w-72 sm:w-80 bg-[#121212] border border-white/10 hover:border-[#ccff00]/40 rounded-3xl p-5 transition-all block group shadow-xl"
                       >
                         <div className="flex justify-between items-start mb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-white/10 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs bg-white/10 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold shrink-0">
                               {list.creator?.avatar_url || '😎'}
                             </span>
-                            <span className="text-xs text-gray-300 font-bold truncate max-w-[120px]">
-                              {list.creator?.username || 'کاربر بینجر'}
+                            <VipUsername 
+                              username={list.creator?.username} 
+                              isVip={list.creator?.is_vip} 
+                              badgeSize={12} 
+                              className="text-xs truncate max-w-[125px]" 
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                              <Bookmark size={11} className="fill-amber-400 text-amber-400" />
+                              <span className="font-mono">{list.save_count || 0} ذخیره</span>
+                            </span>
+                            <span className="text-[11px] text-gray-400 font-bold bg-white/5 px-2 py-0.5 rounded-lg">
+                              {items.length} سریال
                             </span>
                           </div>
-                          <span className="text-[11px] text-gray-400 font-bold bg-white/5 px-2 py-0.5 rounded-lg">
-                            {items.length} سریال
-                          </span>
                         </div>
 
                         <h4 className="text-sm font-black text-white group-hover:text-[#ccff00] transition-colors line-clamp-1 mb-1">
@@ -1616,18 +1662,11 @@ function ShowCard({ show, isAdded, onClick, onToggle }: any) {
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-70 group-hover:opacity-85 transition-opacity"></div>
       
-      <button 
-        onClick={(e) => { e.stopPropagation(); onToggle(); }} 
-        className={`absolute top-2 left-2 p-2 rounded-full backdrop-blur-md transition-all z-10 cursor-pointer shadow-lg hover:scale-110 active:scale-90 ${
-          isAdded ? 'bg-[#ccff00] text-black shadow-[0_0_12px_rgba(204,255,0,0.6)]' : 'bg-black/50 text-white hover:bg-white hover:text-black'
-        }`}
-        title={isAdded ? "در لیست شماست" : "افزودن به لیست من"}
-      >
-        {isAdded ? <Bookmark size={14} fill="black" /> : <Plus size={14} />}
-      </button>
+      {/* دکمه افزودن به لیست انتظار */}
+      <WatchlistButton showId={show.id} showName={show.name} />
 
       {/* نشانگر درصد پیشرفت در بالای پوستر */}
-      <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBar={false} />
+      <ShowCardProgress showId={show.id} show={show} showBar={false} />
       
       <div className="absolute bottom-0 p-2.5 sm:p-3 w-full">
         <h3 className="text-xs font-bold text-white line-clamp-1 drop-shadow-md">{show.name}</h3>
@@ -1642,7 +1681,7 @@ function ShowCard({ show, isAdded, onClick, onToggle }: any) {
         </div>
 
         {/* نوار پیشرفت زیر مشخصات کارت */}
-        <ShowCardProgress showId={show.id} totalEpisodes={show.number_of_episodes} showBadge={false} />
+        <ShowCardProgress showId={show.id} show={show} showBadge={false} />
       </div>
     </div>
   );

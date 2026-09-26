@@ -167,54 +167,160 @@ Respond in valid json with this exact structure:
 }
 `;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+interface FallbackCategory {
+  keywords: string[];
+  replyPrefix: string;
+  titles: string[];
+}
 
-    let groqRes: Response;
+const FALLBACK_CATEGORIES: FallbackCategory[] = [
+  {
+    keywords: ['خنده', 'کمدی', 'طنز', 'شاد', 'فان', 'بخند', 'حال خوب', 'خوشحال', 'خنده دار'],
+    replyPrefix: 'برای خندیدن از ته دل و عوض شدن حالت، این کمدی‌های شاهکار دقیقاً همون چیزی‌ان که لازم داری:',
+    titles: ['Ted Lasso', 'The Office', 'Friends', 'Brooklyn Nine-Nine', 'Parks and Recreation', 'Modern Family', 'The Good Place']
+  },
+  {
+    keywords: ['ترس', 'ترسناک', 'وحشت', 'جن', 'روح', 'زامبی', 'وحشتناک', 'ترسناک ترین'],
+    replyPrefix: 'اگه دنبال بالا رفتن آدرنالین و یه وحشت روان‌شناختی جذاب هستی، این شاهکارها رو از دست نده:',
+    titles: ['The Haunting of Hill House', 'Midnight Mass', 'The Walking Dead', 'Penny Dreadful', 'From', 'Stranger Things']
+  },
+  {
+    keywords: ['جنایی', 'پلیس', 'کارآگاه', 'مافیا', 'قتل', 'تبهکار', 'گانگستر', 'دار و دسته'],
+    replyPrefix: 'برای ورود به تاریک‌ترین پرونده‌های جنایی و باندهای مافیایی، این سریال‌ها میخکوب‌کننده‌ان:',
+    titles: ['Mindhunter', 'Peaky Blinders', 'True Detective', 'Fargo', 'Narcos', 'The Sopranos', 'Ozark', 'The Wire']
+  },
+  {
+    keywords: ['غم', 'غمگین', 'گریه', 'دپ', 'افسرده', 'ناراحت', 'دلتنگ', 'دارک', 'گریه دار'],
+    replyPrefix: 'این سریال‌ها با عمق درام فوق‌العاده‌شون کاملاً با حال و هوات همدلی می‌کنن:',
+    titles: ['BoJack Horseman', 'Chernobyl', 'After Life', 'This Is Us', 'Fleabag', 'Normal People']
+  },
+  {
+    keywords: ['انگیزشی', 'امید', 'تلاش', 'موفقیت', 'انگیزه', 'شغل', 'هدف', 'بیزینس'],
+    replyPrefix: 'برای شارژ شدن انگیزه‌ت و دیدن آدم‌هایی که تا قله پیش رفتن، سراغ این‌ها برو:',
+    titles: ['Suits', 'Ted Lasso', 'Billions', "The Queen's Gambit", 'Silicon Valley', 'Mad Men']
+  },
+  {
+    keywords: ['اکشن', 'هیجان', 'بزن بزن', 'انتقام', 'جنگ', 'آدرنالین', 'رزمی', 'نظامی'],
+    replyPrefix: 'برای نهایت ضربان قلب و اکشن‌های بی‌پروای سطح جهانی، این چندتا رو حتماً ببین:',
+    titles: ['The Punisher', 'Banshee', 'Reacher', 'Band of Brothers', 'The Boys', 'Daredevil', 'Warrior']
+  },
+  {
+    keywords: ['معما', 'پیچیده', 'پازل', 'مغز', 'شوک', 'راز', 'رازآلود', 'عجیب', 'پیچش'],
+    replyPrefix: 'اگه اثری می‌خوای که مغزت رو به چالش بکشه و تا ثانیه آخر درگیرت کنه، این‌ها شاهکارن:',
+    titles: ['Dark', 'Severance', 'Mr. Robot', 'Westworld', 'Sherlock', 'Black Mirror', '1899']
+  },
+  {
+    keywords: ['علمی تخیلی', 'سای فای', 'فضا', 'آینده', 'هوش مصنوعی', 'تخیلی', 'فانتزی', 'جادو'],
+    replyPrefix: 'برای پرواز به دنیاهای ناشناخته و مفاهیم هیجان‌انگیز علمی‌تخیلی و فانتزی:',
+    titles: ['Arcane', 'The Expanse', 'Stranger Things', 'The Mandalorian', 'The Last of Us', 'Foundation']
+  },
+  {
+    keywords: ['عشق', 'عاشقانه', 'رمانتیسم', 'رمانتیک', 'رل', 'احساسی', 'لاو'],
+    replyPrefix: 'برای حس و حال رمانتیک و عاشقانه‌های عمیق با قصه‌های به یادماندنی:',
+    titles: ['Normal People', 'Outlander', 'Heartstopper', 'One Day', 'Crash Landing on You', 'Pride and Prejudice']
+  },
+  {
+    keywords: ['انیمه', 'ژاپن', 'انیمیشن', 'کارتون'],
+    replyPrefix: 'شاهکارهای بی‌همتای دنیای انیمه با داستان‌سرایی فراتر از حد انتظار:',
+    titles: ['Attack on Titan', 'Demon Slayer: Kimetsu no Yaiba', 'Death Note', 'Jujutsu Kaisen', 'Vinland Saga']
+  },
+  {
+    keywords: ['کره', 'کره ای', 'کیدراما', 'کی دراما', 'کره‌ای'],
+    replyPrefix: 'برترین و پرطرفدارترین سریال‌های کره جنوبی که از تماشاشون سیر نمیشی:',
+    titles: ['Squid Game', 'Crash Landing on You', 'Vincenzo', 'The Glory', 'Signal', 'All of Us Are Dead']
+  },
+  {
+    keywords: ['تاریخ', 'تاریخی', 'قدیم', 'قرون وسطی', 'پادشاه', 'امپراتوری', 'روم'],
+    replyPrefix: 'روایت‌هایی عظیم از امپراتوری‌ها، جنگ‌های خونین و نبردهای تاریخی:',
+    titles: ['Game of Thrones', 'Vikings', 'The Crown', 'Rome', 'The Last Kingdom', 'Spartacus']
+  },
+  {
+    keywords: ['کوتاه', 'مینی', 'مینی سریال', 'چند قسمتی', 'سریع'],
+    replyPrefix: 'مینی‌سریال‌های کوتاه و متمرکزی که توی یک آخر هفته می‌تونی تمومشون کنی:',
+    titles: ['Chernobyl', "The Queen's Gambit", 'Band of Brothers', 'Mare of Easttown', 'When They See Us']
+  }
+];
+
+function getIntelligentFallbackRecommendations(message: string, watchedShows: string[]) {
+  const lowerMsg = message.toLowerCase();
+  const watchedSet = new Set(watchedShows.map(s => s.toLowerCase().trim()));
+
+  let matched = FALLBACK_CATEGORIES.find(cat =>
+    cat.keywords.some(kw => lowerMsg.includes(kw))
+  );
+
+  if (!matched) {
+    matched = {
+      keywords: [],
+      replyPrefix: 'بر اساس حس و حال پیامت و آثاری که تا امروز دیدی، این شاهکارهای تماشایی رو برات چیدم:',
+      titles: ['Breaking Bad', 'Better Call Saul', 'Succession', 'The Wire', 'Chernobyl', 'The Sopranos', 'Severance', 'Dark']
+    };
+  }
+
+  // سریال‌هایی که کاربر قبلاً دیده را فیلتر می‌کنیم
+  const unWatched = matched.titles.filter(t => !watchedSet.has(t.toLowerCase().trim()));
+  const chosenTitles = (unWatched.length >= 3 ? unWatched : matched.titles).slice(0, 4);
+
+  return {
+    reply: `${matched.replyPrefix}\n(پاسخ اختصاصی از موتور دستیار بینجر متناسب با مود شما؛ سهمیه شما کسر نشد)`,
+    recommended_titles: chosenTitles,
+  };
+}
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    const baseUrl = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+    let groqRes: Response | null = null;
+    let groqFailed = false;
+
     try {
-      groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'openai/gpt-oss-120b',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: message }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.7,
-        }),
-      });
+      const sendRequest = async (modelName: string) => {
+        return await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: message }
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.7,
+          }),
+        });
+      };
+
+      // Try primary model: llama-3.3-70b-versatile
+      groqRes = await sendRequest('llama-3.3-70b-versatile');
+
+      // Fallback to llama-3.1-8b-instant if primary fails with 5xx/429
+      if (!groqRes.ok && (groqRes.status >= 500 || groqRes.status === 429)) {
+        groqRes = await sendRequest('llama-3.1-8b-instant');
+      }
+
       clearTimeout(timeoutId);
     } catch (fetchErr: unknown) {
       clearTimeout(timeoutId);
-      await refundQuota();
-
-      if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
-        return NextResponse.json({
-          error: 'پاسخگویی هوش مصنوعی بیش از حد طول کشید؛ سهمیه شما کسر نشد.',
-          remaining: 1,
-        }, { status: 504 });
-      }
-
-      console.error('Groq fetch error:', fetchErr);
-      return NextResponse.json({
-        error: 'خطا در برقراری ارتباط با سرور هوش مصنوعی؛ سهمیه شما کسر نشد.',
-        remaining: 1,
-      }, { status: 502 });
+      groqFailed = true;
+      console.warn('Groq fetch network error, activating fallback engine:', fetchErr);
     }
 
-    if (!groqRes.ok) {
+    if (!groqRes || !groqRes.ok || groqFailed) {
+      // سرور هوش مصنوعی به دلیل محدودیت آی‌پی تحریم یا خطای شبکه در دسترس نیست؛
+      // سهمیه به طور کامل برگردانده می‌شود و موتور پیشنهاد هوشمند بینجر پاسخ می‌دهد
       await refundQuota();
-      console.error('Groq API Error status:', groqRes.status);
+      const fallbackResult = getIntelligentFallbackRecommendations(message, cleanWatched);
       return NextResponse.json({
-        error: 'پاسخ معتبری از هوش مصنوعی دریافت نشد؛ سهمیه شما کسر نشد.',
-        remaining: 1,
-      }, { status: 502 });
+        reply: fallbackResult.reply,
+        recommended_titles: fallbackResult.recommended_titles,
+        isVip: quota.is_vip,
+        remaining: quota.remaining,
+      });
     }
 
     const data = await groqRes.json();

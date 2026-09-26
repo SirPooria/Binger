@@ -7,10 +7,11 @@ import { searchShows, getImageUrl } from '@/lib/tmdbClient';
 import Link from 'next/link';
 import { 
   Plus, MoreVertical, Trash2, Edit3, Share2, Globe, 
-  Lock, ArrowUp, ArrowDown, Search, X, Loader2, ArrowRight, 
+  Lock, ArrowUp, ArrowDown, Search, X, Loader2, ArrowRight, ArrowLeft,
   Check, Film, Layers, CheckCircle2, Compass, Pin, Crown, Sparkles, AlertCircle
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function CustomListsPage() {
   const router = useRouter();
@@ -25,10 +26,17 @@ export default function CustomListsPage() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [editingList, setEditingList] = useState<any>(null);
+  const [createStep, setCreateStep] = useState<1 | 2>(1);
+  const [newSelectedShows, setNewSelectedShows] = useState<any[]>([]);
+  const [createSearchQuery, setCreateSearchQuery] = useState('');
+  const [createSearchResults, setCreateSearchResults] = useState<any[]>([]);
+  const [createSearching, setCreateSearching] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
   const [savingList, setSavingList] = useState(false);
+  const [deleteConfirmList, setDeleteConfirmList] = useState<any | null>(null);
+  const [isDeletingList, setIsDeletingList] = useState(false);
 
   // استیت‌های مدال مدیریت سریال‌ها و جستجو در TMDB
   const [activeListForShows, setActiveListForShows] = useState<any>(null);
@@ -70,7 +78,10 @@ export default function CustomListsPage() {
       setIsVip(userIsVip);
 
       // خواندن لیست‌ها مرتب شده بر اساس رتبه اولویت
-      const { data: listsData, error } = await supabase
+      let listsData: any[] | null = null;
+      let listsError: any = null;
+
+      const resWithPin = await supabase
         .from('user_lists')
         .select(`
           *,
@@ -81,7 +92,25 @@ export default function CustomListsPage() {
         .order('order_index', { ascending: true })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (resWithPin.error && (resWithPin.error.message?.includes('is_pinned') || resWithPin.error.code === '42703')) {
+        // اگر ستون is_pinned هنوز در دیتابیس ایجاد نشده باشد، با اولویت عادی فراخوانی می‌کنیم
+        const resFallback = await supabase
+          .from('user_lists')
+          .select(`
+            *,
+            list_items ( id, show_id, show_name, poster_path )
+          `)
+          .eq('user_id', user.id)
+          .order('order_index', { ascending: true })
+          .order('created_at', { ascending: false });
+        listsData = resFallback.data;
+        listsError = resFallback.error;
+      } else {
+        listsData = resWithPin.data;
+        listsError = resWithPin.error;
+      }
+
+      if (listsError) throw listsError;
       setLists(listsData || []);
 
     } catch (err) {
@@ -141,7 +170,13 @@ export default function CustomListsPage() {
         .update({ is_pinned: nextPinned })
         .eq('id', list.id);
 
-      if (error) throw error;
+      if (error) {
+        if (error.message?.includes('is_pinned')) {
+          showToast('ستون is_pinned در دیتابیس یافت نشد. لطفاً دستور SQL مایگریشن را اجرا کنید.');
+          return;
+        }
+        throw error;
+      }
       setLists(lists.map(l => ({
         ...l,
         is_pinned: l.id === list.id ? nextPinned : false
@@ -153,22 +188,99 @@ export default function CustomListsPage() {
     }
   };
 
+  // کمکی: باز و بسته کردن مدال ساخت / ویرایش
+  const closeFormModal = () => {
+    setIsFormModalOpen(false);
+    setCreateStep(1);
+    setTitle('');
+    setDescription('');
+    setIsPublic(true);
+    setNewSelectedShows([]);
+    setCreateSearchQuery('');
+    setCreateSearchResults([]);
+    setEditingList(null);
+  };
+
+  const openCreateModal = () => {
+    if (!isVip && lists.length >= 3) {
+      setIsUpgradeModalOpen(true);
+      return;
+    }
+    setEditingList(null);
+    setCreateStep(1);
+    setTitle('');
+    setDescription('');
+    setIsPublic(true);
+    setNewSelectedShows([]);
+    setCreateSearchQuery('');
+    setCreateSearchResults([]);
+    setIsFormModalOpen(true);
+  };
+
+  // سرچ زنده سریال برای مدال مرحله ۲ ساخت لیست
+  const handleSearchTMDBForCreate = async (q: string) => {
+    setCreateSearchQuery(q);
+    if (!q.trim()) {
+      setCreateSearchResults([]);
+      return;
+    }
+    setCreateSearching(true);
+    try {
+      const results = await searchShows(q);
+      setCreateSearchResults(results || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreateSearching(false);
+    }
+  };
+
+  const handleAddShowToNewList = (show: any) => {
+    if (newSelectedShows.some(s => s.id === show.id)) return;
+    setNewSelectedShows([
+      {
+        id: show.id,
+        name: show.name || show.original_name,
+        poster_path: show.poster_path,
+        first_air_date: show.first_air_date,
+      },
+      ...newSelectedShows,
+    ]);
+    showToast(`«${show.name || show.original_name}» به لیست اضافه شد.`);
+  };
+
+  const handleRemoveShowFromNewList = (showId: number) => {
+    setNewSelectedShows(newSelectedShows.filter(s => s.id !== showId));
+  };
+
   // ۳. ذخیره یا ویرایش مشخصات لیست
-  const handleSaveList = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveList = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!title.trim() || !user) return;
 
     // بررسی سقف ۳ لیست برای کاربران عادی
     if (!editingList && !isVip && lists.length >= 3) {
-      setIsFormModalOpen(false);
+      closeFormModal();
       setIsUpgradeModalOpen(true);
+      return;
+    }
+
+    // اگر در مرحله اول ساخت لیست جدید هستیم، مستقیم به مرحله ۲ (افزودن سریال‌ها) هدایت می‌شود
+    if (!editingList && createStep === 1) {
+      setCreateStep(2);
+      return;
+    }
+
+    // شرط بسیار مهم: لیست بدون سریال ثبت نمی‌شود (حداقل ۱ سریال اجباری است)
+    if (!editingList && newSelectedShows.length === 0) {
+      showToast('برای ثبت لیست، باید حداقل ۱ سریال به آن اضافه کنید.');
       return;
     }
 
     setSavingList(true);
     try {
       if (editingList) {
-        // ویرایش
+        // ویرایش مشخصات لیست موجود
         const { error } = await supabase
           .from('user_lists')
           .update({
@@ -180,11 +292,11 @@ export default function CustomListsPage() {
           .eq('id', editingList.id);
 
         if (error) throw error;
-        showToast('اطلاعات لیست ویرایش شد.');
+        showToast('اطلاعات لیست با موفقیت ویرایش شد.');
       } else {
-        // ساخت جدید
+        // ساخت جدید هم‌زمان با تمام سریال‌های انتخاب‌شده (حداقل ۱ سریال)
         const nextOrderIndex = lists.length;
-        const { error } = await supabase
+        const { data: newListData, error: listError } = await supabase
           .from('user_lists')
           .insert({
             user_id: user.id,
@@ -192,19 +304,31 @@ export default function CustomListsPage() {
             description: description.trim(),
             is_public: isPublic,
             order_index: nextOrderIndex,
-            is_pinned: false,
-          });
+          })
+          .select()
+          .single();
 
-        if (error) throw error;
-        showToast('لیست جدید با موفقیت ساخته شد!');
+        if (listError) throw listError;
+
+        // درج هم‌زمان تمام سریال‌های اضافه شده در list_items
+        const itemsToInsert = newSelectedShows.map((s) => ({
+          list_id: newListData.id,
+          show_id: s.id,
+          show_name: s.name,
+          poster_path: s.poster_path,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('list_items')
+          .insert(itemsToInsert);
+
+        if (itemsError) throw itemsError;
+
+        showToast(`لیست «${title.trim()}» با موفقیت همراه با ${itemsToInsert.length} سریال ایجاد شد! 🎉`);
       }
 
-      setIsFormModalOpen(false);
-      setTitle('');
-      setDescription('');
-      setIsPublic(true);
-      setEditingList(null);
-      fetchUserLists();
+      closeFormModal();
+      await fetchUserLists();
 
     } catch (err: any) {
       console.error(err);
@@ -214,18 +338,21 @@ export default function CustomListsPage() {
     }
   };
 
-  // ۴. حذف لیست
-  const handleDeleteList = async (listId: string) => {
-    if (!confirm('آیا از حذف کامل این لیست مطمئن هستید؟')) return;
-
+  // ۴. حذف لیست با مدال اختصاصی
+  const handleConfirmDeleteList = async () => {
+    if (!deleteConfirmList) return;
+    setIsDeletingList(true);
     try {
-      const { error } = await supabase.from('user_lists').delete().eq('id', listId);
+      const { error } = await supabase.from('user_lists').delete().eq('id', deleteConfirmList.id);
       if (error) throw error;
-      setLists(lists.filter(l => l.id !== listId));
-      showToast('لیست حذف شد.');
-    } catch (err) {
+      setLists(lists.filter((l) => l.id !== deleteConfirmList.id));
+      showToast(`لیست «${deleteConfirmList.title}» با موفقیت حذف شد.`);
+      setDeleteConfirmList(null);
+    } catch (err: any) {
       console.error(err);
-      showToast('خطا در حذف لیست.');
+      showToast(err.message || 'خطا در حذف لیست.');
+    } finally {
+      setIsDeletingList(false);
     }
   };
 
@@ -349,13 +476,6 @@ export default function CustomListsPage() {
         {/* هدر بالای صفحه */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <Link 
-              href="/dashboard/profile"
-              className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-gray-400 hover:text-white transition-all cursor-pointer"
-              title="بازگشت به پروفایل"
-            >
-              <ArrowRight size={18} />
-            </Link>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-2">
@@ -382,17 +502,7 @@ export default function CustomListsPage() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                if (!isVip && lists.length >= 3) {
-                  setIsUpgradeModalOpen(true);
-                  return;
-                }
-                setEditingList(null);
-                setTitle('');
-                setDescription('');
-                setIsPublic(true);
-                setIsFormModalOpen(true);
-              }}
+              onClick={openCreateModal}
               className="bg-[#ccff00] hover:bg-[#b3e600] text-black font-black text-xs px-5 py-3 rounded-2xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(204,255,0,0.25)] active:scale-95 cursor-pointer"
             >
               <Plus size={18} />
@@ -541,6 +651,7 @@ export default function CustomListsPage() {
                             <button
                               onClick={() => {
                                 setEditingList(list);
+                                setCreateStep(1);
                                 setTitle(list.title);
                                 setDescription(list.description || '');
                                 setIsPublic(list.is_public);
@@ -577,7 +688,7 @@ export default function CustomListsPage() {
 
                             <button
                               onClick={() => {
-                                handleDeleteList(list.id);
+                                setDeleteConfirmList(list);
                                 setOpenMenuId(null);
                               }}
                               className="w-full text-right px-3 py-2 text-xs font-bold text-red-400 hover:bg-red-500/10 rounded-xl flex items-center gap-2 cursor-pointer"
@@ -623,93 +734,308 @@ export default function CustomListsPage() {
           <div className="text-center py-20 bg-white/[0.02] border border-dashed border-white/10 rounded-3xl p-8">
             <Layers size={48} className="text-gray-600 mx-auto mb-3" />
             <h3 className="text-lg font-bold text-gray-300">هنوز هیچ لیستی نساخته‌اید</h3>
-            <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+            <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto mb-5">
               لیست‌های دلخواه بسازید، سریال‌های محبوب جهان را در آن جمع‌آوری کنید و به دیگران پیشنهاد دهید.
             </p>
+            <button
+              onClick={openCreateModal}
+              className="bg-[#ccff00] hover:bg-[#b3e600] text-black font-black text-xs px-5 py-3 rounded-2xl inline-flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(204,255,0,0.25)] active:scale-95 cursor-pointer"
+            >
+              <Plus size={18} />
+              <span>ساخت اولین لیست</span>
+            </button>
           </div>
         )}
 
       </div>
 
-      {/* --- ۱. مدال ساخت یا ویرایش لیست --- */}
+      {/* --- ۱. مدال ساخت چندمرحله‌ای یا ویرایش لیست --- */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-white/15 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className={`bg-[#141414] border border-white/15 w-full ${!editingList && createStep === 2 ? 'max-w-2xl' : 'max-w-md'} rounded-3xl p-6 shadow-2xl relative flex flex-col max-h-[90vh] transition-all`}>
             <button 
-              onClick={() => setIsFormModalOpen(false)}
-              className="absolute top-4 left-4 p-2 text-gray-400 hover:text-white rounded-full bg-white/5 cursor-pointer"
+              onClick={closeFormModal}
+              className="absolute top-4 left-4 p-2 text-gray-400 hover:text-white rounded-full bg-white/5 cursor-pointer z-10"
             >
               <X size={18} />
             </button>
 
-            <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
-              <Layers size={20} className="text-[#ccff00]" />
-              <span>{editingList ? 'ویرایش لیست' : 'ساخت لیست جدید'}</span>
-            </h3>
-
-            <form onSubmit={handleSaveList} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1.5">نام لیست *</label>
-                <input
-                  type="text"
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="مثلاً: ۱۰ مینی‌سریال معمایی شاهکار"
-                  className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl p-3 text-white focus:border-[#ccff00] focus:outline-none text-sm"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-300 block mb-1.5">توضیحات لیست (اختیاری)</label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="دلیل معرفی این لیست یا توضیحی برای بقیه کاربران..."
-                  className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl p-3 text-white focus:border-[#ccff00] focus:outline-none text-sm resize-none"
-                />
-              </div>
-
-              {/* سوییچ عمومی / خصوصی */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-white block">وضعیت نمایش لیست</span>
-                  <span className="text-[10px] text-gray-400">
-                    {isPublic ? 'عمومی (نمایش در پروفایل و برای دیگران)' : 'خصوصی (فقط برای خودم)'}
-                  </span>
-                </div>
-
+            {/* Stepper برای ساخت لیست جدید */}
+            {!editingList && (
+              <div className="flex items-center justify-between mb-4 bg-white/[0.03] border border-white/10 p-2.5 rounded-2xl">
                 <button
                   type="button"
-                  onClick={() => setIsPublic(!isPublic)}
-                  className={`w-12 h-6 rounded-full p-1 transition-colors cursor-pointer ${
-                    isPublic ? 'bg-[#ccff00]' : 'bg-gray-700'
+                  onClick={() => setCreateStep(1)}
+                  className={`flex items-center gap-2 text-xs font-bold transition-colors cursor-pointer ${
+                    createStep === 1 ? 'text-[#ccff00]' : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  <div className={`w-4 h-4 rounded-full bg-black transition-transform ${isPublic ? 'translate-x-0' : '-translate-x-6'}`} />
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                    createStep === 1 ? 'bg-[#ccff00] text-black' : 'bg-white/10 text-white'
+                  }`}>
+                    ۱
+                  </div>
+                  <span>مشخصات لیست</span>
                 </button>
-              </div>
 
-              <div className="pt-2 flex gap-3">
-                <button
-                  type="submit"
-                  disabled={savingList}
-                  className="flex-1 bg-[#ccff00] hover:bg-[#b3e600] text-black font-black py-3 rounded-xl transition-all active:scale-95 text-xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {savingList ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                  <span>{editingList ? 'ثبت ویرایش' : 'ساخت لیست'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsFormModalOpen(false)}
-                  className="px-4 py-3 bg-white/5 text-gray-400 hover:text-white rounded-xl text-xs font-bold cursor-pointer"
-                >
-                  انصراف
-                </button>
+                <div className={`h-[2px] flex-1 mx-3 rounded-full transition-colors ${
+                  createStep === 2 ? 'bg-[#ccff00]' : 'bg-white/10'
+                }`} />
+
+                <div className={`flex items-center gap-2 text-xs font-bold ${
+                  createStep === 2 ? 'text-[#ccff00]' : 'text-gray-500'
+                }`}>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                    createStep === 2 ? 'bg-[#ccff00] text-black' : 'bg-white/10 text-gray-400'
+                  }`}>
+                    ۲
+                  </div>
+                  <span>افزودن سریال‌ها ({newSelectedShows.length})</span>
+                </div>
               </div>
-            </form>
+            )}
+
+            {/* عنوان مدال */}
+            <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
+              <Layers size={20} className="text-[#ccff00]" />
+              <span>
+                {editingList 
+                  ? 'ویرایش لیست' 
+                  : createStep === 1 
+                    ? 'ساخت لیست جدید' 
+                    : `افزودن سریال‌ها به «${title}»`
+                }
+              </span>
+            </h3>
+
+            {/* گام ۱: مشخصات اولیه لیست */}
+            {(editingList || createStep === 1) && (
+              <form onSubmit={handleSaveList} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-300 block mb-1.5">نام لیست *</label>
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="مثلاً: ۱۰ مینی‌سریال معمایی شاهکار"
+                    className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl p-3 text-white focus:border-[#ccff00] focus:outline-none text-sm"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-300 block mb-1.5">توضیحات لیست (اختیاری)</label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="دلیل معرفی این لیست یا توضیحی برای بقیه کاربران..."
+                    className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl p-3 text-white focus:border-[#ccff00] focus:outline-none text-sm resize-none"
+                  />
+                </div>
+
+                {/* سوییچ عمومی / خصوصی */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-white block">وضعیت نمایش لیست</span>
+                    <span className="text-[10px] text-gray-400">
+                      {isPublic ? 'عمومی (نمایش در پروفایل و برای دیگران)' : 'خصوصی (فقط برای خودم)'}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPublic(!isPublic)}
+                    className={`w-12 h-6 rounded-full p-1 transition-colors cursor-pointer ${
+                      isPublic ? 'bg-[#ccff00]' : 'bg-gray-700'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-black transition-transform ${isPublic ? 'translate-x-0' : '-translate-x-6'}`} />
+                  </button>
+                </div>
+
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={savingList}
+                    className="flex-1 bg-[#ccff00] hover:bg-[#b3e600] text-black font-black py-3 rounded-xl transition-all active:scale-95 text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#ccff00]/10"
+                  >
+                    {savingList ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : editingList ? (
+                      <Check size={16} />
+                    ) : (
+                      <ArrowLeft size={16} />
+                    )}
+                    <span>{editingList ? 'ثبت ویرایش' : 'مرحله بعد: افزودن سریال‌ها'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeFormModal}
+                    className="px-4 py-3 bg-white/5 text-gray-400 hover:text-white rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    انصراف
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* گام ۲: جستجو و افزودن سریال‌ها (فقط برای ساخت لیست جدید) */}
+            {!editingList && createStep === 2 && (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                {/* کادر سرچ زنده کل سریال‌ها در TMDB */}
+                <div className="py-2">
+                  <div className="relative">
+                    <Search size={18} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={createSearchQuery}
+                      onChange={(e) => handleSearchTMDBForCreate(e.target.value)}
+                      placeholder="جستجوی نام هر سریالی در جهان (فارسی یا انگلیسی)..."
+                      className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl pr-11 pl-4 py-3 text-white text-xs focus:border-[#ccff00] focus:outline-none placeholder-gray-500"
+                      autoFocus
+                    />
+                    {createSearching && (
+                      <Loader2 size={16} className="animate-spin text-[#ccff00] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    )}
+                  </div>
+
+                  {/* نتایج زنده سرچ TMDB */}
+                  {createSearchResults.length > 0 && (
+                    <div className="mt-2 bg-[#181818] border border-white/15 rounded-2xl p-2 max-h-48 overflow-y-auto space-y-1.5 shadow-2xl custom-scrollbar">
+                      {createSearchResults.slice(0, 6).map((show) => {
+                        const isAdded = newSelectedShows.some(s => s.id === show.id);
+                        return (
+                          <div key={show.id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="relative w-10 h-14 shrink-0 rounded-lg overflow-hidden bg-black">
+                                <img 
+                                  src={getImageUrl(show.poster_path)} 
+                                  alt={show.name} 
+                                  className="w-full h-full object-cover"
+                                />
+                                <ShowCardProgress showId={show.id} showPercentageBadge={false} />
+                              </div>
+                              <div>
+                                <h5 className="text-xs font-bold text-white">{show.name}</h5>
+                                <span className="text-[10px] text-gray-400 ltr block text-right">
+                                  {show.first_air_date?.split('-')[0] || ''}
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAddShowToNewList(show)}
+                              disabled={isAdded}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                                isAdded 
+                                  ? 'bg-white/10 text-gray-400 cursor-not-allowed'
+                                  : 'bg-[#ccff00] hover:bg-[#b3e600] text-black'
+                              }`}
+                            >
+                              {isAdded ? <Check size={14} /> : <Plus size={14} />}
+                              <span>{isAdded ? 'اضافه شد' : 'افزودن'}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* بخش نمایش سریال‌های انتخاب‌شده */}
+                <div className="flex-1 overflow-y-auto pt-2 border-t border-white/5 space-y-2 custom-scrollbar my-2">
+                  <div className="flex justify-between items-center text-xs font-bold text-gray-400 px-1">
+                    <span>سریال‌های انتخاب‌شده ({newSelectedShows.length})</span>
+                    {newSelectedShows.length === 0 && (
+                      <span className="text-amber-400 text-[11px] font-medium flex items-center gap-1">
+                        <AlertCircle size={13} />
+                        حداقل ۱ سریال الزامی است
+                      </span>
+                    )}
+                  </div>
+
+                  {newSelectedShows.length > 0 ? (
+                    newSelectedShows.map((show) => (
+                      <div key={show.id} className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-2 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                          <div className="relative w-9 h-12 shrink-0 rounded-lg overflow-hidden bg-black">
+                            <img 
+                              src={getImageUrl(show.poster_path)} 
+                              alt={show.name} 
+                              className="w-full h-full object-cover"
+                            />
+                            <ShowCardProgress showId={show.id} showPercentageBadge={false} />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-white block">{show.name}</span>
+                            {show.first_air_date && (
+                              <span className="text-[10px] text-gray-400 ltr block text-right">
+                                {show.first_air_date.split('-')[0]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveShowFromNewList(show.id)}
+                          className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer"
+                          title="حذف از لیست"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 bg-amber-500/5 border border-dashed border-amber-500/20 rounded-2xl p-4">
+                      <Film size={32} className="text-amber-400/60 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-amber-300">هنوز هیچ سریالی انتخاب نکرده‌اید</p>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        برای ثبت و ساخت این لیست، حداقل ۱ سریال را از کادر بالا جستجو و اضافه کنید.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* دکمه‌های اقدام نهایی مرحله ۲ */}
+                <div className="pt-3 border-t border-white/10 flex gap-3 mt-auto">
+                  <button
+                    type="button"
+                    onClick={() => setCreateStep(1)}
+                    className="px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <ArrowRight size={14} />
+                    <span>مرحله قبل</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={newSelectedShows.length === 0 || savingList}
+                    onClick={() => handleSaveList()}
+                    className={`flex-1 py-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      newSelectedShows.length === 0
+                        ? 'bg-white/5 text-gray-500 border border-white/10 cursor-not-allowed'
+                        : 'bg-[#ccff00] hover:bg-[#b3e600] text-black active:scale-95 shadow-lg shadow-[#ccff00]/20'
+                    }`}
+                  >
+                    {savingList ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Check size={16} />
+                    )}
+                    <span>
+                      {newSelectedShows.length === 0 
+                        ? 'حداقل ۱ سریال اضافه کنید تا ثبت شود' 
+                        : `ثبت و ساخت لیست (${newSelectedShows.length} سریال)`
+                      }
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -881,6 +1207,21 @@ export default function CustomListsPage() {
           </div>
         </div>
       )}
+
+      {/* مدال اختصاصی تأیید حذف لیست */}
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmList)}
+        onClose={() => {
+          if (!isDeletingList) setDeleteConfirmList(null);
+        }}
+        onConfirm={handleConfirmDeleteList}
+        title="حذف کامل لیست"
+        description={`آیا از حذف کامل لیست «${deleteConfirmList?.title || ''}» اطمینان دارید؟ تمامی سریال‌های داخل این لیست نیز برداشته خواهند شد و این عملیات قابل بازگشت نیست.`}
+        confirmText="بله، حذف این لیست"
+        cancelText="انصراف"
+        variant="danger"
+        loading={isDeletingList}
+      />
 
       {/* اعلان تستی ساده (Toast) */}
       {toastMessage && (

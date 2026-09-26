@@ -108,6 +108,69 @@ export interface TMDBReview {
   };
 }
 
+/**
+ * Calculates the total number of episodes that have actually aired/released to date.
+ * Excludes:
+ * - Specials (season_number === 0)
+ * - Future seasons whose air_date is in the future
+ * - Unannounced / unreleased seasons with no air_date on continuing shows
+ * - Future episodes of an in-progress season (if next_episode_to_air is in the future)
+ */
+export function getReleasedEpisodeCount(show: Partial<TMDBShow> | null | undefined): number {
+  if (!show) return 0;
+
+  const now = new Date();
+  const nowTime = now.getTime();
+
+  if (show.seasons && Array.isArray(show.seasons) && show.seasons.length > 0) {
+    const nextEp = show.next_episode_to_air;
+    const nextEpAirTime = nextEp?.air_date ? new Date(nextEp.air_date).getTime() : null;
+    const isNextEpInFuture = nextEpAirTime !== null && nextEpAirTime > nowTime;
+
+    let releasedCount = 0;
+    const isEnded = show.status === 'Ended' || show.status === 'Canceled';
+
+    for (const season of show.seasons) {
+      if (!season || season.season_number === 0) continue;
+      const epCount = season.episode_count || 0;
+      if (epCount <= 0) continue;
+
+      if (season.air_date) {
+        const seasonAirTime = new Date(season.air_date).getTime();
+        if (seasonAirTime > nowTime) {
+          // Future season that hasn't aired yet (e.g. Stick Season 2)
+          continue;
+        }
+
+        // Season air_date is in past or today. Check if only some episodes have aired:
+        if (isNextEpInFuture && nextEp && nextEp.season_number === season.season_number) {
+          const airedInThisSeason = Math.max(0, nextEp.episode_number - 1);
+          releasedCount += Math.min(epCount, airedInThisSeason);
+        } else {
+          releasedCount += epCount;
+        }
+      } else {
+        // Season has no air_date
+        if (isEnded) {
+          releasedCount += epCount;
+        } else if (season.season_number === 1 && show.first_air_date) {
+          const firstAirTime = new Date(show.first_air_date).getTime();
+          if (firstAirTime <= nowTime) {
+            releasedCount += epCount;
+          }
+        }
+      }
+    }
+
+    if (releasedCount > 0) {
+      return releasedCount;
+    }
+  }
+
+  // Fallback: If seasons array not available or calculated 0, use number_of_episodes
+  return show.number_of_episodes || 0;
+}
+
 const liteDetailsCache = new Map<string, TMDBShow>();
 
 function getBaseApiUrl(): string {
@@ -446,9 +509,60 @@ export const getShowWithCredits = async (id: string): Promise<TMDBShow | null> =
   return data;
 };
 
+const LEGENDARY_MASTERPIECE_IDS = [
+  1396,  // Breaking Bad
+  1399,  // Game of Thrones
+  87108, // Chernobyl
+  850,   // The Wire
+  60059, // Better Call Saul
+  1398,  // The Sopranos
+  4613,  // Band of Brothers
+  94605, // Arcane
+  19885, // Sherlock
+  60574, // Peaky Blinders
+  70523, // Dark
+  66732, // Stranger Things
+  100088,// The Last of Us
+  63351, // Narcos
+  1668,  // Friends
+  60625, // Rick and Morty
+  246,   // Avatar: The Last Airbender
+  46952, // The Blacklist
+];
+
 export const getTopRatedShows = async (page: number = 1): Promise<TMDBShow[]> => {
-  const data = await fetchFromGateway<{ results: TMDBShow[] }>('tv/top_rated', {
+  // Use discover/tv with high vote count threshold (2500+) so only true global masterpieces
+  // (Breaking Bad, Game of Thrones, Chernobyl, The Wire, etc.) appear at the top,
+  // completely eliminating temporary obscure 2-week-old shows with low votes.
+  const data = await fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
     language: 'en-US',
+    sort_by: 'vote_average.desc',
+    'vote_count.gte': 2500,
+    page,
+  });
+
+  const valid = (data?.results || []).filter((s) => Boolean(s.poster_path));
+  if (valid.length >= 5) {
+    return valid;
+  }
+
+  // Safety fallback: if discover fails or returns fewer shows, fetch legendary masterpieces
+  const fallbackShows = await Promise.all(
+    LEGENDARY_MASTERPIECE_IDS.map((id) => getShowDetailsLite(String(id)))
+  );
+  return fallbackShows.filter((s): s is TMDBShow => Boolean(s && s.poster_path));
+};
+
+export const getAnimeShows = async (page: number = 1): Promise<TMDBShow[]> => {
+  // Anime: Genre 16 (Animation) with original language Japanese ('ja') & origin country JP
+  // sorted by popularity to get the most trending anime worldwide (Attack on Titan, Demon Slayer, Jujutsu Kaisen, etc.)
+  const data = await fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
+    language: 'en-US',
+    sort_by: 'popularity.desc',
+    with_genres: '16',
+    with_original_language: 'ja',
+    with_origin_country: 'JP',
+    'vote_count.gte': 50,
     page,
   });
   return (data?.results || []).filter((s) => Boolean(s.poster_path));
@@ -465,31 +579,26 @@ export const getKoreanShows = async (page: number = 1): Promise<TMDBShow[]> => {
 };
 
 export const getTeenShows = async (page: number = 1): Promise<TMDBShow[]> => {
+  // TMDB Keywords: 193400 (teen drama), 6270 (high school), 296608 (teenager), 10683 (coming of age)
+  // Exclude genre 16 (Animation) so it targets authentic live-action teen dramas
   const data = await fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
     language: 'en-US',
     sort_by: 'popularity.desc',
-    with_keywords: '155986|210024|242|10183',
+    with_keywords: '193400|6270|296608|10683',
+    without_genres: '16',
+    'vote_count.gte': 40,
     page,
   });
-  if (data?.results && data.results.length >= 5) {
-    return data.results.filter((s) => Boolean(s.poster_path));
-  }
-  const fallback = await fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
-    language: 'en-US',
-    sort_by: 'popularity.desc',
-    with_genres: '18,10765',
-    'vote_count.gte': 50,
-    page,
-  });
-  return (fallback?.results || []).filter((s) => Boolean(s.poster_path));
+  return (data?.results || []).filter((s) => Boolean(s.poster_path));
 };
 
 export const getMiniSeries = async (page: number = 1): Promise<TMDBShow[]> => {
+  // In TMDB with_type: 2 is Miniseries (2 = Miniseries, 1 = News/Talk Show)
   const data = await fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
     language: 'en-US',
-    sort_by: 'vote_average.desc',
-    with_type: 1,
-    'vote_count.gte': 200,
+    sort_by: 'popularity.desc',
+    with_type: 2,
+    'vote_count.gte': 80,
     page,
   });
   return (data?.results || []).filter((s) => Boolean(s.poster_path));

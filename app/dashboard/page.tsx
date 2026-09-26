@@ -2,33 +2,35 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
-import { 
-  getShowDetails, 
-  getSeasonDetails, 
-  getImageUrl, 
+import {
+  getShowDetails,
+  getSeasonDetails,
+  getImageUrl,
   getGlobalAiringShows,
-  getBackdropUrl 
+  getBackdropUrl,
+  getReleasedEpisodeCount
 } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
-import { 
-  Loader2, 
-  Calendar as CalIcon, 
-  Clock, 
-  Check, 
-  PlayCircle, 
-  AlertCircle, 
-  Flame, 
-  Sparkles, 
-  Bell, 
-  Plus, 
-  CheckCircle2, 
-  Tv, 
+import {
+  Loader2,
+  Calendar as CalIcon,
+  Clock,
+  Check,
+  PlayCircle,
+  AlertCircle,
+  Flame,
+  Sparkles,
+  Bell,
+  Plus,
+  CheckCircle2,
+  Tv,
   Film,
   TrendingUp,
   Award
 } from 'lucide-react';
 import EpisodeModal from './components/EpisodeModal';
 import { ShowCardProgress } from './components/ShowProgressBar';
+import { VipUsername } from './components/VipBadge';
 // لیست ۱۶ تخصص پزشکی-سینمایی اختصاصی بینجر
 const SPECIALTIES = [
   { id: 'comedy', name: 'فوق تخصص قهقهه', genreId: 35 },
@@ -46,7 +48,7 @@ const SPECIALTIES = [
   { id: 'musical', name: 'متخصص موزیکولوژی', genreId: 10402 },
   { id: 'doc', name: 'متخصص فکتولوژی', genreId: 99 },
   { id: 'biography', name: 'مدیر بایگانی', isBio: true },
-];  
+];
 export default function BingerHomeScreen() {
   const router = useRouter();
   const supabase = createClient() as any;
@@ -72,7 +74,7 @@ export default function BingerHomeScreen() {
 
   // مودال جزئیات قسمت
   const [selectedEpData, setSelectedEpData] = useState<any>(null);
-// محاسبه ۱۰۰٪ زنده هویت و تخصص سینمایی بر اساس سریال‌های تماشا شده کاربر
+  // محاسبه ۱۰۰٪ زنده هویت و تخصص سینمایی بر اساس سریال‌های تماشا شده کاربر
   const userSpecialty = useMemo(() => {
     const watchedShowIds = Array.from(new Set(watchedRecords.map(w => Number(w.show_id))));
     const count = watchedShowIds.length;
@@ -220,7 +222,7 @@ export default function BingerHomeScreen() {
                 if (sData?.episodes) {
                   seasonCache[`${show.id}_${sNum}`] = sData.episodes;
                 }
-              } catch {}
+              } catch { }
             })
           );
         })
@@ -265,7 +267,7 @@ export default function BingerHomeScreen() {
           if (sData?.episodes) {
             setSeasonEpisodesMap(prev => ({ ...prev, [cacheKey]: sData.episodes }));
           }
-        } catch {}
+        } catch { }
       }
     });
   }, [watchedRecords, trackedShows]);
@@ -354,10 +356,7 @@ export default function BingerHomeScreen() {
         .filter((s: any) => s && s.season_number > 0)
         .sort((a: any, b: any) => a.season_number - b.season_number);
 
-      let totalEpisodesCount = 0;
-      validSeasons.forEach((s: any) => {
-        totalEpisodesCount += (s.episode_count || 0);
-      });
+      const totalEpisodesCount = getReleasedEpisodeCount(show);
 
       let cumulative = 0;
       let targetSeason = 1;
@@ -431,8 +430,8 @@ export default function BingerHomeScreen() {
           episodeTitle: epTitle,
           isReleased,
           countdownBadge,
-          watchedCount: showWatched.length,
-          totalEpisodes: totalEpisodesCount || show.number_of_episodes || 0,
+          watchedCount: Math.min(showWatched.length, totalEpisodesCount),
+          totalEpisodes: totalEpisodesCount || 0,
         });
       }
     });
@@ -541,17 +540,17 @@ export default function BingerHomeScreen() {
   }
 
   // انتخاب لیست نمایشی تقویم بر اساس تب فعال
-  const currentCalendarDisplay = 
+  const currentCalendarDisplay =
     calendarTab === 'today' ? calendarData.todayList :
-    calendarTab === 'this_week' ? calendarData.thisWeekList :
-    calendarData.upcomingList;
+      calendarTab === 'this_week' ? calendarData.thisWeekList :
+        calendarData.upcomingList;
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-32">
-      
+
       {/* مودال مشاهده جزئیات اپیزود */}
       {selectedEpData && (
-        <EpisodeModal 
+        <EpisodeModal
           showId={selectedEpData.showId}
           seasonNum={selectedEpData.season}
           episodeNum={selectedEpData.number}
@@ -565,16 +564,21 @@ export default function BingerHomeScreen() {
       {/* ========================================================================= */}
       <header className="sticky top-20 md:top-24 z-40 bg-[#050505]/95 backdrop-blur-md border-b border-white/10 px-4 md:px-8 py-3.5 shadow-2xl">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
-          
+
           {/* هویت کاربر و تگ تخصص */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-lg sm:text-xl shadow-inner shrink-0">
               {userProfile?.avatar_url || '😎'}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-xs sm:text-sm md:text-base font-black text-white truncate flex items-center gap-1.5">
-                {userProfile?.username || currentUser?.user_metadata?.full_name || 'کاربر بینجر'}
-              </span>
+              <div className="flex items-center gap-1.5 truncate">
+                <VipUsername
+                  username={userProfile?.username || currentUser?.user_metadata?.full_name || 'کاربر بینجر'}
+                  isVip={userProfile?.is_vip === true || userProfile?.role === 'admin'}
+                  badgeSize={15}
+                  className="text-xs sm:text-sm md:text-base font-black truncate"
+                />
+              </div>
               <span className="text-[10px] sm:text-[11px] font-bold text-[#ccff00] flex items-center gap-1 truncate">
                 <Award size={12} className="shrink-0" />
                 <span className="truncate">{userSpecialty}</span>
@@ -584,19 +588,18 @@ export default function BingerHomeScreen() {
 
           {/* نوتیفیکیشن عددی قسمت‌های امروز */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-black flex items-center gap-1.5 shadow-md ${
-              calendarData.totalTodayCount > 0
+            <div className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-black flex items-center gap-1.5 shadow-md ${calendarData.totalTodayCount > 0
                 ? 'bg-[#ccff00]/15 border-[#ccff00]/40 text-[#ccff00]'
                 : 'bg-white/5 border-white/10 text-gray-400'
-            }`}>
+              }`}>
               <Bell size={13} className={`shrink-0 ${calendarData.totalTodayCount > 0 ? 'text-[#ccff00] animate-pulse' : 'text-gray-500'}`} />
               <span className="hidden sm:inline">
-                {calendarData.totalTodayCount > 0 
+                {calendarData.totalTodayCount > 0
                   ? `${calendarData.totalTodayCount} قسمت جدید امروز داری`
                   : 'امروز قسمت جدیدی نداری'}
               </span>
               <span className="sm:hidden font-mono">
-                {calendarData.totalTodayCount > 0 
+                {calendarData.totalTodayCount > 0
                   ? `${calendarData.totalTodayCount} جدید`
                   : '۰ جدید'}
               </span>
@@ -625,16 +628,16 @@ export default function BingerHomeScreen() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {coldStartTrendingShows.map(show => (
-                <div 
+                <div
                   key={show.id}
                   className="bg-[#181818] border border-white/5 rounded-2xl p-3 flex items-center justify-between gap-3 hover:border-white/20 transition-all"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative w-10 h-14 rounded-xl overflow-hidden shrink-0 bg-white/5">
-                      <img 
-                        src={getImageUrl(show.poster_path)} 
-                        alt={show.name} 
-                        className="w-full h-full object-cover" 
+                      <img
+                        src={getImageUrl(show.poster_path)}
+                        alt={show.name}
+                        className="w-full h-full object-cover"
                       />
                       <ShowCardProgress showId={show.id} showPercentageBadge={false} />
                     </div>
@@ -689,16 +692,15 @@ export default function BingerHomeScreen() {
                           season: seasonNumber,
                           number: episodeNumber
                         })}
-                        className={`group flex items-center justify-between p-3 rounded-2xl bg-[#121212] hover:bg-[#181818] border border-white/5 hover:border-[#ccff00]/40 transition-all duration-300 cursor-pointer shadow-lg ${
-                          isCardLeaving ? '-translate-x-full opacity-0 scale-90 pointer-events-none' : 'translate-x-0 opacity-100 scale-100'
-                        }`}
+                        className={`group flex items-center justify-between p-3 rounded-2xl bg-[#121212] hover:bg-[#181818] border border-white/5 hover:border-[#ccff00]/40 transition-all duration-300 cursor-pointer shadow-lg ${isCardLeaving ? '-translate-x-full opacity-0 scale-90 pointer-events-none' : 'translate-x-0 opacity-100 scale-100'
+                          }`}
                       >
                         <div className="flex items-center gap-3.5 min-w-0">
                           <div className="w-13 h-19 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-md">
-                            <img 
-                              src={getImageUrl(show.poster_path)} 
-                              alt={show.name} 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            <img
+                              src={getImageUrl(show.poster_path)}
+                              alt={show.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           </div>
 
@@ -725,7 +727,7 @@ export default function BingerHomeScreen() {
 
                         {/* دکمه ثبت آنی تماشا یا برچسب زمان پخش */}
                         {!isReleased ? (
-                          <div 
+                          <div
                             className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1.5 shrink-0 ml-1 select-none"
                             title="این قسمت هنوز پخش نشده است"
                           >
@@ -752,7 +754,7 @@ export default function BingerHomeScreen() {
             {/* بخش سوم: تقویم پخش اپیزودها (Release Calendar) */}
             {/* ========================================================================= */}
             <section className="space-y-4 pt-4">
-              
+
               {/* هدر تقویم با فیلتر سریع (سریال‌های من / ترند جهان) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -764,21 +766,19 @@ export default function BingerHomeScreen() {
                 <div className="flex items-center p-1 rounded-xl bg-white/5 border border-white/10 self-start sm:self-auto">
                   <button
                     onClick={() => setCalendarScope('mine')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      calendarScope === 'mine' 
-                        ? 'bg-[#ccff00] text-black shadow-md' 
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${calendarScope === 'mine'
+                        ? 'bg-[#ccff00] text-black shadow-md'
                         : 'text-gray-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     فقط سریال‌های من
                   </button>
                   <button
                     onClick={() => setCalendarScope('global')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      calendarScope === 'global' 
-                        ? 'bg-[#ccff00] text-black shadow-md' 
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${calendarScope === 'global'
+                        ? 'bg-[#ccff00] text-black shadow-md'
                         : 'text-gray-400 hover:text-white'
-                    }`}
+                      }`}
                   >
                     <TrendingUp size={13} />
                     <span>سریال‌های ترند جهان</span>
@@ -790,11 +790,10 @@ export default function BingerHomeScreen() {
               <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
                 <button
                   onClick={() => setCalendarTab('today')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    calendarTab === 'today'
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${calendarTab === 'today'
                       ? 'bg-white text-black font-black'
                       : 'bg-[#141414] text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-white/5'
-                  }`}
+                    }`}
                 >
                   <Flame size={14} className={calendarTab === 'today' ? 'text-amber-500' : 'text-[#ccff00]'} />
                   <span>امروز ({calendarData.todayList.length})</span>
@@ -802,11 +801,10 @@ export default function BingerHomeScreen() {
 
                 <button
                   onClick={() => setCalendarTab('this_week')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    calendarTab === 'this_week'
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${calendarTab === 'this_week'
                       ? 'bg-white text-black font-black'
                       : 'bg-[#141414] text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-white/5'
-                  }`}
+                    }`}
                 >
                   <Clock size={14} />
                   <span>این هفته ({calendarData.thisWeekList.length})</span>
@@ -814,11 +812,10 @@ export default function BingerHomeScreen() {
 
                 <button
                   onClick={() => setCalendarTab('upcoming')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                    calendarTab === 'upcoming'
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${calendarTab === 'upcoming'
                       ? 'bg-white text-black font-black'
                       : 'bg-[#141414] text-gray-400 hover:bg-[#1a1a1a] hover:text-white border border-white/5'
-                  }`}
+                    }`}
                 >
                   <Sparkles size={14} />
                   <span>به‌زودی ({calendarData.upcomingList.length})</span>
@@ -857,28 +854,26 @@ export default function BingerHomeScreen() {
                           season: episode.season_number,
                           number: episode.episode_number
                         })}
-                        className={`group flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
-                          isWatched
+                        className={`group flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${isWatched
                             ? 'bg-[#0a0a0a] border-white/5 opacity-50 hover:opacity-80'
                             : isAired
-                            ? 'bg-[#161616] border-white/10 hover:border-[#ccff00]/40 shadow-md'
-                            : 'bg-[#121212] border-white/5 hover:border-white/15'
-                        }`}
+                              ? 'bg-[#161616] border-white/10 hover:border-[#ccff00]/40 shadow-md'
+                              : 'bg-[#121212] border-white/5 hover:border-white/15'
+                          }`}
                       >
                         <div className="flex items-center gap-3.5 min-w-0">
                           <div className="w-12 h-16 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10">
-                            <img 
-                              src={getImageUrl(show.poster_path)} 
-                              alt={show.name} 
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                            <img
+                              src={getImageUrl(show.poster_path)}
+                              alt={show.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           </div>
 
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`text-sm font-black truncate ${
-                                isWatched ? 'text-gray-400' : 'text-white group-hover:text-[#ccff00]'
-                              }`}>
+                              <span className={`text-sm font-black truncate ${isWatched ? 'text-gray-400' : 'text-white group-hover:text-[#ccff00]'
+                                }`}>
                                 {show.name}
                               </span>
                               {isWatched && (
@@ -896,11 +891,10 @@ export default function BingerHomeScreen() {
                         </div>
 
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${
-                            diffDays === 0 
-                              ? 'bg-[#ccff00] text-black font-black' 
+                          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${diffDays === 0
+                              ? 'bg-[#ccff00] text-black font-black'
                               : 'bg-white/10 text-white'
-                          }`}>
+                            }`}>
                             {badgeLabel}
                           </span>
 
@@ -908,11 +902,10 @@ export default function BingerHomeScreen() {
                           {isAired && (
                             <button
                               onClick={(e) => handleToggleWatched(e, show.id, episode.id, isWatched)}
-                              className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
-                                isWatched 
-                                  ? 'bg-emerald-500 border-emerald-500 text-black' 
+                              className={`w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer ${isWatched
+                                  ? 'bg-emerald-500 border-emerald-500 text-black'
                                   : 'border-white/20 text-gray-500 hover:border-[#ccff00] hover:text-[#ccff00]'
-                              }`}
+                                }`}
                               title={isWatched ? "دیده‌شده" : "ثبت دیدن"}
                             >
                               <Check size={14} strokeWidth={3} />

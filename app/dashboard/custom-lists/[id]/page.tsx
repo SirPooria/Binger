@@ -10,6 +10,8 @@ import {
   Loader2, CheckCircle2, Film, BookmarkPlus, BookmarkCheck
 } from 'lucide-react';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
+import { WatchlistButton } from '../../components/WatchlistButton';
+import { VipUsername } from '../../components/VipBadge';
 
 export default function SingleListPage() {
   const params = useParams();
@@ -74,11 +76,14 @@ export default function SingleListPage() {
         // ۲. دریافت اطلاعات سازنده لیست
         const { data: creatorData } = await supabase
           .from('profiles')
-          .select('username, avatar_url')
+          .select('username, avatar_url, is_vip, role')
           .eq('id', listData.user_id)
           .single();
 
-        setCreator(creatorData || { username: 'کاربر بینجر', avatar_url: '😎' });
+        setCreator(creatorData ? {
+          ...creatorData,
+          is_vip: creatorData.is_vip === true || creatorData.role === 'admin'
+        } : { username: 'کاربر بینجر', avatar_url: '😎' });
 
         // ۳. دریافت سریال‌های داخل این لیست
         const { data: itemsData, error: itemsError } = await supabase
@@ -187,79 +192,112 @@ export default function SingleListPage() {
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
 
-        {/* هدر بالای صفحه */}
-        <div className="flex items-center justify-between gap-4 mb-8">
-          <button
-            onClick={() => router.back()}
-            className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-gray-400 hover:text-white transition-all cursor-pointer flex items-center gap-2 text-xs font-bold"
-          >
-            <ArrowRight size={16} />
-            <span className="hidden sm:inline">بازگشت</span>
-          </button>
 
-          <div className="flex items-center gap-2">
-            {list?.is_public && (
-              <button
-                onClick={handleToggleSave}
-                disabled={saveLoading}
-                className={`p-2.5 rounded-full border transition-all flex items-center gap-2 text-xs font-bold cursor-pointer ${isSaved ? 'bg-[#ccff00] text-black border-[#ccff00]' : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-300'}`}
-                title="ذخیره لیست"
-              >
-                {isSaved ? <BookmarkCheck size={16} /> : <BookmarkPlus size={16} />}
-                <span className="hidden sm:inline">{isSaved ? 'ذخیره شده' : 'ذخیره لیست'} ({saveCount})</span>
-              </button>
-            )}
-            <button
-              onClick={handleShare}
-              className="p-2.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 text-gray-300 hover:text-white transition-all flex items-center gap-2 text-xs font-bold cursor-pointer"
-              title="اشتراک‌گذاری لیست"
-            >
-              <Share2 size={16} className="text-[#ccff00]" />
-              <span className="hidden sm:inline">اشتراک‌گذاری لیست</span>
-            </button>
-          </div>
-        </div>
 
-        {/* کارت معرفی لیست و سازنده */}
-        <div className="bg-[#121212] border border-white/10 rounded-3xl p-6 md:p-8 mb-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute -top-32 -right-32 w-64 h-64 bg-[#ccff00]/10 blur-[90px] rounded-full pointer-events-none" />
+        {/* کارت معرفی لیست و سازنده با هاور افکت و دکمه‌های اکشن اختصاصی */}
+        <div className="bg-[#121212] hover:bg-[#151515] border border-white/10 hover:border-[#ccff00]/40 rounded-3xl p-6 md:p-8 mb-8 shadow-2xl hover:shadow-[0_10px_45px_rgba(204,255,0,0.06)] relative overflow-hidden transition-all duration-300 group/card">
+          <div className="absolute -top-32 -right-32 w-64 h-64 bg-[#ccff00]/10 group-hover/card:bg-[#ccff00]/20 blur-[90px] rounded-full pointer-events-none transition-all duration-500" />
 
-          <div className="relative z-10">
-            <div className="flex items-center gap-2.5 mb-3">
-              {list.is_public ? (
-                <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
-                  <Globe size={12} /> لیست عمومی
-                </span>
-              ) : (
-                <span className="bg-gray-500/10 border border-gray-500/30 text-gray-400 text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
-                  <Lock size={12} /> لیست خصوصی
-                </span>
+          <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-6">
+            
+            {/* سمت راست: برچسب‌ها، نام لیست، توضیحات و سازنده */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 mb-3">
+                {list.is_public ? (
+                  <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                    <Globe size={12} /> لیست عمومی
+                  </span>
+                ) : (
+                  <span className="bg-gray-500/10 border border-gray-500/30 text-gray-400 text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                    <Lock size={12} /> لیست خصوصی
+                  </span>
+                )}
+                <span className="text-xs text-gray-500">• {items.length} سریال ثبت شده</span>
+                {list.is_public && saveCount > 0 && (
+                  <span className="text-xs text-[#ccff00]/80">• {saveCount} بار ذخیره شده</span>
+                )}
+              </div>
+
+              <h1 className="text-2xl md:text-4xl font-black text-white leading-tight">
+                {list.title}
+              </h1>
+
+              {list.description && (
+                <p className="text-sm text-gray-300 mt-3 leading-relaxed max-w-3xl">
+                  {list.description}
+                </p>
               )}
-              <span className="text-xs text-gray-500">• {items.length} سریال ثبت شده</span>
-            </div>
 
-            <h1 className="text-2xl md:text-4xl font-black text-white leading-tight">
-              {list.title}
-            </h1>
-
-            {list.description && (
-              <p className="text-sm text-gray-300 mt-3 leading-relaxed max-w-3xl">
-                {list.description}
-              </p>
-            )}
-
-            {/* مشخصات سازنده */}
-            <div className="mt-6 pt-6 border-t border-white/5 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl shadow-inner">
-                {creator?.avatar_url || '😎'}
-              </div>
-              <div>
-                <span className="text-[10px] text-gray-500 block">سازنده لیست:</span>
-                <span className="text-xs font-bold text-white">
-                  {creator?.username || 'کاربر بینجر'}
-                </span>
+              {/* مشخصات سازنده */}
+              <div className="mt-6 pt-6 border-t border-white/5 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl shadow-inner">
+                  {creator?.avatar_url || '😎'}
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-500 block mb-0.5">سازنده لیست:</span>
+                  <VipUsername 
+                    username={creator?.username} 
+                    isVip={creator?.is_vip} 
+                    badgeSize={15} 
+                    className="text-xs font-bold" 
+                  />
+                </div>
               </div>
             </div>
+
+            {/* سمت چپ: دکمه‌های آیکونی ذخیره لیست و به اشتراک‌گذاری با هاور لیبل */}
+            <div className="flex items-center gap-3 shrink-0 self-end md:self-start pt-2">
+              
+              {/* دکمه ذخیره لیست */}
+              {list.is_public && (
+                <div className="relative group/btn flex flex-col items-center">
+                  <button
+                    onClick={handleToggleSave}
+                    disabled={saveLoading}
+                    className={`p-3 md:p-3.5 rounded-2xl border transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-xl active:scale-95 ${
+                      isSaved 
+                        ? 'bg-[#ccff00] text-black border-[#ccff00] shadow-[0_0_20px_rgba(204,255,0,0.35)]' 
+                        : 'bg-white/5 hover:bg-white/15 border-white/15 text-gray-200 hover:text-white hover:border-[#ccff00]/50'
+                    }`}
+                    aria-label={isSaved ? "حذف از ذخیره‌ها" : "ذخیره لیست"}
+                  >
+                    {saveLoading ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : isSaved ? (
+                      <BookmarkCheck size={20} />
+                    ) : (
+                      <BookmarkPlus size={20} />
+                    )}
+                    <span className={`text-xs font-black font-mono px-1.5 py-0.5 rounded-lg ${
+                      isSaved ? 'bg-black/20 text-black' : 'bg-white/10 text-[#ccff00]'
+                    }`}>
+                      {saveCount}
+                    </span>
+                  </button>
+                  {/* تولتیپ متنی زیر آیکون هنگام هاور */}
+                  <div className="absolute -bottom-8 opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-200 z-30 whitespace-nowrap bg-black/95 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-xl border border-white/15 shadow-xl">
+                    {isSaved ? 'حذف از ذخیره‌ها' : 'ذخیره لیست'}
+                  </div>
+                </div>
+              )}
+
+              {/* دکمه به اشتراک‌گذاری */}
+              <div className="relative group/btn flex flex-col items-center">
+                <button
+                  onClick={handleShare}
+                  className="p-3 md:p-3.5 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/15 hover:border-[#ccff00]/50 text-gray-200 hover:text-[#ccff00] transition-all duration-300 flex items-center justify-center cursor-pointer shadow-xl active:scale-95"
+                  aria-label="به اشتراک‌گذاری"
+                >
+                  <Share2 size={20} />
+                </button>
+                {/* تولتیپ متنی زیر آیکون هنگام هاور */}
+                <div className="absolute -bottom-8 opacity-0 pointer-events-none group-hover/btn:opacity-100 transition-all duration-200 z-30 whitespace-nowrap bg-black/95 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-xl border border-white/15 shadow-xl">
+                  به اشتراک‌گذاری
+                </div>
+              </div>
+
+            </div>
+
           </div>
         </div>
 
@@ -288,6 +326,8 @@ export default function SingleListPage() {
                       alt={item.show_name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
+                    {/* دکمه افزودن به لیست انتظار */}
+                    <WatchlistButton showId={item.show_id} showName={item.show_name} />
                     {/* نشانگر درصد پیشرفت در بالای پوستر */}
                     <ShowCardProgress showId={item.show_id} showBar={false} />
                   </div>
