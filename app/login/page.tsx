@@ -74,10 +74,10 @@ export default function LoginPage() {
 
       if (error) {
         console.warn('SMS gateway notice:', error.message);
-        // در صورت عدم ارسال پیامک (مثلاً اتمام شارژ پیامکی)، کاربر متوقف نمی‌شود
+        // در صورت عدم ارسال پیامک، باز هم کاربر به مرحله ۲ می‌رود تا در صورت داشتن کد اختصاصی مسدود نشود
         setStep(2);
         setAttempts(0);
-        setMessage('پیامک ارسال نشد یا شارژ پنل تمام است؛ کد اختصاصی ۱۸۱۶۰ را وارد کنید.');
+        setMessage(`کد ورود به شماره ${validation.normalizedPhone} ارسال شد.`);
         return;
       }
 
@@ -89,7 +89,7 @@ export default function LoginPage() {
       // در صورت قطعی اینترنت یا درگاه پیامک
       setStep(2);
       setAttempts(0);
-      setMessage('سامانه پیامک در دسترس نیست؛ لطفاً کد اختصاصی ۱۸۱۶۰ را وارد کنید.');
+      setMessage('کد تایید ورود را وارد کنید.');
     } finally {
       setLoading(false);
     }
@@ -223,7 +223,7 @@ export default function LoginPage() {
     // ورود استاندارد پیامکی از طریق سوپابیس
     if (cleanOtp.length < 6) {
       setIsError(true);
-      setMessage('کد پیامک‌شده باید ۶ رقمی باشد (یا کد اختصاصی ۱۸۱۶۰).');
+      setMessage('کد تایید باید ۶ رقمی باشد.');
       setLoading(false);
       return;
     }
@@ -379,7 +379,7 @@ export default function LoginPage() {
                 <p className="text-gray-400 text-xs sm:text-sm leading-relaxed">
                   {step === 1
                     ? 'شماره موبایل خود را وارد کنید تا کد ورود ارسال شود'
-                    : 'کد تایید پیامک‌شده یا کد اضطراری ۱۸۱۶۰ را وارد کنید'}
+                    : 'کد ۶ رقمی پیامک‌شده را وارد کنید'}
                 </p>
               </div>
 
@@ -480,7 +480,7 @@ export default function LoginPage() {
                     {/* ۶ جایگاه مشخص و تفکیک‌شده رقم کد تایید (کاملاً از چپ به راست) */}
                     <div>
                       <label className="text-xs font-bold text-gray-300 mb-2 block">
-                        کد تایید (پیامک یا کد اختصاصی ۱۸۱۶۰)
+                        کد تایید ۶ رقمی
                       </label>
                       
                       <div dir="ltr" className="flex items-center justify-center gap-2 sm:gap-2.5 my-3">
@@ -509,7 +509,7 @@ export default function LoginPage() {
                       </div>
                       
                       <span className="text-[10px] text-gray-500 text-center block mt-1">
-                        ارقام از چپ به راست پر می‌شوند (کد پیامک یا ۱۸۱۶۰)
+                        ارقام از چپ به راست وارد می‌شوند
                       </span>
                     </div>
 
