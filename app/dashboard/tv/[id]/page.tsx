@@ -5,13 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   getShowDetails, getSeasonDetails, getImageUrl, getBackdropUrl,
-  getSimilarShows, getReleasedEpisodeCount
+  getSimilarShows, getReleasedEpisodeCount, getShowDetailsLite
 } from '@/lib/tmdbClient';
+import { getShowSpinOffs, SpinOffItem } from '@/lib/spinOffs';
 import { createClient } from '@/lib/supabase';
 import {
   Star, Loader2, Check, Plus, Share2, Play, Info, RotateCcw,
   ChevronDown, ChevronUp, Tag, CheckCircle2, Search, Users,
-  Feather, Award
+  Feather, Award, GitFork
 } from 'lucide-react';
 import EpisodeModal from '../../components/EpisodeModal';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
@@ -109,6 +110,8 @@ export default function ShowDetailsPage() {
 
   // امتیازها و آثار مشابه
   const [similarShows, setSimilarShows] = useState<any[]>([]);
+  const [spinOffs, setSpinOffs] = useState<SpinOffItem[]>([]);
+  const [spinOffsLoading, setSpinOffsLoading] = useState(true);
   const [myRating, setMyRating] = useState(0);
   const [bingerStats, setBingerStats] = useState({ avg: 0, count: 0 });
   const [inWatchlist, setInWatchlist] = useState(false);
@@ -216,12 +219,14 @@ export default function ShowDetailsPage() {
           details,
           detailsEn,
           similarData,
+          spinOffsData,
           platformRes,
           watchlistRes
         ] = await Promise.all([
           getShowDetails(showId),
           getEnglishDetails(showId),
           getSimilarShows(showId),
+          getShowSpinOffs(showId, undefined, undefined, getShowDetailsLite),
           supabase.from('show_platform_links').select('*').eq('show_id', showId).maybeSingle(),
           supabase.from('watchlist').select('id').eq('user_id', currentUser.id).eq('show_id', showId)
         ]);
@@ -229,6 +234,14 @@ export default function ShowDetailsPage() {
         setShow(details);
         setShowEn(detailsEn);
         setSimilarShows(similarData || []);
+
+        let finalSpinOffs = spinOffsData || [];
+        if (finalSpinOffs.length === 0 && details?.name && Array.isArray(similarData) && similarData.length > 0) {
+          finalSpinOffs = await getShowSpinOffs(showId, details.name, similarData, getShowDetailsLite);
+        }
+        setSpinOffs(finalSpinOffs);
+        setSpinOffsLoading(false);
+
         if (platformRes.data) setPlatformLinks(platformRes.data);
         if (watchlistRes.data && watchlistRes.data.length > 0) setInWatchlist(true);
 
@@ -776,6 +789,90 @@ export default function ShowDetailsPage() {
                   ))}
                   {cast.length === 0 && <span className="text-xs text-gray-500">لیست بازیگران ثبت نشده است.</span>}
                 </div>
+              </div>
+
+              {/* بخش اسپین‌اف‌ها و آثار مرتبط */}
+              <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-white flex items-center gap-2">
+                    <GitFork className="text-[#ccff00]" size={18} />
+                    <span>اسپین‌اف‌ها و آثار مرتبط</span>
+                  </h3>
+                  {!spinOffsLoading && spinOffs.length > 0 && (
+                    <span className="text-[10px] bg-[#ccff00]/10 text-[#ccff00] font-bold px-2.5 py-0.5 rounded-full border border-[#ccff00]/20">
+                      {spinOffs.length} اثر مرتبط
+                    </span>
+                  )}
+                </div>
+
+                {spinOffsLoading ? (
+                  <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="w-[125px] shrink-0 animate-pulse">
+                        <div className="w-full aspect-[2/3] bg-white/5 rounded-xl mb-2"></div>
+                        <div className="w-3/4 h-3 bg-white/5 rounded mx-auto mb-1"></div>
+                        <div className="w-1/2 h-2 bg-white/5 rounded mx-auto"></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : spinOffs.length > 0 ? (
+                  <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                    {spinOffs.map((spin) => (
+                      <Link
+                        key={spin.id}
+                        href={`/dashboard/tv/${spin.id}`}
+                        className="group relative w-[130px] shrink-0 block focus:outline-none focus:ring-2 focus:ring-[#ccff00] rounded-xl transition-all"
+                      >
+                        <div className="relative rounded-xl overflow-hidden aspect-[2/3] bg-white/5 border border-white/10 group-hover:border-[#ccff00]/40 transition-colors shadow-md">
+                          <img
+                            src={getImageUrl(spin.poster_path || null)}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            alt={spin.name}
+                            loading="lazy"
+                          />
+                          {/* برچسب رابطه */}
+                          <div className="absolute top-2 right-2 z-10">
+                            <span className="bg-black/80 backdrop-blur-md text-[9px] font-bold text-[#ccff00] px-2 py-0.5 rounded-md border border-[#ccff00]/30 shadow-sm">
+                              {spin.relationLabel}
+                            </span>
+                          </div>
+                          <WatchlistButton showId={spin.id} showName={spin.name} iconSize={11} className="p-1.5 top-1.5 left-1.5 z-10" />
+                          <ShowCardProgress showId={spin.id} />
+                        </div>
+                        <h4 className="text-xs font-bold text-center mt-2.5 text-white group-hover:text-[#ccff00] transition-colors line-clamp-1">
+                          {spin.faName || spin.name}
+                        </h4>
+                        {spin.faName && (
+                          <p className="text-[10px] text-gray-500 text-center line-clamp-1 font-sans dir-ltr">
+                            {spin.name}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-center gap-2 mt-1 text-[10px] text-gray-400">
+                          {spin.vote_average ? (
+                            <span className="flex items-center gap-0.5 text-yellow-400 font-bold">
+                              <Star size={10} fill="currentColor" /> {spin.vote_average.toFixed(1)}
+                            </span>
+                          ) : null}
+                          {spin.first_air_date && (
+                            <span>{spin.first_air_date.split('-')[0]}</span>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 px-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center flex flex-col items-center justify-center gap-1.5">
+                    <div className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-gray-500 mb-1">
+                      <GitFork size={16} className="opacity-50" />
+                    </div>
+                    <p className="text-gray-300 text-sm font-bold">
+                      هنوز برای این سریال اسپین‌آفی تولید نشده است.
+                    </p>
+                    <p className="text-gray-500 text-[11px]">
+                      در صورت ساخت یا معرفی اثر جدید از دنیای این سریال، در این بخش اضافه خواهد شد.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* سریال‌های مشابه */}
