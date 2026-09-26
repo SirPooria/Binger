@@ -61,8 +61,8 @@ export default function BingerHomeScreen() {
   const [watchedRecords, setWatchedRecords] = useState<any[]>([]);
   const [seasonEpisodesMap, setSeasonEpisodesMap] = useState<Record<string, any[]>>({});
 
-  // تب‌های تقویم: امروز / این هفته / به‌زودی
-  const [calendarTab, setCalendarTab] = useState<'today' | 'this_week' | 'upcoming'>('today');
+  // تب‌های تقویم: دیده‌نشده‌ها / امروز / این هفته / به‌زودی
+  const [calendarTab, setCalendarTab] = useState<'unwatched' | 'today' | 'this_week' | 'upcoming'>('today');
 
   // سوییچ منبع تقویم: سریال‌های من یا ترندهای جهانی
   const [calendarScope, setCalendarScope] = useState<'mine' | 'global'>('mine');
@@ -261,6 +261,11 @@ export default function BingerHomeScreen() {
 
           const seasonsToFetch = new Set<number>();
           seasonsToFetch.add(targetSeason);
+          validSeasons.forEach((s: any) => {
+            if (s.season_number >= targetSeason) {
+              seasonsToFetch.add(s.season_number);
+            }
+          });
           if (show.next_episode_to_air?.season_number) seasonsToFetch.add(show.next_episode_to_air.season_number);
           if (show.last_episode_to_air?.season_number) seasonsToFetch.add(show.last_episode_to_air.season_number);
 
@@ -498,44 +503,64 @@ export default function BingerHomeScreen() {
     return list;
   }, [trackedShows, watchedRecords, seasonEpisodesMap]);
 
-  // ۳. تقویم پخش با تب‌بندی سه‌گانه: امروز، این هفته، به‌زودی
+  // ۳. تقویم پخش با تب‌بندی چهارگانه: دیده‌نشده‌ها، امروز، این هفته، به‌زودی
   const calendarData = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
+    const watchedEpisodeIds = new Set(watchedRecords.map(w => Number(w.episode_id)));
     const sourceShows = calendarScope === 'mine' ? trackedShows : globalAiringShows;
     const episodesList: any[] = [];
+    const unwatchedList: any[] = [];
     const addedKeys = new Set<string>();
 
     sourceShows.forEach(show => {
       if (!show) return;
 
-      // سریال‌های تمام‌شده یا کنسل‌شده نباید در تقویم زنده بیایند
-      if (show.status === 'Ended' || show.status === 'Canceled') {
+      // سریال‌های تمام‌شده یا کنسل‌شده در بخش ترندهای جهانی رد می‌شوند (اما برای کاربر حفظ می‌شوند)
+      if (calendarScope === 'global' && (show.status === 'Ended' || show.status === 'Canceled')) {
         return;
       }
 
-      // ۱. اگر فصل‌های سریال لود شده‌اند، اپیزودهای آینده‌اش خوانده می‌شوند
+      // ۱. اگر فصل‌های سریال لود شده‌اند، اپیزودهای آینده و ندیده‌اش خوانده می‌شوند
       const validSeasons = (show.seasons || []).filter((s: any) => s && s.season_number > 0);
       validSeasons.forEach((season: any) => {
         const seasonEps = seasonEpisodesMap[`${show.id}_${season.season_number}`] || [];
         seasonEps.forEach((ep: any) => {
-          if (!ep || !ep.air_date) return;
+          if (!ep) return;
           const key = `${show.id}_${ep.id}`;
           if (addedKeys.has(key)) return;
 
-          const airDate = new Date(ep.air_date);
-          airDate.setHours(0, 0, 0, 0);
-          const diffDays = Math.round((airDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const isWatched = watchedEpisodeIds.has(Number(ep.id));
+          let diffDays: number | null = null;
+          let airDateObj: Date | null = null;
 
-          // فقط از امروز تا ۳۶۵ روز آینده
-          if (diffDays >= 0 && diffDays <= 365) {
+          if (ep.air_date) {
+            airDateObj = new Date(ep.air_date);
+            airDateObj.setHours(0, 0, 0, 0);
+            diffDays = Math.round((airDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          }
+
+          // قسمت‌های آینده تا ۳۶۵ روز (تمام اپیزودهای بعدی تا هرجایی که تاریخ‌شان مشخص شده)
+          if (diffDays !== null && diffDays >= 0 && diffDays <= 365) {
             addedKeys.add(key);
             episodesList.push({
               show,
               episode: ep,
-              airDate,
-              diffDays
+              airDate: airDateObj,
+              diffDays,
+              isWatched
+            });
+          }
+          // هر اپیزود پخش‌شده‌ای که کاربر هنوز ندیده است ("هر چیزی که ندیدم هم باید ببینم هم نشونم بده !")
+          else if (!isWatched && calendarScope === 'mine') {
+            addedKeys.add(key);
+            unwatchedList.push({
+              show,
+              episode: ep,
+              airDate: airDateObj,
+              diffDays: diffDays ?? -999,
+              isWatched: false
             });
           }
         });
@@ -552,27 +577,42 @@ export default function BingerHomeScreen() {
 
           if (diffDays >= 0 && diffDays <= 365) {
             addedKeys.add(key);
-            episodesList.push({ show, episode: ep, airDate, diffDays });
+            episodesList.push({
+              show,
+              episode: ep,
+              airDate,
+              diffDays,
+              isWatched: watchedEpisodeIds.has(Number(ep.id))
+            });
           }
         }
       }
     });
 
     // سورت زمانی از امروز به آینده
-    episodesList.sort((a, b) => a.airDate.getTime() - b.airDate.getTime());
+    episodesList.sort((a, b) => (a.airDate?.getTime() || 0) - (b.airDate?.getTime() || 0));
 
-    // تقسیم به ۳ تب استاندارد
+    // سورت دیده‌نشده‌ها به ترتیب شماره فصل و قسمت
+    unwatchedList.sort((a, b) => {
+      if (a.show.id !== b.show.id) return a.show.name.localeCompare(b.show.name);
+      if (a.episode.season_number !== b.episode.season_number) return a.episode.season_number - b.episode.season_number;
+      return a.episode.episode_number - b.episode.episode_number;
+    });
+
+    // تقسیم به تب‌های استاندارد
     const todayList = episodesList.filter(e => e.diffDays === 0);
     const thisWeekList = episodesList.filter(e => e.diffDays >= 1 && e.diffDays <= 7);
     const upcomingList = episodesList.filter(e => e.diffDays > 7);
 
     return {
+      unwatchedList,
       todayList,
       thisWeekList,
       upcomingList,
-      totalTodayCount: todayList.length
+      totalTodayCount: todayList.length,
+      totalUnwatchedCount: unwatchedList.length,
     };
-  }, [trackedShows, globalAiringShows, calendarScope, seasonEpisodesMap]);
+  }, [trackedShows, globalAiringShows, calendarScope, seasonEpisodesMap, watchedRecords]);
 
   // سریال‌های پیشنهادی ترند برای کاربر جدید (Cold Start Fallback)
   const coldStartTrendingShows = useMemo(() => {
@@ -596,9 +636,10 @@ export default function BingerHomeScreen() {
 
   // انتخاب لیست نمایشی تقویم بر اساس تب فعال
   const currentCalendarDisplay =
-    calendarTab === 'today' ? calendarData.todayList :
-      calendarTab === 'this_week' ? calendarData.thisWeekList :
-        calendarData.upcomingList;
+    calendarTab === 'unwatched' ? calendarData.unwatchedList :
+      calendarTab === 'today' ? calendarData.todayList :
+        calendarTab === 'this_week' ? calendarData.thisWeekList :
+          calendarData.upcomingList;
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-32 relative selection:bg-[#ccff00] selection:text-black">
@@ -942,8 +983,27 @@ export default function BingerHomeScreen() {
                 </div>
               </div>
 
-              {/* تب‌بندی سه‌گانه زمانی: امروز / این هفته / به‌زودی */}
+              {/* تب‌بندی چهارگانه زمانی: دیده‌نشده‌ها / امروز / این هفته / به‌زودی */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                {/* تب دیده‌نشده‌ها (پخش‌شده‌هایی که کاربر هنوز تماشا نکرده است) */}
+                {calendarScope === 'mine' && calendarData.unwatchedList.length > 0 && (
+                  <button
+                    onClick={() => setCalendarTab('unwatched')}
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                      calendarTab === 'unwatched'
+                        ? 'bg-amber-400 text-black font-black shadow-[0_0_20px_rgba(251,191,36,0.3)]'
+                        : 'bg-white/[0.04] text-gray-400 hover:bg-white/[0.08] hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <AlertCircle size={14} className={calendarTab === 'unwatched' ? 'text-black' : 'text-amber-400'} />
+                    <span>دیده‌نشده‌ها</span>
+                    <span className={`text-[11px] font-mono px-1.5 py-0.2 rounded-md ${
+                      calendarTab === 'unwatched' ? 'bg-black/20 text-black font-black' : 'bg-white/10 text-gray-300'
+                    }`}>
+                      {calendarData.unwatchedList.length}
+                    </span>
+                  </button>
+                )}
                 <button
                   onClick={() => setCalendarTab('today')}
                   className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
@@ -1004,14 +1064,20 @@ export default function BingerHomeScreen() {
                   {currentCalendarDisplay.map((entry) => {
                     const { show, episode, diffDays, airDate } = entry;
                     const isWatched = watchedRecords.some(w => Number(w.episode_id) === Number(episode.id));
-                    const isAired = diffDays <= 0;
+                    const isAired = diffDays === null || diffDays <= 0;
 
                     // عنوان تاریخ و روز
                     let badgeLabel = "";
-                    if (diffDays === 0) badgeLabel = "امروز! 🔥";
-                    else if (diffDays === 1) badgeLabel = "فردا";
-                    else if (diffDays <= 7) {
-                      const dayName = airDate.toLocaleDateString('fa-IR', { weekday: 'long' });
+                    if (diffDays === null || diffDays < -1) {
+                      badgeLabel = airDate ? airDate.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }) : "پخش‌شده";
+                    } else if (diffDays === -1) {
+                      badgeLabel = "دیروز";
+                    } else if (diffDays === 0) {
+                      badgeLabel = "امروز! 🔥";
+                    } else if (diffDays === 1) {
+                      badgeLabel = "فردا";
+                    } else if (diffDays <= 7) {
+                      const dayName = airDate?.toLocaleDateString('fa-IR', { weekday: 'long' });
                       badgeLabel = `${dayName} (${diffDays} روز دیگر)`;
                     } else {
                       badgeLabel = `${diffDays} روز دیگر`;
