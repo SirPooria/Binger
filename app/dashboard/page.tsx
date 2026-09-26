@@ -82,7 +82,6 @@ export default function BingerHomeScreen() {
   const handleScrollToTodayEpisodes = () => {
     if (calendarData.totalTodayCount === 0) return;
     setCalendarTab('today');
-    setCalendarScope('mine');
 
     setTimeout(() => {
       const element = document.getElementById('release-calendar');
