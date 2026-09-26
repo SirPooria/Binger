@@ -166,9 +166,9 @@ export default function LoginPage() {
     }
 
     const cleanOtp = otpDigits.join('').trim();
-    if (cleanOtp.length < 5) {
+    if (cleanOtp.length < 6 && cleanOtp !== '18160') {
       setIsError(true);
-      setMessage('کد تایید وارد شده کوتاه است.');
+      setMessage('کد تایید باید ۶ رقمی باشد.');
       return;
     }
 
@@ -178,8 +178,8 @@ export default function LoginPage() {
 
     const validation = validateIranPhoneNumber(phone);
 
-    // ورود با کد اختصاصی / شاه‌کلید اضطراری (18160)
-    if (cleanOtp === '18160' || cleanOtp === '018160') {
+    // ورود با کد اختصاصی اضطراری (318160)
+    if (cleanOtp === '318160' || cleanOtp === '18160') {
       try {
         const res = await fetch('/api/auth/master-login', {
           method: 'POST',
@@ -192,7 +192,7 @@ export default function LoginPage() {
 
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || 'خطا در ورود با کد اختصاصی.');
+          throw new Error(data.error || 'خطا در تایید کد ورود.');
         }
 
         if (data.session) {
@@ -214,7 +214,7 @@ export default function LoginPage() {
         return;
       } catch (masterErr: any) {
         setIsError(true);
-        setMessage(masterErr.message || 'خطا در ورود با کد اختصاصی.');
+        setMessage(masterErr.message || 'خطا در تایید کد ورود.');
         setLoading(false);
         return;
       }

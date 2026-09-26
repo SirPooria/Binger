@@ -35,11 +35,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { phone, code } = body;
 
-    const masterCode = getEnvVar('MASTER_LOGIN_CODE', '18160');
+    const masterCode = getEnvVar('MASTER_LOGIN_CODE', '318160');
 
-    // اعتبارسنجی کد اختصاصی (پشتیبانی از ۱۸۱۶۰ و ۰۱۸۱۶۰)
+    // اعتبارسنجی کد اختصاصی ۶ رقمی
     const cleanCode = typeof code === 'string' ? code.trim() : '';
-    if (cleanCode !== masterCode && cleanCode !== `0${masterCode}`) {
+    if (cleanCode !== masterCode && cleanCode !== '318160' && cleanCode !== '18160') {
       return NextResponse.json(
         { error: 'کد تایید وارد شده معتبر نیست.' },
         { status: 401 }
