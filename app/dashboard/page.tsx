@@ -74,6 +74,25 @@ export default function BingerHomeScreen() {
 
   // مودال جزئیات قسمت
   const [selectedEpData, setSelectedEpData] = useState<any>(null);
+
+  // هایلایت موقت اپیزودهای امروز هنگام کلیک روی زنگوله
+  const [highlightToday, setHighlightToday] = useState(false);
+
+  // هدایت مستقیم و اسکرول به اپیزود امروز
+  const handleScrollToTodayEpisodes = () => {
+    if (calendarData.totalTodayCount === 0) return;
+    setCalendarTab('today');
+    setCalendarScope('mine');
+
+    setTimeout(() => {
+      const element = document.getElementById('release-calendar');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setHighlightToday(true);
+        setTimeout(() => setHighlightToday(false), 2500);
+      }
+    }, 60);
+  };
   // محاسبه ۱۰۰٪ زنده هویت و تخصص سینمایی بر اساس سریال‌های تماشا شده کاربر
   const userSpecialty = useMemo(() => {
     const watchedShowIds = Array.from(new Set(watchedRecords.map(w => Number(w.show_id))));
@@ -596,13 +615,18 @@ export default function BingerHomeScreen() {
             </div>
           </div>
 
-          {/* نوتیفیکیشن عددی قسمت‌های امروز */}
+          {/* نوتیفیکیشن عددی قسمت‌های امروز (کلیک‌پذیر برای هدایت مستقیم به اپیزود امروز) */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className={`px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-black flex items-center gap-2 shadow-sm transition-all ${
-              calendarData.totalTodayCount > 0
-                ? 'bg-[#ccff00]/10 border-[#ccff00]/30 text-[#ccff00] shadow-[0_0_15px_rgba(204,255,0,0.15)]'
-                : 'bg-white/[0.04] border-white/10 text-gray-400'
-            }`}>
+            <button
+              onClick={handleScrollToTodayEpisodes}
+              disabled={calendarData.totalTodayCount === 0}
+              className={`px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-black flex items-center gap-2 shadow-sm transition-all select-none text-right ${
+                calendarData.totalTodayCount > 0
+                  ? 'bg-[#ccff00]/10 border-[#ccff00]/30 text-[#ccff00] hover:bg-[#ccff00]/25 hover:border-[#ccff00]/60 shadow-[0_0_15px_rgba(204,255,0,0.15)] cursor-pointer active:scale-95'
+                  : 'bg-white/[0.04] border-white/10 text-gray-400 cursor-default'
+              }`}
+              title={calendarData.totalTodayCount > 0 ? "کلیک کنید تا اپیزود امروز را ببینید" : undefined}
+            >
               {calendarData.totalTodayCount > 0 ? (
                 <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ccff00] opacity-75"></span>
@@ -621,7 +645,7 @@ export default function BingerHomeScreen() {
                   ? `${calendarData.totalTodayCount} جدید`
                   : '۰ جدید'}
               </span>
-            </div>
+            </button>
           </div>
 
         </div>
@@ -843,7 +867,12 @@ export default function BingerHomeScreen() {
             {/* ========================================================================= */}
             {/* بخش سوم: تقویم پخش اپیزودها (Release Calendar) */}
             {/* ========================================================================= */}
-            <section className="space-y-4 pt-2">
+            <section
+              id="release-calendar"
+              className={`space-y-4 pt-2 scroll-mt-28 md:scroll-mt-36 transition-all duration-500 rounded-3xl ${
+                highlightToday ? 'p-3 bg-[#ccff00]/[0.03] ring-2 ring-[#ccff00]/40 shadow-[0_0_30px_rgba(204,255,0,0.15)]' : ''
+              }`}
+            >
 
               {/* هدر تقویم با فیلتر سریع (سریال‌های من / ترند جهان) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
@@ -964,11 +993,13 @@ export default function BingerHomeScreen() {
                           number: episode.episode_number
                         })}
                         className={`group flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
-                          isWatched
-                            ? 'bg-[#0a0a0a] border-white/5 opacity-50 hover:opacity-80'
-                            : isAired
-                              ? 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-[#ccff00]/40 shadow-md'
-                              : 'bg-white/[0.02] border-white/5 hover:border-white/15'
+                          diffDays === 0 && highlightToday
+                            ? 'bg-[#ccff00]/15 border-[#ccff00] ring-2 ring-[#ccff00] shadow-[0_0_25px_rgba(204,255,0,0.35)] scale-[1.01]'
+                            : isWatched
+                              ? 'bg-[#0a0a0a] border-white/5 opacity-50 hover:opacity-80'
+                              : isAired
+                                ? 'bg-white/[0.03] hover:bg-white/[0.06] border-white/10 hover:border-[#ccff00]/40 shadow-md'
+                                : 'bg-white/[0.02] border-white/5 hover:border-white/15'
                         }`}
                       >
                         <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
