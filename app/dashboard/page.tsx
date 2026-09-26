@@ -7,8 +7,7 @@ import {
   getSeasonDetails,
   getImageUrl,
   getGlobalAiringShows,
-  getBackdropUrl,
-  getReleasedEpisodeCount
+  getBackdropUrl
 } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import {
@@ -162,6 +161,29 @@ export default function BingerHomeScreen() {
         .select('show_id')
         .eq('user_id', user.id);
 
+      // خواندن سریال‌های موردعلاقه (favorites)
+      const { data: favoritesData } = await supabase
+        .from('favorites')
+        .select('show_id')
+        .eq('user_id', user.id);
+
+      // خواندن تمام سریال‌های موجود در لیست‌های شخصی کاربر (user_lists و list_items)
+      const { data: userListsData } = await supabase
+        .from('user_lists')
+        .select('id, list_items(show_id)')
+        .eq('user_id', user.id);
+
+      const customListShowIds: number[] = [];
+      if (userListsData) {
+        userListsData.forEach((ul: any) => {
+          if (Array.isArray(ul.list_items)) {
+            ul.list_items.forEach((item: any) => {
+              if (item?.show_id) customListShowIds.push(Number(item.show_id));
+            });
+          }
+        });
+      }
+
       // خواندن تمام قسمت‌های دیده‌شده
       const allWatched: any[] = [];
       let page = 0;
@@ -186,7 +208,16 @@ export default function BingerHomeScreen() {
 
       const watchedShowIds = new Set<number>(allWatched.map(w => Number(w.show_id)));
       const watchlistShowIds = new Set<number>((watchlistData || []).map((w: any) => Number(w.show_id)));
-      const allShowIds = Array.from(new Set([...watchedShowIds, ...watchlistShowIds]));
+      const favoritesShowIds = new Set<number>((favoritesData || []).map((f: any) => Number(f.show_id)));
+      const customShowIds = new Set<number>(customListShowIds);
+
+      // تجمیع سریال‌های تمام لیست‌های کاربر (دیده‌شده، واچ‌لیست، فیوریت، لیست‌های شخصی)
+      const allShowIds = Array.from(new Set([
+        ...watchedShowIds,
+        ...watchlistShowIds,
+        ...favoritesShowIds,
+        ...customShowIds
+      ]));
 
       // واکشی سریال‌های جهانی برای تقویم و کلد استارت
       const globalShows = await getGlobalAiringShows();
@@ -374,7 +405,10 @@ export default function BingerHomeScreen() {
         .filter((s: any) => s && s.season_number > 0)
         .sort((a: any, b: any) => a.season_number - b.season_number);
 
-      const totalEpisodesCount = getReleasedEpisodeCount(show);
+      let totalEpisodesCount = 0;
+      validSeasons.forEach((s: any) => {
+        totalEpisodesCount += (s.episode_count || 0);
+      });
 
       let cumulative = 0;
       let targetSeason = 1;
