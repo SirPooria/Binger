@@ -5,26 +5,12 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Loader2, Phone, ArrowLeft, RotateCcw,
-  Sparkles, ShieldCheck, CheckCircle2, AlertCircle, Tv, Film,
-  Flame, Star, Play, Clapperboard, Compass
+  Sparkles, ShieldCheck, CheckCircle2, AlertCircle, Tv,
+  Star, Compass, Flame, Users
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { validateIranPhoneNumber } from '@/lib/validation/phone';
 import Link from 'next/link';
-
-// پوسترهای پس‌زمینه سینمایی با ترنسپرنسی ملایم
-const BACKGROUND_POSTERS = [
-  "https://image.tmdb.org/t/p/w300/ggFHVNu6YYI5L9pCfOacjizRGt.jpg", // Breaking Bad
-  "https://image.tmdb.org/t/p/w300/pPHpeIqlzp8GB1v1OjEZ9SpvCzg.jpg", // Severance
-  "https://image.tmdb.org/t/p/w300/77iBsV12Ztl1bz0kqz17Pz2t75t.jpg", // Succession
-  "https://image.tmdb.org/t/p/w300/fqldf2t8ztc9aiwn3k6mlX3tvRT.jpg", // Arcane
-  "https://image.tmdb.org/t/p/w300/evIl42b8hQ3G9P87GeqZgZ5u3Hj.jpg", // The Bear
-  "https://image.tmdb.org/t/p/w300/hlLXt2tOPT6RRnjiUmoxyG1LTFi.jpg", // Chernobyl
-  "https://image.tmdb.org/t/p/w300/reKs8y4mSI7vy6T5Ac2sqW599TT.jpg", // Dark
-  "https://image.tmdb.org/t/p/w300/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg", // Better Call Saul
-  "https://image.tmdb.org/t/p/w300/u3bZgnGQ9T01sWNhyveQz0wH0Hl.jpg", // Game of Thrones
-  "https://image.tmdb.org/t/p/w300/8kOWDBK6XlPUzckuHDo3wwVRFwt.jpg", // Rick and Morty
-];
 
 export default function LoginPage() {
   const supabase = createClient();
@@ -167,21 +153,9 @@ export default function LoginPage() {
   return (
     <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] relative flex flex-col justify-between p-4 sm:p-6 md:p-8 overflow-x-hidden selection:bg-[#ccff00] selection:text-black">
       
-      {/* --- AMBIENT POSTER WALL (Dimmed Cinematic Backdrop) --- */}
-      <div className="fixed inset-0 pointer-events-none -z-20 overflow-hidden opacity-[0.06] select-none">
-        <div className="grid grid-cols-5 md:grid-cols-10 gap-3 scale-110 -rotate-3 blur-[1px]">
-          {BACKGROUND_POSTERS.concat(BACKGROUND_POSTERS).map((src, i) => (
-            <div key={i} className="aspect-[2/3] rounded-xl overflow-hidden bg-white/5">
-              <img src={src} alt="Backdrop poster" className="w-full h-full object-cover" />
-            </div>
-          ))}
-        </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-[#050505]" />
-      </div>
-
-      {/* --- AMBIENT NEON GLOWS --- */}
-      <div className="fixed top-1/4 right-1/6 w-[450px] h-[450px] bg-[#ccff00]/12 blur-[140px] rounded-full pointer-events-none -z-10 animate-pulse" />
-      <div className="fixed bottom-1/4 left-1/6 w-[400px] h-[400px] bg-purple-600/12 blur-[150px] rounded-full pointer-events-none -z-10" />
+      {/* --- AMBIENT NEON GLOWS (بدون هیچ عکس خارجی، کاملاً سبک و سریع) --- */}
+      <div className="fixed top-1/4 right-1/4 w-[450px] h-[450px] bg-[#ccff00]/10 blur-[150px] rounded-full pointer-events-none -z-10 animate-pulse" />
+      <div className="fixed bottom-1/4 left-1/4 w-[400px] h-[400px] bg-purple-600/10 blur-[160px] rounded-full pointer-events-none -z-10" />
 
       {/* --- TOP NAV --- */}
       <header className="w-full max-w-6xl mx-auto flex items-center justify-between py-2 sm:py-3 z-10">
@@ -206,7 +180,7 @@ export default function LoginPage() {
       <main className="w-full max-w-6xl mx-auto my-auto py-6 sm:py-10 z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
           
-          {/* بخش ویترینی و متنی (مخصوص دسکتاپ و تبلت بزرگ) */}
+          {/* بخش ویترینی و متنی (مخصوص دسکتاپ و تبلت بزرگ - بدون عکس خارجی) */}
           <div className="hidden lg:flex lg:col-span-7 flex-col space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-xs font-black w-fit shadow-[0_0_20px_rgba(204,255,0,0.15)]">
               <Sparkles size={14} />
@@ -226,53 +200,47 @@ export default function LoginPage() {
 
             {/* کارت‌های سه‌گانه مزیت‌ها */}
             <div className="grid grid-cols-3 gap-3.5 pt-2">
-              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-[#ccff00]/40 transition-all group">
-                <div className="w-9 h-9 rounded-xl bg-[#ccff00]/10 text-[#ccff00] flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
-                  <Sparkles size={18} />
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-[#ccff00]/40 transition-all group">
+                <div className="w-10 h-10 rounded-xl bg-[#ccff00]/10 text-[#ccff00] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <Sparkles size={20} />
                 </div>
-                <h3 className="text-xs font-black text-white mb-1">دستیار Mood AI</h3>
+                <h3 className="text-xs font-black text-white mb-1.5">دستیار Mood AI</h3>
                 <p className="text-[11px] text-gray-400 leading-snug">پیشنهاد بر اساس مود و حال‌وهوای دقیق شما</p>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-[#ccff00]/40 transition-all group">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
-                  <Tv size={18} />
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-[#ccff00]/40 transition-all group">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <Tv size={20} />
                 </div>
-                <h3 className="text-xs font-black text-white mb-1">ردیاب اپیزودها</h3>
-                <p className="text-[11px] text-gray-400 leading-snug">ثبت لحظه‌ای فصل‌ها و محاسبه ساعت‌های تماشا</p>
+                <h3 className="text-xs font-black text-white mb-1.5">ردیاب اپیزودها</h3>
+                <p className="text-[11px] text-gray-400 leading-snug">ثبت لحظه‌ای فصل‌ها و محاسبه زمان‌های تماشا</p>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-[#ccff00]/40 transition-all group">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
-                  <Star size={18} />
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md hover:border-[#ccff00]/40 transition-all group">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                  <Star size={20} />
                 </div>
-                <h3 className="text-xs font-black text-white mb-1">باشگاه منتقدان</h3>
+                <h3 className="text-xs font-black text-white mb-1.5">باشگاه منتقدان</h3>
                 <p className="text-[11px] text-gray-400 leading-snug">کسب نشان‌ها و ثبت دیدگاه با نمرات تخصصی</p>
               </div>
             </div>
 
-            {/* کارت مینی ویترین پیشنهاد زنده */}
-            <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-md max-w-md">
-              <div className="w-12 h-14 rounded-xl overflow-hidden shrink-0 border border-white/10 shadow-lg">
-                <img
-                  src="https://image.tmdb.org/t/p/w200/pPHpeIqlzp8GB1v1OjEZ9SpvCzg.jpg"
-                  alt="Severance"
-                  className="w-full h-full object-cover"
-                />
+            {/* آمار زنده پلتفرم بدون عکس */}
+            <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-md max-w-lg">
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-300">
+                <Users size={16} className="text-[#ccff00]" />
+                <span>جامعه سریال‌بین‌های ایرانی</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold mb-0.5">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#ccff00] animate-ping" />
-                  <span>محبوب‌ترین پیشنهاد امروز هوش مصنوعی</span>
-                </div>
-                <h4 className="text-xs font-bold text-white truncate">تفکیک‌سازی (Severance)</h4>
-                <span className="text-[11px] text-[#ccff00] font-mono font-bold">★ ۸.۷ TMDB • ۹۸٪ تطابق با سلیقه شما</span>
+              <span className="text-gray-600">•</span>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#ccff00]">
+                <Flame size={15} />
+                <span>۱۰۰٪ رایگان و بدون پسورد</span>
               </div>
             </div>
 
           </div>
 
-          {/* کارت فرم ورود شیشه‌ای (مدرن و ریسپانسیو) */}
+          {/* کارت فرم ورود شیشه‌ای (مدرن، ریسپانسیو و سریع) */}
           <div className="w-full max-w-[430px] mx-auto lg:col-span-5">
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.98 }}
