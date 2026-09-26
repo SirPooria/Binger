@@ -70,7 +70,7 @@ export default function WelcomePage() {
       {/* --- FLOATING HEADER --- */}
       <header className="sticky top-0 z-50 w-full backdrop-blur-xl bg-[#050505]/75 border-b border-white/10 px-4 md:px-8 py-3.5 transition-all">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          
+
           {/* لوگو و عنوان */}
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="relative">
@@ -122,7 +122,7 @@ export default function WelcomePage() {
 
       {/* --- HERO SECTION --- */}
       <section className="relative min-h-[85vh] flex flex-col items-center justify-center pt-8 md:pt-14 pb-16 px-4 overflow-hidden">
-        
+
         {/* دیواره پوستر شناور متحرک در پس‌زمینه (Cinematic Marquee Wall) */}
         <div className="absolute inset-0 z-0 opacity-25 grayscale-[30%] brightness-[0.45] pointer-events-none overflow-hidden select-none">
           {/* ردیف اول */}
@@ -156,7 +156,7 @@ export default function WelcomePage() {
 
         {/* محتوای متنی و اکشن‌های هیرو */}
         <div className="relative z-10 w-full max-w-3xl text-center space-y-6 sm:space-y-8 my-auto">
-          
+
           {/* بج پروموشن یا رویداد */}
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -185,7 +185,7 @@ export default function WelcomePage() {
             className="space-y-3"
           >
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-black leading-[1.2] md:leading-[1.15] tracking-tight">
-              دستیار هوشمند و هویت سینماییِ <br />
+              دستیار هوشمند <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ccff00] via-emerald-300 to-cyan-300 drop-shadow-[0_0_35px_rgba(204,255,0,0.35)]">
                 خوره‌های سریال
               </span>
@@ -275,7 +275,7 @@ export default function WelcomePage() {
 
       {/* --- INTERACTIVE BENTO GRID (ابر‌قدرت‌های بینجر) --- */}
       <section id="features" className="relative z-10 py-20 px-4 md:px-8 max-w-6xl mx-auto space-y-12">
-        
+
         {/* سربرگ بخش ویژگی‌ها */}
         <div className="text-center space-y-3 max-w-2xl mx-auto">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-xs font-black">
@@ -292,11 +292,11 @@ export default function WelcomePage() {
 
         {/* بنتو گرید ۴ تایی مدرن */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-          
+
           {/* کارت ۱ (عرض ۲ ستون): نوبت تماشا و تقویم اختصاصی */}
           <div className="md:col-span-2 bg-[#0e0e0e] border border-white/10 hover:border-[#ccff00]/40 rounded-3xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group transition-all shadow-xl hover:shadow-[0_0_30px_rgba(204,255,0,0.1)]">
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#ccff00]/5 blur-[80px] rounded-full pointer-events-none" />
-            
+
             <div className="space-y-3 relative z-10">
               <span className="text-xs font-black text-[#ccff00] bg-[#ccff00]/10 px-3 py-1 rounded-lg inline-block">
                 ⚡ نوبت تماشا و تقویم پخش
@@ -340,7 +340,7 @@ export default function WelcomePage() {
           {/* کارت ۲ (۱ ستون): هویت و DNA سینمایی */}
           <div className="bg-[#0e0e0e] border border-white/10 hover:border-purple-500/40 rounded-3xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group transition-all shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]">
             <div className="absolute top-0 left-0 w-48 h-48 bg-purple-600/10 blur-[70px] rounded-full pointer-events-none" />
-            
+
             <div className="space-y-3 relative z-10">
               <span className="text-xs font-black text-purple-400 bg-purple-500/10 px-3 py-1 rounded-lg inline-block">
                 🧬 هویت و DNA سینمایی

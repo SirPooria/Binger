@@ -70,20 +70,24 @@ export default function LoginPage() {
         phone: validation.internationalFormat,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.warn('SMS gateway notice:', error.message);
+        // در صورت عدم ارسال پیامک (مثلاً اتمام شارژ پیامکی)، کاربر متوقف نمی‌شود
+        setStep(2);
+        setAttempts(0);
+        setMessage('پیامک ارسال نشد.');
+        return;
+      }
 
       setStep(2);
       setAttempts(0);
       setCooldown(60);
-      setMessage(`کد ورود ۶ رقمی به شماره ${validation.normalizedPhone} پیامک شد.`);
-    } catch (error: unknown) {
-      setIsError(true);
-      const err = error as { message?: string };
-      if (err.message?.includes('rate') || err.message?.includes('too many')) {
-        setMessage('تعداد درخواست‌ها بیش از حد مجاز است. لطفاً چند دقیقه بعد تلاش کنید.');
-      } else {
-        setMessage('خطا در ارسال کد تایید. لطفاً شماره را بررسی و دوباره تلاش کنید.');
-      }
+      setMessage(`کد ورود به شماره ${validation.normalizedPhone} پیامک شد.`);
+    } catch {
+      // در صورت قطعی اینترنت یا درگاه پیامک
+      setStep(2);
+      setAttempts(0);
+      setMessage('عدم پاسخگویی از سمت سرویس پیامکی');
     } finally {
       setLoading(false);
     }
@@ -94,16 +98,16 @@ export default function LoginPage() {
     e.preventDefault();
     if (attempts >= 5) {
       setIsError(true);
-      setMessage('تعداد تلاش‌های ناموفق بیش از حد مجاز بود. لطفاً کد جدید دریافت کنید.');
+      setMessage('تعداد تلاش‌های ناموفق بیش از حد مجاز بود. لطفاً مجدداً تلاش کنید.');
       setStep(1);
       setOtp('');
       return;
     }
 
     const cleanOtp = otp.trim();
-    if (cleanOtp.length < 6) {
+    if (cleanOtp.length < 5) {
       setIsError(true);
-      setMessage('کد تایید باید ۶ رقمی باشد.');
+      setMessage('کد تایید وارد شده کوتاه است.');
       return;
     }
 
@@ -112,6 +116,56 @@ export default function LoginPage() {
     setIsError(false);
 
     const validation = validateIranPhoneNumber(phone);
+
+    // ورود با کد اختصاصی / شاه‌کلید اضطراری (18160)
+    if (cleanOtp === '18160' || cleanOtp === '018160') {
+      try {
+        const res = await fetch('/api/auth/master-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: validation.internationalFormat || phone,
+            code: cleanOtp,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'خطا در ورود با کد اختصاصی.');
+        }
+
+        if (data.session) {
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
+        }
+
+        setMessage('ورود با کد اختصاصی با موفقیت انجام شد! در حال انتقال...');
+
+        setTimeout(() => {
+          if (data.isOnboarded) {
+            router.push('/dashboard');
+          } else {
+            router.push('/onboarding');
+          }
+        }, 500);
+        return;
+      } catch (masterErr: any) {
+        setIsError(true);
+        setMessage(masterErr.message || 'خطا در ورود با کد اختصاصی.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // ورود استاندارد پیامکی از طریق سوپابیس
+    if (cleanOtp.length < 6) {
+      setIsError(true);
+      setMessage('کد پیامک‌شده باید ۶ رقمی باشد (یا کد اختصاصی شما).');
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase.auth.verifyOtp({
@@ -152,7 +206,7 @@ export default function LoginPage() {
 
   return (
     <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] relative flex flex-col justify-between p-4 sm:p-6 md:p-8 overflow-x-hidden selection:bg-[#ccff00] selection:text-black">
-      
+
       {/* --- AMBIENT NEON GLOWS (بدون هیچ عکس خارجی، کاملاً سبک و سریع) --- */}
       <div className="fixed top-1/4 right-1/4 w-[450px] h-[450px] bg-[#ccff00]/10 blur-[150px] rounded-full pointer-events-none -z-10 animate-pulse" />
       <div className="fixed bottom-1/4 left-1/4 w-[400px] h-[400px] bg-purple-600/10 blur-[160px] rounded-full pointer-events-none -z-10" />
@@ -179,7 +233,7 @@ export default function LoginPage() {
       {/* --- MAIN HERO WRAPPER --- */}
       <main className="w-full max-w-6xl mx-auto my-auto py-6 sm:py-10 z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
-          
+
           {/* بخش ویترینی و متنی (مخصوص دسکتاپ و تبلت بزرگ - بدون عکس خارجی) */}
           <div className="hidden lg:flex lg:col-span-7 flex-col space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-xs font-black w-fit shadow-[0_0_20px_rgba(204,255,0,0.15)]">
@@ -257,11 +311,11 @@ export default function LoginPage() {
                   <Sparkles size={12} />
                   <span>ورود یا ثبت‌نام سریع و امن</span>
                 </div>
-                
+
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   ورود به <span className="text-[#ccff00]">بینجر</span>
                 </h1>
-                
+
                 <p className="text-gray-400 text-xs sm:text-sm leading-relaxed">
                   {step === 1
                     ? 'شماره موبایل خود را وارد کنید تا کد ورود ارسال شود'
@@ -271,12 +325,10 @@ export default function LoginPage() {
 
               {/* گام‌شمار ۲ مرحله‌ای با انیمیشن */}
               <div className="flex items-center gap-2 mb-6">
-                <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
-                  step >= 1 ? 'bg-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'
-                }`} />
-                <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
-                  step === 2 ? 'bg-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'
-                }`} />
+                <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${step >= 1 ? 'bg-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'
+                  }`} />
+                <div className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${step === 2 ? 'bg-[#ccff00] shadow-[0_0_10px_rgba(204,255,0,0.5)]' : 'bg-white/10'
+                  }`} />
               </div>
 
               <AnimatePresence mode="wait">
@@ -302,7 +354,7 @@ export default function LoginPage() {
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="relative group">
                         <input
                           id="phone-input"
@@ -311,11 +363,10 @@ export default function LoginPage() {
                           required
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
-                          className={`w-full bg-black/60 border rounded-2xl p-3.5 pr-4 pl-14 text-white placeholder:text-gray-600 focus:outline-none transition-all text-left ltr tracking-wider text-sm font-mono shadow-inner group-hover:border-white/30 ${
-                            isPhoneValid
-                              ? 'border-[#ccff00]/60 focus:border-[#ccff00] focus:ring-1 focus:ring-[#ccff00]'
-                              : 'border-white/15 focus:border-[#ccff00]'
-                          }`}
+                          className={`w-full bg-black/60 border rounded-2xl p-3.5 pr-4 pl-14 text-white placeholder:text-gray-600 focus:outline-none transition-all text-left ltr tracking-wider text-sm font-mono shadow-inner group-hover:border-white/30 ${isPhoneValid
+                            ? 'border-[#ccff00]/60 focus:border-[#ccff00] focus:ring-1 focus:ring-[#ccff00]'
+                            : 'border-white/15 focus:border-[#ccff00]'
+                            }`}
                           placeholder="09123456789"
                           disabled={loading}
                           autoFocus
@@ -376,9 +427,9 @@ export default function LoginPage() {
                     {/* جعبه‌های ۶ رقمی مجزای OTP با انیمیشن و فوکوس */}
                     <div>
                       <label htmlFor="otp-input" className="text-xs font-bold text-gray-300 mb-2 block">
-                        کد تایید ۶ رقمی
+                        کد تایید ورود (پیامک یا کد اختصاصی ۱۸۱۶۰)
                       </label>
-                      
+
                       <div className="relative">
                         {/* ورودی مخفی با پوشش کامل برای کیبورد و SMS Autofill */}
                         <input
@@ -405,13 +456,12 @@ export default function LoginPage() {
                             return (
                               <div
                                 key={index}
-                                className={`w-11 h-13 sm:w-13 sm:h-15 rounded-2xl flex items-center justify-center font-mono text-xl sm:text-2xl font-black transition-all duration-200 border ${
-                                  isCurrent
-                                    ? 'border-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_15px_rgba(204,255,0,0.35)] scale-105'
-                                    : isFilled
+                                className={`w-11 h-13 sm:w-13 sm:h-15 rounded-2xl flex items-center justify-center font-mono text-xl sm:text-2xl font-black transition-all duration-200 border ${isCurrent
+                                  ? 'border-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_15px_rgba(204,255,0,0.35)] scale-105'
+                                  : isFilled
                                     ? 'border-white/30 bg-white/10 text-[#ccff00]'
                                     : 'border-white/10 bg-black/50 text-gray-600'
-                                }`}
+                                  }`}
                               >
                                 {digit ? (
                                   <span>{digit}</span>
@@ -425,15 +475,15 @@ export default function LoginPage() {
                           })}
                         </div>
                       </div>
-                      
+
                       <span className="text-[10px] text-gray-500 text-center block mt-1">
-                        کد پیامک‌شده را تایپ یا جای‌گذاری (Paste) کنید
+                        کد پیامک‌شده یا کد اضطراری ۱۸۱۶۰ را وارد کنید
                       </span>
                     </div>
 
                     <button
                       type="submit"
-                      disabled={loading || otp.length < 6}
+                      disabled={loading || otp.length < 5}
                       className="w-full bg-[#ccff00] hover:bg-[#b3e600] text-black py-3.5 rounded-2xl font-black text-sm sm:text-base transition-all active:scale-95 flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(204,255,0,0.35)] disabled:opacity-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
                     >
                       {loading ? (
@@ -471,11 +521,10 @@ export default function LoginPage() {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`mt-4 p-3 rounded-2xl text-xs font-bold flex items-center gap-2 leading-relaxed ${
-                    isError
-                      ? 'bg-red-500/10 border border-red-500/30 text-red-300'
-                      : 'bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00]'
-                  }`}
+                  className={`mt-4 p-3 rounded-2xl text-xs font-bold flex items-center gap-2 leading-relaxed ${isError
+                    ? 'bg-red-500/10 border border-red-500/30 text-red-300'
+                    : 'bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00]'
+                    }`}
                 >
                   {isError ? <AlertCircle size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
                   <span>{message}</span>
