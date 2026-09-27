@@ -9,7 +9,9 @@ import {
   getGlobalAiringShows,
   getBackdropUrl
 } from '@/lib/tmdbClient';
+import { useWatched } from '@/lib/watchedContext';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Loader2,
   Calendar as CalIcon,
@@ -27,9 +29,101 @@ import {
   TrendingUp,
   Award
 } from 'lucide-react';
-import EpisodeModal from './components/EpisodeModal';
+import dynamic from 'next/dynamic';
 import { ShowCardProgress } from './components/ShowProgressBar';
 import { VipUsername } from './components/VipBadge';
+import { calculateSubscriptionDetails } from '@/lib/subscription';
+import { SubscriptionBadge } from './components/SubscriptionComponents';
+
+const EpisodeModal = dynamic(() => import('./components/EpisodeModal'), {
+  loading: () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in">
+      <div className="flex flex-col items-center gap-3 bg-[#111] p-6 rounded-2xl border border-white/10 shadow-2xl">
+        <Loader2 className="w-8 h-8 text-[#ccff00] animate-spin" />
+        <span className="text-xs font-bold text-gray-300">در حال بارگذاری جزئیات قسمت...</span>
+      </div>
+    </div>
+  ),
+  ssr: false,
+});
+
+// --- Modular Skeleton Loaders for Progressive Rendering (Eliminate Full-Page Spinners) ---
+const StatsBarSkeleton = () => (
+  <div className="grid grid-cols-3 gap-2.5 sm:gap-4 animate-pulse">
+    {[1, 2, 3].map(i => (
+      <div key={i} className="bg-white/[0.03] border border-white/5 rounded-2xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3">
+        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 shrink-0" />
+        <div className="flex flex-col gap-1.5 w-full">
+          <div className="w-14 h-3 bg-white/10 rounded" />
+          <div className="w-8 h-4 bg-white/10 rounded" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const UpNextSkeleton = () => (
+  <section className="space-y-4">
+    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-xl bg-[#ccff00]/10 border border-[#ccff00]/20 text-[#ccff00] flex items-center justify-center">
+          <PlayCircle size={18} />
+        </div>
+        <h2 className="text-base sm:text-lg font-black text-white">نوبت تماشا</h2>
+      </div>
+      <span className="text-[11px] sm:text-xs text-gray-500 font-mono animate-pulse">در حال آماده‌سازی نوبت تماشا...</span>
+    </div>
+
+    <div className="space-y-3">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="p-3 sm:p-3.5 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+            <div className="w-13 h-19 sm:w-15 sm:h-21 rounded-xl bg-white/10 shrink-0" />
+            <div className="space-y-2">
+              <div className="w-32 sm:w-48 h-4 bg-white/10 rounded" />
+              <div className="w-20 sm:w-28 h-3 bg-white/5 rounded" />
+              <div className="w-28 sm:w-36 h-1.5 bg-white/10 rounded-full mt-2" />
+            </div>
+          </div>
+          <div className="w-11 h-11 rounded-full bg-white/10 shrink-0 ml-1" />
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
+const CalendarSkeleton = () => (
+  <section className="space-y-4 pt-2">
+    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+          <CalIcon size={18} />
+        </div>
+        <h2 className="text-base sm:text-lg font-black text-white">تقویم پخش اپیزودها</h2>
+      </div>
+      <span className="text-[11px] sm:text-xs text-gray-500 font-mono animate-pulse">در حال بارگذاری تقویم...</span>
+    </div>
+
+    <div className="flex items-center gap-2 pb-1">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="w-20 h-8 rounded-xl bg-white/5 animate-pulse" />
+      ))}
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3 animate-pulse">
+          <div className="w-12 h-16 rounded-xl bg-white/10 shrink-0" />
+          <div className="space-y-2 flex-1">
+            <div className="w-28 h-4 bg-white/10 rounded" />
+            <div className="w-40 h-3 bg-white/5 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
 // لیست ۱۶ تخصص پزشکی-سینمایی اختصاصی بینجر
 const SPECIALTIES = [
   { id: 'comedy', name: 'فوق تخصص قهقهه', genreId: 35 },
@@ -51,6 +145,11 @@ const SPECIALTIES = [
 export default function BingerHomeScreen() {
   const router = useRouter();
   const supabase = createClient() as any;
+  const {
+    watchedRecords: contextWatchedRecords,
+    getWatchedRecords,
+    toggleWatchedEpisode,
+  } = useWatched();
 
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -59,10 +158,17 @@ export default function BingerHomeScreen() {
   // دیتای سریال‌ها و رکوردهای تماشا
   const [trackedShows, setTrackedShows] = useState<any[]>([]);
   const [watchedRecords, setWatchedRecords] = useState<any[]>([]);
+
+  // همگام‌سازی لحظه‌ای با کانتکست سراسری
+  useEffect(() => {
+    if (contextWatchedRecords) {
+      setWatchedRecords(contextWatchedRecords);
+    }
+  }, [contextWatchedRecords]);
   const [seasonEpisodesMap, setSeasonEpisodesMap] = useState<Record<string, any[]>>({});
 
-  // تب‌های تقویم: دیده‌نشده‌ها / امروز / این هفته / به‌زودی
-  const [calendarTab, setCalendarTab] = useState<'unwatched' | 'today' | 'this_week' | 'upcoming'>('today');
+  // تب‌های تقویم: امروز / این هفته / به‌زودی
+  const [calendarTab, setCalendarTab] = useState<'today' | 'this_week' | 'upcoming'>('today');
 
   // سوییچ منبع تقویم: سریال‌های من یا ترندهای جهانی
   const [calendarScope, setCalendarScope] = useState<'mine' | 'global'>('mine');
@@ -136,6 +242,18 @@ export default function BingerHomeScreen() {
     return assigned.name;
   }, [trackedShows, watchedRecords]);
 
+  // وضعیت دقیق اشتراک و روزهای باقی‌مانده کاربر
+  const subStatus = useMemo(() => {
+    return calculateSubscriptionDetails({
+      is_vip: userProfile?.is_vip,
+      role: userProfile?.role,
+      vip_until: userProfile?.vip_until,
+      created_at: userProfile?.created_at,
+      updated_at: userProfile?.updated_at,
+      user_metadata: currentUser?.user_metadata,
+    });
+  }, [userProfile, currentUser]);
+
   // ۱. واکشی اطلاعات جامع کاربر و دیتابیس
   const loadInitialData = async () => {
     try {
@@ -184,26 +302,8 @@ export default function BingerHomeScreen() {
         });
       }
 
-      // خواندن تمام قسمت‌های دیده‌شده
-      const allWatched: any[] = [];
-      let page = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('watched')
-          .select('show_id, episode_id')
-          .eq('user_id', user.id)
-          .range(page * 1000, (page + 1) * 1000 - 1);
-
-        if (error || !data || data.length === 0) {
-          hasMore = false;
-        } else {
-          allWatched.push(...data);
-          hasMore = data.length === 1000;
-          page++;
-        }
-      }
-
+      // خواندن تمام قسمت‌های دیده‌شده از کانتکست سراسری یکپارچه (بدون کوئری تکراری دیتابیس)
+      const allWatched = await getWatchedRecords();
       setWatchedRecords(allWatched);
 
       const watchedShowIds = new Set<number>(allWatched.map(w => Number(w.show_id)));
@@ -239,48 +339,68 @@ export default function BingerHomeScreen() {
 
       setTrackedShows(showsDetails);
 
-      // واکشی فصل‌های جاری برای دسترسی سریع به شناسه‌ها و عناوین
-      const seasonCache: Record<string, any[]> = {};
-      await Promise.all(
-        showsDetails.map(async (show) => {
-          const showWatchedCount = allWatched.filter(w => Number(w.show_id) === Number(show.id)).length;
-          const validSeasons = (show.seasons || [])
-            .filter((s: any) => s && s.season_number > 0)
-            .sort((a: any, b: any) => a.season_number - b.season_number);
+      // واکشی هوشمند و دسته‌ای فصل‌ها برای سریال‌های کاربر
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
 
-          let cumulative = 0;
-          let targetSeason = 1;
-          for (const s of validSeasons) {
-            const count = s.episode_count || 0;
-            if (showWatchedCount < cumulative + count) {
-              targetSeason = s.season_number;
-              break;
-            }
-            cumulative += count;
+      const seasonRequests: Array<{ showId: number; seasonNum: number }> = [];
+      showsDetails.forEach((show) => {
+        const showWatchedCount = allWatched.filter(w => Number(w.show_id) === Number(show.id)).length;
+        const validSeasons = (show.seasons || [])
+          .filter((s: any) => s && s.season_number > 0)
+          .sort((a: any, b: any) => a.season_number - b.season_number);
+
+        let cumulative = 0;
+        let targetSeason = 1;
+        for (const s of validSeasons) {
+          const count = s.episode_count || 0;
+          if (showWatchedCount < cumulative + count) {
+            targetSeason = s.season_number;
+            break;
           }
+          cumulative += count;
+        }
 
-          const seasonsToFetch = new Set<number>();
+        const seasonsToFetch = new Set<number>();
+        // ۱. فصل هدف تماشای کاربر یا فصل ۱
+        if (validSeasons.some((s: any) => s.season_number === targetSeason)) {
           seasonsToFetch.add(targetSeason);
-          validSeasons.forEach((s: any) => {
-            if (s.season_number >= targetSeason) {
-              seasonsToFetch.add(s.season_number);
-            }
-          });
-          if (show.next_episode_to_air?.season_number) seasonsToFetch.add(show.next_episode_to_air.season_number);
-          if (show.last_episode_to_air?.season_number) seasonsToFetch.add(show.last_episode_to_air.season_number);
+        } else if (validSeasons.length > 0) {
+          seasonsToFetch.add(validSeasons[0].season_number);
+        }
 
-          await Promise.all(
-            Array.from(seasonsToFetch).map(async (sNum) => {
-              try {
-                const sData = await getSeasonDetails(String(show.id), sNum);
-                if (sData?.episodes) {
-                  seasonCache[`${show.id}_${sNum}`] = sData.episodes;
-                }
-              } catch { }
-            })
-          );
-        })
-      );
+        // ۲. فصل قسمت بعدی در صورت وجود
+        if (show.next_episode_to_air?.season_number) {
+          seasonsToFetch.add(show.next_episode_to_air.season_number);
+        }
+
+        // ۳. فصل قسمت قبلی در صورت وجود (جهت فال‌بک)
+        if (show.last_episode_to_air?.season_number) {
+          seasonsToFetch.add(show.last_episode_to_air.season_number);
+        }
+
+        seasonsToFetch.forEach((sn) => {
+          seasonRequests.push({ showId: Number(show.id), seasonNum: sn });
+        });
+      });
+
+      const seasonCache: Record<string, any[]> = {};
+      const seasonBatchSize = 6;
+      for (let i = 0; i < seasonRequests.length; i += seasonBatchSize) {
+        const batch = seasonRequests.slice(i, i + seasonBatchSize);
+        await Promise.all(
+          batch.map(async ({ showId, seasonNum }) => {
+            try {
+              const sData = await getSeasonDetails(String(showId), seasonNum);
+              if (sData?.episodes) {
+                seasonCache[`${showId}_${seasonNum}`] = sData.episodes;
+              }
+            } catch (err) {
+              console.error(`Season details fetch error ${showId}_${seasonNum}:`, err);
+            }
+          })
+        );
+      }
 
       setSeasonEpisodesMap(seasonCache);
       setLoading(false);
@@ -326,7 +446,7 @@ export default function BingerHomeScreen() {
     });
   }, [watchedRecords, trackedShows]);
 
-  // ثبت تماشا به صورت Optimistic Update (آنی و بدون لودینگ بلاک‌کننده)
+  // ثبت تماشا به صورت Optimistic Update با استفاده از کانتکست یکپارچه
   const handleToggleWatched = async (
     e: React.MouseEvent,
     showId: number,
@@ -337,47 +457,14 @@ export default function BingerHomeScreen() {
     if (!currentUser || !episodeId) return;
 
     if (isAlreadyWatched) {
-      // آپدیت آنی لوکال (حذف)
-      setWatchedRecords(prev => prev.filter(w => Number(w.episode_id) !== Number(episodeId)));
-
-      const { error } = await supabase
-        .from('watched')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .eq('show_id', Number(showId))
-        .eq('episode_id', Number(episodeId));
-
-      if (error) {
-        // بازگرداندن در صورت خطا
-        setWatchedRecords(prev => [...prev, { show_id: Number(showId), episode_id: Number(episodeId) }]);
-      }
+      await toggleWatchedEpisode(showId, episodeId, true);
     } else {
       // فعال‌سازی انیمیشن اسلاید خروج کارت در نوبت تماشا
       setAnimatingCardId(showId);
-
-      // آپدیت آنی استیت لوکال
-      setTimeout(() => {
-        setWatchedRecords(prev => [...prev, { show_id: Number(showId), episode_id: Number(episodeId) }]);
+      setTimeout(async () => {
         setAnimatingCardId(null);
+        await toggleWatchedEpisode(showId, episodeId, false);
       }, 260);
-
-      // ثبت در پس‌زمینه دیتابیس
-      const { error } = await supabase
-        .from('watched')
-        .upsert([{
-          user_id: currentUser.id,
-          show_id: Number(showId),
-          episode_id: Number(episodeId)
-        }], { onConflict: 'user_id, episode_id' });
-
-      if (error) {
-        console.error("Optimistic insert failed:", error);
-        setWatchedRecords(prev => prev.filter(w => Number(w.episode_id) !== Number(episodeId)));
-      }
-    }
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
     }
   };
 
@@ -415,14 +502,29 @@ export default function BingerHomeScreen() {
         totalEpisodesCount += (s.episode_count || 0);
       });
 
-      let cumulative = 0;
+      const isEnded = show.status === 'Ended' || show.status === 'Canceled';
+      const isAllWatched = totalEpisodesCount > 0 && showWatched.length >= totalEpisodesCount;
+
+      // سریال‌های تمام‌شده‌ای که کاربر همه قسمت‌هایشان را دیده از نوبت تماشا حذف می‌شوند
+      if (isEnded && isAllWatched) {
+        return;
+      }
+
       let targetSeason = 1;
       let targetEpisodeNum = 1;
-      let isCompleted = false;
 
-      if (showWatched.length >= totalEpisodesCount && totalEpisodesCount > 0) {
-        isCompleted = true;
+      if (isAllWatched) {
+        // کاربر تمام قسمت‌های پخش‌شده سریال ادامه‌دار را دیده؛ هدایت به قسمت یا فصل آینده
+        if (show.next_episode_to_air) {
+          targetSeason = show.next_episode_to_air.season_number;
+          targetEpisodeNum = show.next_episode_to_air.episode_number;
+        } else {
+          const lastSeason = validSeasons[validSeasons.length - 1]?.season_number || 1;
+          targetSeason = lastSeason + 1;
+          targetEpisodeNum = 1;
+        }
       } else {
+        let cumulative = 0;
         for (const s of validSeasons) {
           const count = s.episode_count || 0;
           if (showWatched.length < cumulative + count) {
@@ -434,63 +536,83 @@ export default function BingerHomeScreen() {
         }
       }
 
-      // سریال‌های تمام‌شده‌ای که کاربر همه قسمت‌هایشان را دیده حذف می‌شوند
-      if (!isCompleted) {
-        const seasonEps = seasonEpisodesMap[`${show.id}_${targetSeason}`] || [];
-        const epData = seasonEps.find((e: any) => e.episode_number === targetEpisodeNum);
+      const seasonEps = seasonEpisodesMap[`${show.id}_${targetSeason}`] || [];
+      const epData = seasonEps.find((e: any) => e.episode_number === targetEpisodeNum);
 
-        let finalEpId = epData?.id;
-        let epTitle = epData?.name || `قسمت ${targetEpisodeNum}`;
-        let epAirDate = epData?.air_date;
+      let finalEpId = epData?.id;
+      let epTitle = epData?.name || `قسمت ${targetEpisodeNum}`;
+      let epAirDate = epData?.air_date;
 
-        if (!finalEpId) {
-          if (show.next_episode_to_air && show.next_episode_to_air.season_number === targetSeason && show.next_episode_to_air.episode_number === targetEpisodeNum) {
-            finalEpId = show.next_episode_to_air.id;
-            epTitle = show.next_episode_to_air.name || epTitle;
-            epAirDate = show.next_episode_to_air.air_date;
-          } else if (show.last_episode_to_air && show.last_episode_to_air.season_number === targetSeason && show.last_episode_to_air.episode_number === targetEpisodeNum) {
-            finalEpId = show.last_episode_to_air.id;
-            epTitle = show.last_episode_to_air.name || epTitle;
-            epAirDate = show.last_episode_to_air.air_date;
-          }
+      if (!finalEpId) {
+        if (show.next_episode_to_air && show.next_episode_to_air.season_number === targetSeason && show.next_episode_to_air.episode_number === targetEpisodeNum) {
+          finalEpId = show.next_episode_to_air.id;
+          epTitle = show.next_episode_to_air.name || epTitle;
+          epAirDate = show.next_episode_to_air.air_date;
+        } else if (show.last_episode_to_air && show.last_episode_to_air.season_number === targetSeason && show.last_episode_to_air.episode_number === targetEpisodeNum) {
+          finalEpId = show.last_episode_to_air.id;
+          epTitle = show.last_episode_to_air.name || epTitle;
+          epAirDate = show.last_episode_to_air.air_date;
         }
-
-        const targetSeasonInfo = validSeasons.find((s: any) => s.season_number === targetSeason);
-        const seasonAlreadyAired = targetSeasonInfo?.air_date ? new Date(targetSeasonInfo.air_date) <= now : false;
-
-        let isReleased = false;
-        let countdownBadge = "پخش‌نشده";
-
-        if (epAirDate) {
-          const airDateObj = new Date(epAirDate);
-          airDateObj.setHours(0, 0, 0, 0);
-          const diffDays = Math.round((airDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-          if (diffDays <= 0) {
-            isReleased = true;
-          } else if (diffDays === 1) {
-            countdownBadge = "پخش: فردا";
-          } else if (diffDays <= 7) {
-            countdownBadge = `پخش: ${diffDays} روز دیگر`;
-          } else {
-            countdownBadge = `پخش: ${diffDays} روز دیگر`;
-          }
-        } else if (seasonAlreadyAired) {
-          isReleased = true;
-        }
-
-        list.push({
-          show,
-          seasonNumber: targetSeason,
-          episodeNumber: targetEpisodeNum,
-          episodeId: finalEpId,
-          episodeTitle: epTitle,
-          isReleased,
-          countdownBadge,
-          watchedCount: Math.min(showWatched.length, totalEpisodesCount),
-          totalEpisodes: totalEpisodesCount || 0,
-        });
       }
+
+      const targetSeasonInfo = validSeasons.find((s: any) => s.season_number === targetSeason);
+      const seasonAlreadyAired = targetSeasonInfo?.air_date ? new Date(targetSeasonInfo.air_date) <= now : false;
+
+      let isReleased = false;
+      let countdownBadge = "پخش‌نشده";
+      let diffDays: number | null = null;
+
+      if (epAirDate) {
+        const airDateObj = new Date(epAirDate);
+        airDateObj.setHours(0, 0, 0, 0);
+        diffDays = Math.round((airDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 0) {
+          isReleased = true;
+        } else if (diffDays === 1) {
+          countdownBadge = "پخش: فردا";
+        } else if (diffDays <= 7) {
+          countdownBadge = `پخش: ${diffDays} روز دیگر`;
+        } else {
+          countdownBadge = `پخش: ${diffDays} روز دیگر`;
+        }
+      } else if (seasonAlreadyAired && !isAllWatched) {
+        isReleased = true;
+      } else if (isAllWatched) {
+        countdownBadge = "در انتظار فصل بعدی";
+      }
+
+      // فیلتر اختصاصی نوبت تماشا طبق دستور کاربر:
+      // ۱. مواردی که در انتظار فصل بعدی هستند کلاً نمایش داده نشوند
+      if (countdownBadge === "در انتظار فصل بعدی") {
+        return;
+      }
+
+      // ۲. مواردی که همه قسمت‌های فعلی را دیده‌اند، فقط اگر اپیزود بعدی تا ۱ هفته آینده (diffDays <= 7) پخش می‌شود نمایش داده شوند
+      if (isAllWatched) {
+        if (!epAirDate || diffDays === null || diffDays <= 0 || diffDays > 7) {
+          return;
+        }
+      }
+
+      // ۳. اگر اپیزود هنوز پخش نشده است، فقط مواردی که تا ۱ هفته آینده (diffDays <= 7) پخش می‌شوند نمایش داده شوند
+      if (!isReleased) {
+        if (diffDays === null || diffDays <= 0 || diffDays > 7) {
+          return;
+        }
+      }
+
+      list.push({
+        show,
+        seasonNumber: targetSeason,
+        episodeNumber: targetEpisodeNum,
+        episodeId: finalEpId,
+        episodeTitle: epTitle,
+        isReleased,
+        countdownBadge,
+        watchedCount: Math.min(showWatched.length, totalEpisodesCount),
+        totalEpisodes: totalEpisodesCount || 0,
+      });
     });
 
     // سورت: قسمت‌های آماده تماشا در صدر، موارد منتظر پخش در انتها
@@ -503,7 +625,7 @@ export default function BingerHomeScreen() {
     return list;
   }, [trackedShows, watchedRecords, seasonEpisodesMap]);
 
-  // ۳. تقویم پخش با تب‌بندی چهارگانه: دیده‌نشده‌ها، امروز، این هفته، به‌زودی
+  // ۳. تقویم پخش با تب‌بندی سه‌گانه: امروز، این هفته، به‌زودی
   const calendarData = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -511,7 +633,6 @@ export default function BingerHomeScreen() {
     const watchedEpisodeIds = new Set(watchedRecords.map(w => Number(w.episode_id)));
     const sourceShows = calendarScope === 'mine' ? trackedShows : globalAiringShows;
     const episodesList: any[] = [];
-    const unwatchedList: any[] = [];
     const addedKeys = new Set<string>();
 
     sourceShows.forEach(show => {
@@ -522,7 +643,7 @@ export default function BingerHomeScreen() {
         return;
       }
 
-      // ۱. اگر فصل‌های سریال لود شده‌اند، اپیزودهای آینده و ندیده‌اش خوانده می‌شوند
+      // ۱. اگر فصل‌های سریال لود شده‌اند، اپیزودهای آینده خوانده می‌شوند
       const validSeasons = (show.seasons || []).filter((s: any) => s && s.season_number > 0);
       validSeasons.forEach((season: any) => {
         const seasonEps = seasonEpisodesMap[`${show.id}_${season.season_number}`] || [];
@@ -552,17 +673,6 @@ export default function BingerHomeScreen() {
               isWatched
             });
           }
-          // هر اپیزود پخش‌شده‌ای که کاربر هنوز ندیده است ("هر چیزی که ندیدم هم باید ببینم هم نشونم بده !")
-          else if (!isWatched && calendarScope === 'mine') {
-            addedKeys.add(key);
-            unwatchedList.push({
-              show,
-              episode: ep,
-              airDate: airDateObj,
-              diffDays: diffDays ?? -999,
-              isWatched: false
-            });
-          }
         });
       });
 
@@ -587,17 +697,42 @@ export default function BingerHomeScreen() {
           }
         }
       }
+
+      // ۳. اضافه کردن فصل‌های آینده تا ۱ سال که هنوز قسمت‌های مجزا ندارند (Season Premiere)
+      validSeasons.forEach((season: any) => {
+        if (season.air_date) {
+          const airDateObj = new Date(season.air_date);
+          airDateObj.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((airDateObj.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 0 && diffDays <= 365) {
+            const hasAnyEp = episodesList.some(e => e.show.id === show.id && e.episode.season_number === season.season_number);
+            if (!hasAnyEp) {
+              const syntheticKey = `${show.id}_s${season.season_number}_premiere`;
+              if (!addedKeys.has(syntheticKey)) {
+                addedKeys.add(syntheticKey);
+                episodesList.push({
+                  show,
+                  episode: {
+                    id: season.id || (show.id * 1000 + season.season_number),
+                    name: `شروع ${season.name || `فصل ${season.season_number}`}`,
+                    season_number: season.season_number,
+                    episode_number: 1,
+                    air_date: season.air_date,
+                    overview: season.overview
+                  },
+                  airDate: airDateObj,
+                  diffDays,
+                  isWatched: false
+                });
+              }
+            }
+          }
+        }
+      });
     });
 
     // سورت زمانی از امروز به آینده
     episodesList.sort((a, b) => (a.airDate?.getTime() || 0) - (b.airDate?.getTime() || 0));
-
-    // سورت دیده‌نشده‌ها به ترتیب شماره فصل و قسمت
-    unwatchedList.sort((a, b) => {
-      if (a.show.id !== b.show.id) return a.show.name.localeCompare(b.show.name);
-      if (a.episode.season_number !== b.episode.season_number) return a.episode.season_number - b.episode.season_number;
-      return a.episode.episode_number - b.episode.episode_number;
-    });
 
     // تقسیم به تب‌های استاندارد
     const todayList = episodesList.filter(e => e.diffDays === 0);
@@ -605,12 +740,10 @@ export default function BingerHomeScreen() {
     const upcomingList = episodesList.filter(e => e.diffDays > 7);
 
     return {
-      unwatchedList,
       todayList,
       thisWeekList,
       upcomingList,
       totalTodayCount: todayList.length,
-      totalUnwatchedCount: unwatchedList.length,
     };
   }, [trackedShows, globalAiringShows, calendarScope, seasonEpisodesMap, watchedRecords]);
 
@@ -622,24 +755,11 @@ export default function BingerHomeScreen() {
       .slice(0, 5);
   }, [globalAiringShows, trackedShows]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex flex-col justify-center items-center gap-4 text-[#ccff00] relative overflow-hidden">
-        <div className="absolute top-1/3 w-80 h-80 bg-[#ccff00]/10 blur-[140px] rounded-full pointer-events-none" />
-        <div className="relative flex flex-col items-center gap-3 z-10">
-          <Loader2 className="animate-spin text-[#ccff00]" size={40} />
-          <span className="text-xs font-bold text-gray-400 tracking-wide">در حال آماده‌سازی مرکز تماشای Binger...</span>
-        </div>
-      </div>
-    );
-  }
-
   // انتخاب لیست نمایشی تقویم بر اساس تب فعال
   const currentCalendarDisplay =
-    calendarTab === 'unwatched' ? calendarData.unwatchedList :
-      calendarTab === 'today' ? calendarData.todayList :
-        calendarTab === 'this_week' ? calendarData.thisWeekList :
-          calendarData.upcomingList;
+    calendarTab === 'today' ? calendarData.todayList :
+      calendarTab === 'this_week' ? calendarData.thisWeekList :
+        calendarData.upcomingList;
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-32 relative selection:bg-[#ccff00] selection:text-black">
@@ -669,28 +789,42 @@ export default function BingerHomeScreen() {
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative group">
               <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white/[0.06] border border-white/15 flex items-center justify-center text-lg sm:text-xl shadow-inner shrink-0 group-hover:border-[#ccff00]/40 transition-colors">
-                {userProfile?.avatar_url || '😎'}
+                {loading && !userProfile ? (
+                  <div className="w-full h-full rounded-2xl bg-white/10 animate-pulse" />
+                ) : (
+                  userProfile?.avatar_url || '😎'
+                )}
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#050505]" />
             </div>
             <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1.5 truncate">
-                <VipUsername
-                  username={userProfile?.username || currentUser?.user_metadata?.full_name || 'کاربر بینجر'}
-                  isVip={userProfile?.is_vip === true || userProfile?.role === 'admin'}
-                  badgeSize={15}
-                  className="text-xs sm:text-sm md:text-base font-black truncate"
-                />
-              </div>
-              <span className="text-[10px] sm:text-[11px] font-bold text-[#ccff00] flex items-center gap-1 truncate mt-0.5">
-                <Award size={12} className="shrink-0" />
-                <span className="truncate">{userSpecialty}</span>
-              </span>
+              {loading && !userProfile ? (
+                <div className="space-y-1.5 py-0.5">
+                  <div className="w-24 sm:w-32 h-4 bg-white/10 rounded animate-pulse" />
+                  <div className="w-16 sm:w-20 h-3 bg-white/5 rounded animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <VipUsername
+                      username={userProfile?.username || currentUser?.user_metadata?.full_name || 'کاربر بینجر'}
+                      isVip={userProfile?.is_vip === true || userProfile?.role === 'admin'}
+                      badgeSize={15}
+                      className="text-xs sm:text-sm md:text-base font-black truncate"
+                    />
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-[#ccff00] flex items-center gap-1 truncate mt-0.5">
+                    <Award size={12} className="shrink-0" />
+                    <span className="truncate">{userSpecialty}</span>
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* نوتیفیکیشن عددی قسمت‌های امروز (کلیک‌پذیر برای هدایت مستقیم به اپیزود امروز) */}
+          {/* نوتیفیکیشن عددی قسمت‌های امروز و بج اشتراک VIP با روزهای باقی‌مانده */}
           <div className="flex items-center gap-2 shrink-0">
+            <SubscriptionBadge status={subStatus} />
             <button
               onClick={handleScrollToTodayEpisodes}
               disabled={calendarData.totalTodayCount === 0}
@@ -727,10 +861,32 @@ export default function BingerHomeScreen() {
 
       <main className="max-w-4xl mx-auto px-4 md:px-8 mt-6 space-y-10">
 
+        {/* هشدار اتمام اشتراک VIP در صورت نزدیک شدن به موعد تمدید */}
+        {subStatus.isExpiringSoon && !subStatus.isLifetime && (
+          <div className="bg-gradient-to-r from-rose-500/15 via-amber-500/10 to-transparent border border-rose-500/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-[0_0_20px_rgba(244,63,94,0.15)] animate-in fade-in">
+            <div className="flex items-center gap-2.5 text-xs text-rose-200">
+              <span className="p-1.5 rounded-xl bg-rose-500/20 text-rose-300">
+                <AlertCircle size={16} />
+              </span>
+              <span>
+                <strong>فقط {subStatus.formattedDaysRemaining}</strong> از اشتراک ماهانه VIP شما باقی مانده است. جهت ادامه دسترسی نامحدود، اشتراک خود را تمدید کنید.
+              </span>
+            </div>
+            <Link
+              href="/dashboard/subscription"
+              className="bg-amber-400 hover:bg-amber-300 text-black text-xs font-black px-3.5 py-1.5 rounded-xl transition-all shrink-0 shadow-md"
+            >
+              تمدید اشتراک
+            </Link>
+          </div>
+        )}
+
         {/* ========================================================================= */}
         {/* نوار خلاصه آمار تماشا (Quick Stats Strip - بسیار شیک و خلوت) */}
         {/* ========================================================================= */}
-        {trackedShows.length > 0 && (
+        {loading ? (
+          <StatsBarSkeleton />
+        ) : trackedShows.length > 0 && (
           <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
             <div className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 rounded-2xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 transition-all">
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
@@ -771,9 +927,14 @@ export default function BingerHomeScreen() {
         )}
 
         {/* ========================================================================= */}
-        {/* مدیریت حالت کاربر جدید (Cold Start Fallback) */}
+        {/* نوبت تماشا و تقویم با بارگذاری مرحله‌ای (Progressive Loading) */}
         {/* ========================================================================= */}
-        {trackedShows.length === 0 ? (
+        {loading ? (
+          <>
+            <UpNextSkeleton />
+            <CalendarSkeleton />
+          </>
+        ) : trackedShows.length === 0 ? (
           <section className="bg-gradient-to-b from-white/[0.06] via-white/[0.02] to-transparent border border-white/10 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl">
             <div className="flex flex-col items-center text-center space-y-2">
               <div className="w-14 h-14 rounded-2xl bg-[#ccff00]/10 border border-[#ccff00]/20 text-[#ccff00] flex items-center justify-center mb-1 shadow-[0_0_20px_rgba(204,255,0,0.15)]">
@@ -876,7 +1037,14 @@ export default function BingerHomeScreen() {
                         }`}
                       >
                         <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                          <div className="w-13 h-19 sm:w-15 sm:h-21 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-md relative group-hover:border-white/20 transition-all">
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/dashboard/tv/${show.id}`);
+                            }}
+                            title={`مشاهده صفحه سریال ${show.name}`}
+                            className="w-13 h-19 sm:w-15 sm:h-21 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-md relative group-hover:border-white/20 transition-all cursor-pointer hover:ring-2 hover:ring-[#ccff00]/60"
+                          >
                             <img
                               src={getImageUrl(show.poster_path)}
                               alt={show.name}
@@ -885,9 +1053,28 @@ export default function BingerHomeScreen() {
                           </div>
 
                           <div className="flex flex-col min-w-0">
-                            <span className="text-sm sm:text-base font-black text-white truncate group-hover:text-[#ccff00] transition-colors">
-                              {show.name}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/dashboard/tv/${show.id}`);
+                                }}
+                                title={`مشاهده صفحه سریال ${show.name}`}
+                                className="text-sm sm:text-base font-black text-white truncate hover:text-[#ccff00] hover:underline transition-colors cursor-pointer"
+                              >
+                                {show.name}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/dashboard/tv/${show.id}`);
+                                }}
+                                title="مشاهده صفحه سریال"
+                                className="p-1 rounded-lg bg-white/5 hover:bg-[#ccff00]/20 text-gray-400 hover:text-[#ccff00] transition-colors shrink-0"
+                              >
+                                <Tv size={13} />
+                              </button>
+                            </div>
 
                             <div className="flex items-center gap-2 mt-1">
                               <span className="px-2 py-0.5 rounded-lg bg-[#ccff00]/10 border border-[#ccff00]/25 text-[#ccff00] font-mono font-bold text-xs ltr">
@@ -983,27 +1170,8 @@ export default function BingerHomeScreen() {
                 </div>
               </div>
 
-              {/* تب‌بندی چهارگانه زمانی: دیده‌نشده‌ها / امروز / این هفته / به‌زودی */}
+              {/* تب‌بندی سه‌گانه زمانی: امروز / این هفته / به‌زودی */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {/* تب دیده‌نشده‌ها (پخش‌شده‌هایی که کاربر هنوز تماشا نکرده است) */}
-                {calendarScope === 'mine' && calendarData.unwatchedList.length > 0 && (
-                  <button
-                    onClick={() => setCalendarTab('unwatched')}
-                    className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                      calendarTab === 'unwatched'
-                        ? 'bg-amber-400 text-black font-black shadow-[0_0_20px_rgba(251,191,36,0.3)]'
-                        : 'bg-white/[0.04] text-gray-400 hover:bg-white/[0.08] hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <AlertCircle size={14} className={calendarTab === 'unwatched' ? 'text-black' : 'text-amber-400'} />
-                    <span>دیده‌نشده‌ها</span>
-                    <span className={`text-[11px] font-mono px-1.5 py-0.2 rounded-md ${
-                      calendarTab === 'unwatched' ? 'bg-black/20 text-black font-black' : 'bg-white/10 text-gray-300'
-                    }`}>
-                      {calendarData.unwatchedList.length}
-                    </span>
-                  </button>
-                )}
                 <button
                   onClick={() => setCalendarTab('today')}
                   className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
@@ -1102,7 +1270,14 @@ export default function BingerHomeScreen() {
                         }`}
                       >
                         <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
-                          <div className="w-12 h-16 sm:w-13 sm:h-18 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-sm">
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/dashboard/tv/${show.id}`);
+                            }}
+                            title={`مشاهده صفحه سریال ${show.name}`}
+                            className="w-12 h-16 sm:w-13 sm:h-18 rounded-xl overflow-hidden shrink-0 bg-white/5 border border-white/10 shadow-sm cursor-pointer hover:ring-2 hover:ring-[#ccff00]/60 transition-all"
+                          >
                             <img
                               src={getImageUrl(show.poster_path)}
                               alt={show.name}
@@ -1112,11 +1287,28 @@ export default function BingerHomeScreen() {
 
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className={`text-sm font-black truncate ${
-                                isWatched ? 'text-gray-400' : 'text-white group-hover:text-[#ccff00] transition-colors'
-                              }`}>
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/dashboard/tv/${show.id}`);
+                                }}
+                                title={`مشاهده صفحه سریال ${show.name}`}
+                                className={`text-sm font-black truncate hover:underline cursor-pointer ${
+                                  isWatched ? 'text-gray-400' : 'text-white group-hover:text-[#ccff00] transition-colors'
+                                }`}
+                              >
                                 {show.name}
                               </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/dashboard/tv/${show.id}`);
+                                }}
+                                title="مشاهده صفحه سریال"
+                                className="p-1 rounded-lg bg-white/5 hover:bg-[#ccff00]/20 text-gray-400 hover:text-[#ccff00] transition-colors shrink-0"
+                              >
+                                <Tv size={12} />
+                              </button>
                               {isWatched && (
                                 <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
                                   دیده شده
@@ -1167,6 +1359,20 @@ export default function BingerHomeScreen() {
         )}
 
       </main>
+
+      {/* مودال جزئیات قسمت */}
+      {selectedEpData && (
+        <EpisodeModal
+          showId={String(selectedEpData.showId)}
+          seasonNum={Number(selectedEpData.season)}
+          episodeNum={Number(selectedEpData.number)}
+          watchedEpisodeIds={watchedRecords.map(w => Number(w.episode_id))}
+          onClose={() => setSelectedEpData(null)}
+          onWatchedChange={() => {
+            loadInitialData();
+          }}
+        />
+      )}
 
     </div>
   );

@@ -6,10 +6,12 @@ import { getShowDetails, getImageUrl, getReleasedEpisodeCount } from '@/lib/tmdb
 import { useRouter } from 'next/navigation';
 import { Loader2, ArrowRight, ListChecks, Bookmark, Eye, Clock, Tv, CheckCircle } from 'lucide-react';
 import { WatchlistButton } from '../components/WatchlistButton';
+import { useWatched } from '@/lib/watchedContext';
 
 export default function MyListsPage() {
   const supabase = createClient() as any;
   const router = useRouter();
+  const { getWatchedRecords } = useWatched();
   
   const [activeTab, setActiveTab] = useState<'completed' | 'watched' | 'watchlist'>('watched');
   const [tabInitialized, setTabInitialized] = useState(false);
@@ -40,26 +42,8 @@ export default function MyListsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { window.location.href = '/login'; return; }
 
-        // ۱. دریافت نامحدود تمام اپیزودهای تماشا شده (شکستن سقف ۱۰۰۰تایی)
-        let allWatchedData: any[] = [];
-        let page = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('watched')
-            .select('show_id, episode_id')
-            .eq('user_id', user.id)
-            .range(page * 1000, (page + 1) * 1000 - 1);
-
-          if (error || !data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allWatchedData = [...allWatchedData, ...data];
-            if (data.length < 1000) hasMore = false;
-            else page++;
-          }
-        }
+        // ۱. دریافت تمام اپیزودهای تماشاشده از کانتکست یکپارچه سراسری
+        const allWatchedData = await getWatchedRecords();
 
         // ۲. دریافت واچ‌لیست کاربر
         const { data: watchlistData } = await supabase

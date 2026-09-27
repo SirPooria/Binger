@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
 import { MAX_FAVORITES } from '@/lib/favoritesLimit';
+import { useWatched } from '@/lib/watchedContext';
 
 export { MAX_FAVORITES };
 
 export default function ManageFavoritesPage() {
   const router = useRouter();
   const supabase = createClient() as any;
+  const { getWatchedRecords } = useWatched();
 
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -51,34 +53,10 @@ export default function ManageFavoritesPage() {
         const favSet = new Set<number>(favIds);
         setFavoriteIds(favSet);
 
-        // ۲. دریافت تمام رکوردهای تماشاشده کاربر بدون محدودیت
-        let allWatchedData: any[] = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('watched')
-            .select('show_id, created_at')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1);
-
-          if (error || !data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allWatchedData = [...allWatchedData, ...data];
-            if (data.length < pageSize) {
-              hasMore = false;
-            } else {
-              page++;
-            }
-          }
-        }
-
+        // ۲. دریافت تمام رکوردهای تماشاشده از کانتکست یکپارچه سراسری
+        const allWatchedData = await getWatchedRecords();
         const sortedWatched = [...allWatchedData].sort(
-          (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          (a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
         );
         const uniqueWatchedShowIds: number[] = Array.from(new Set(sortedWatched.map((i: any) => Number(i.show_id))));
 

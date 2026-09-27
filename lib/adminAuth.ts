@@ -25,7 +25,15 @@ export async function verifyAdminSession(): Promise<{
     .eq('id', user.id)
     .maybeSingle();
 
-  if (profileError || profile?.role !== 'admin') {
+  const adminEmails = (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const isEmailAdmin = Boolean(user.email && adminEmails.includes(user.email.toLowerCase()));
+  const isRoleAdmin = profile?.role === 'admin';
+
+  if (!isRoleAdmin && !isEmailAdmin) {
     return { authorized: false, user: null, supabase };
   }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { calculateSubscriptionDetails } from '@/lib/subscription';
 
 export async function GET() {
   const { authorized, supabase } = await verifyAdminSession();
@@ -11,7 +12,7 @@ export async function GET() {
     const [profilesRes, watchedRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, username, bio, avatar_url, role, is_vip, created_at, phone')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(100),
       supabase.from('watched').select('user_id'),
@@ -32,6 +33,8 @@ export async function GET() {
         ? rawPhone.slice(0, 4) + '***' + rawPhone.slice(-4)
         : rawPhone;
 
+      const sub = calculateSubscriptionDetails(p);
+
       return {
         id: p.id,
         username: p.username || 'کاربر بینجر',
@@ -41,6 +44,9 @@ export async function GET() {
         created_at: p.created_at,
         phone: maskedPhone,
         watchedCount: watchedMap[p.id] || 0,
+        days_remaining: sub.daysRemaining,
+        formatted_days: sub.formattedDaysRemaining,
+        subscription_status: sub.statusLabel,
       };
     });
 

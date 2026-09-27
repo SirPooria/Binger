@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ShowCardProgress } from '../components/ShowProgressBar';
 import { WatchlistButton } from '../components/WatchlistButton';
 import { createClient } from '@/lib/supabase';
+import { useWatched } from '@/lib/watchedContext';
 
 const QUICK_CHIPS = [
   { label: "😂 بترکم از خنده", text: "یه سریال کمدی و خنده دار خفن معرفی کن که حالمو حسابی جا بیاره" },
@@ -26,6 +27,7 @@ const INITIAL_MESSAGE = {
 export default function MoodChatPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { getWatchedRecords } = useWatched();
   const scrollRef = useRef<HTMLDivElement>(null);
   
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -82,36 +84,9 @@ export default function MoodChatPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        let allWatched: { show_id: number; created_at: string }[] = [];
-        let from = 0;
-        const PAGE_SIZE = 1000;
-        let hasMore = true;
-
-        // حلقه نامحدود برای دور زدن لیمیت ۱۰۰۰ تایی سوپابیس
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('watched')
-            .select('show_id, created_at')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .range(from, from + PAGE_SIZE - 1);
-
-          if (error || !data || data.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          allWatched = allWatched.concat(data.map(d => ({ show_id: Number(d.show_id), created_at: d.created_at })));
-
-          if (data.length < PAGE_SIZE) {
-            hasMore = false;
-          } else {
-            from += PAGE_SIZE;
-          }
-        }
-
-        // شناسه‌های یکتا برای فیلتر کردن
-        const uniqueIds: number[] = Array.from(new Set(allWatched.map(w => w.show_id)));
+        // دریافت دیتای تماشاشده از کانتکست یکپارچه سراسری
+        const allWatched = await getWatchedRecords();
+        const uniqueIds: number[] = Array.from(new Set(allWatched.map(w => Number(w.show_id))));
         setWatchedIds(uniqueIds);
 
         // استخراج نام چند سریال آخری که دیده تا به هوش مصنوعی منتقل شود

@@ -1,0 +1,27 @@
+import type { MetadataRoute } from 'next';
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: 'Binger',
+    short_name: 'Binger',
+    description: 'سامانه هوشمند مدیریت و پیگیری تماشای فیلم و سریال',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#050505',
+    theme_color: '#0f172a',
+    icons: [
+      {
+        src: '/icons/icon-192x192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/icons/icon-512x512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+    ],
+  };
+}

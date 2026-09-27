@@ -2,11 +2,17 @@
 // All requests are routed through the secure server-only TMDB gateway (/api/tmdb/...)
 // No secret API keys are bundled or exposed to the client.
 
+import { createBrowserClient } from '@supabase/ssr';
+
 export interface TMDBShow {
   id: number;
   name: string;
+  name_en?: string;
+  name_fa?: string;
   original_name?: string;
   overview?: string;
+  overview_en?: string;
+  overview_fa?: string;
   poster_path: string | null;
   backdrop_path: string | null;
   vote_average?: number;
@@ -178,7 +184,8 @@ function getBaseApiUrl(): string {
     return '/api/tmdb';
   }
   // Server-side fallback for internal fetch
-  const host = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const port = process.env.PORT || '3001';
+  const host = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
   return `${host}/api/tmdb`;
 }
 
@@ -204,14 +211,60 @@ async function fetchFromGateway<T>(path: string, params: Record<string, string |
 }
 
 // 1. Image URL builders (pure CDN URLs, no secrets required)
-export const getImageUrl = (path: string | null): string => {
+export type TMDBPosterSize = 'w92' | 'w154' | 'w185' | 'w342' | 'w500' | 'w780' | 'original';
+export type TMDBBackdropSize = 'w300' | 'w780' | 'w1280' | 'original';
+export type TMDBStillSize = 'w92' | 'w185' | 'w300' | 'original';
+export type TMDBProfileSize = 'w45' | 'w185' | 'h632' | 'original';
+
+const TMDB_CDN_BASE = 'https://white-disk-01cc.prafooseh.workers.dev/t/p';
+
+/**
+ * Generates optimized poster image URLs.
+ * Default is w342 (crisp on mobile and desktop card grids with ~50% lower weight than w500).
+ * Never serves raw/original sizes to prevent bandwidth waste.
+ */
+export const getImageUrl = (path: string | null, size: TMDBPosterSize = 'w342'): string => {
   if (!path) return '/placeholder.png';
-  return `https://white-disk-01cc.prafooseh.workers.dev/t/p/w500${path}`;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const effectiveSize = size === 'original' ? 'w500' : size;
+  return `${TMDB_CDN_BASE}/${effectiveSize}${cleanPath}`;
 };
 
-export const getBackdropUrl = (path: string | null): string => {
+/**
+ * Generates optimized backdrop image URLs.
+ * Default is w1280 (high definition for hero backdrops, saving 90%+ bandwidth compared to multi-megabyte /original/).
+ */
+export const getBackdropUrl = (path: string | null, size: TMDBBackdropSize = 'w1280'): string => {
   if (!path) return '';
-  return `https://white-disk-01cc.prafooseh.workers.dev/t/p/original${path}`;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const effectiveSize = size === 'original' ? 'w1280' : size;
+  return `${TMDB_CDN_BASE}/${effectiveSize}${cleanPath}`;
+};
+
+/**
+ * Generates optimized episode screenshot / still image URLs.
+ * Default is w300.
+ */
+export const getStillUrl = (path: string | null, size: TMDBStillSize = 'w300'): string => {
+  if (!path) return '/placeholder.png';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const effectiveSize = size === 'original' ? 'w300' : size;
+  return `${TMDB_CDN_BASE}/${effectiveSize}${cleanPath}`;
+};
+
+/**
+ * Generates optimized cast / crew profile avatar URLs.
+ * Default is w185.
+ */
+export const getProfileUrl = (path: string | null, size: TMDBProfileSize = 'w185'): string => {
+  if (!path) return '/placeholder.png';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const effectiveSize = size === 'original' ? 'w185' : size;
+  return `${TMDB_CDN_BASE}/${effectiveSize}${cleanPath}`;
 };
 
 // 2. Trending & Popular Shows
@@ -243,31 +296,129 @@ export const searchShows = async (query: string): Promise<TMDBShow[]> => {
   return data?.results || [];
 };
 
-// 4. Show Details
-export const getShowDetails = async (id: string): Promise<TMDBShow | null> => {
-  const showEn = await fetchFromGateway<TMDBShow>(`tv/${id}`, { language: 'en-US' });
-  if (!showEn) return null;
-
+// Supabase client helper (modular & fail-safe across server, client, and test environments)
+function getSupabaseClient() {
   try {
-    const showFa = await fetchFromGateway<TMDBShow>(`tv/${id}`, { language: 'fa-IR' });
-    if (showFa?.overview && showFa.overview.trim() !== '') {
-      showEn.overview = showFa.overview;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return null;
     }
+    return createBrowserClient(supabaseUrl, supabaseAnonKey) as any;
   } catch {
-    // English fallback is preserved
+    return null;
+  }
+}
+
+// 7-day TTL for Database Mirroring of TV show metadata
+export const SHOW_DB_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// 4. Show Details (Database Mirroring + Concurrent dual-language fetch)
+export const getShowDetails = async (id: string): Promise<TMDBShow | null> => {
+  const numId = Number(id);
+
+  // --- Step A: Query Supabase cached_shows by ID (Instant Cache Hit) ---
+  if (!isNaN(numId)) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: row, error } = await supabase
+          .from('cached_shows')
+          .select('data, updated_at')
+          .eq('id', numId)
+          .maybeSingle();
+
+        if (!error && row && row.data) {
+          const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+          const isFresh = Date.now() - updatedAt < SHOW_DB_CACHE_TTL_MS;
+          if (isFresh) {
+            return row.data as TMDBShow;
+          }
+        }
+      }
+    } catch (dbErr) {
+      // Non-blocking fail-safe: log warning and proceed to TMDB fetch
+      console.warn(`[getShowDetails] Supabase cache read skipped for show ${id}:`, dbErr);
+    }
   }
 
-  return showEn;
+  // --- Step B: If not found (or too old), fetch from TMDB concurrently ---
+  const [showEn, showFa] = await Promise.all([
+    fetchFromGateway<TMDBShow>(`tv/${id}`, { language: 'en-US' }).catch(() => null),
+    fetchFromGateway<TMDBShow>(`tv/${id}`, { language: 'fa-IR' }).catch(() => null),
+  ]);
+
+  const baseShow = showEn || showFa;
+  if (!baseShow) return null;
+
+  // Preserve English metadata for dual-language display / fallbacks
+  if (showEn) {
+    baseShow.name_en = showEn.name;
+    baseShow.overview_en = showEn.overview;
+  }
+
+  // Preserve Persian metadata and apply Persian overview if available
+  if (showFa) {
+    baseShow.name_fa = showFa.name;
+    baseShow.overview_fa = showFa.overview;
+
+    if (showFa.overview && showFa.overview.trim() !== '') {
+      baseShow.overview = showFa.overview;
+    }
+  }
+
+  // --- Step C: Asynchronously UPSERT this new data into cached_shows (Background) ---
+  if (!isNaN(numId)) {
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase
+            .from('cached_shows')
+            .upsert(
+              {
+                id: numId,
+                data: baseShow,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+        }
+      } catch (upsertErr) {
+        // Fail-safe: DB failure should never break the client application
+        console.warn(`[getShowDetails] Background cache upsert failed for show ${id}:`, upsertErr);
+      }
+    })();
+  }
+
+  return baseShow;
 };
 
-// 5. Season Details
+const seasonCacheMap = new Map<string, TMDBSeason>();
+
+// 5. Season Details (Concurrent dual-language fetch)
 export const getSeasonDetails = async (id: string, seasonNumber: number): Promise<TMDBSeason | null> => {
-  const dataFa = await fetchFromGateway<TMDBSeason>(`tv/${id}/season/${seasonNumber}`, { language: 'fa-IR' });
-  if (dataFa && dataFa.episodes && dataFa.episodes.length > 0 && !dataFa.episodes[0].overview) {
-    const dataEn = await fetchFromGateway<TMDBSeason>(`tv/${id}/season/${seasonNumber}`, { language: 'en-US' });
-    return dataEn || dataFa;
+  const cacheKey = `${id}_${seasonNumber}`;
+  if (seasonCacheMap.has(cacheKey)) {
+    return seasonCacheMap.get(cacheKey)!;
   }
-  return dataFa;
+
+  const [dataFa, dataEn] = await Promise.all([
+    fetchFromGateway<TMDBSeason>(`tv/${id}/season/${seasonNumber}`, { language: 'fa-IR' }).catch(() => null),
+    fetchFromGateway<TMDBSeason>(`tv/${id}/season/${seasonNumber}`, { language: 'en-US' }).catch(() => null),
+  ]);
+
+  let result = dataFa;
+  if (dataFa && dataFa.episodes && dataFa.episodes.length > 0 && !dataFa.episodes[0].overview) {
+    result = dataEn || dataFa;
+  } else if (!dataFa) {
+    result = dataEn;
+  }
+
+  if (result) {
+    seasonCacheMap.set(cacheKey, result);
+  }
+  return result;
 };
 
 // 6. Episode Details
@@ -278,80 +429,162 @@ export const getEpisodeDetails = async (showId: string, seasonNum: string, episo
   });
 };
 
-// 7. Person Details
+// 7. Person Details (Concurrent dual-language fetch)
 export const getPersonDetails = async (id: string): Promise<TMDBPerson | null> => {
-  const data = await fetchFromGateway<TMDBPerson>(`person/${id}`, {
-    language: 'fa-IR',
-    append_to_response: 'tv_credits',
-  });
+  const [dataFa, dataEn] = await Promise.all([
+    fetchFromGateway<TMDBPerson>(`person/${id}`, {
+      language: 'fa-IR',
+      append_to_response: 'tv_credits',
+    }).catch(() => null),
+    fetchFromGateway<TMDBPerson>(`person/${id}`, {
+      language: 'en-US',
+      append_to_response: 'tv_credits',
+    }).catch(() => null),
+  ]);
+
+  const data = dataFa || dataEn;
   if (!data) return null;
 
   if (!data.biography || !data.biography.trim()) {
-    const fallback = await fetchFromGateway<TMDBPerson>(`person/${id}`, {
-      language: 'en-US',
-      append_to_response: 'tv_credits',
-    });
-    if (fallback) {
-      data.biography = fallback.biography || '';
-      data.tv_credits = data.tv_credits || fallback.tv_credits;
+    if (dataEn) {
+      data.biography = dataEn.biography || '';
+      data.tv_credits = data.tv_credits || dataEn.tv_credits;
     }
   }
 
   return data;
 };
 
-// 8. Global Airing Shows
-export const getGlobalAiringShows = async (): Promise<TMDBShow[]> => {
-  try {
-    const today = new Date();
-    const futureDate = new Date();
-    futureDate.setDate(today.getDate() + 90);
+// 8. Global Airing Shows (24-Hour Persistent Multi-Layer Cache)
+const GLOBAL_AIRING_CACHE_KEY = 'binger_global_airing_shows_cache_v2';
+const GLOBAL_AIRING_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (fetch once per day)
 
-    const todayStr = today.toISOString().split('T')[0];
-    const futureDateStr = futureDate.toISOString().split('T')[0];
+interface GlobalAiringCacheEntry {
+  timestamp: number;
+  data: TMDBShow[];
+}
 
-    const [p1, p2, p3] = await Promise.all([
-      fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
-        language: 'en-US',
-        sort_by: 'popularity.desc',
-        'air_date.gte': todayStr,
-        'air_date.lte': futureDateStr,
-        page: 1,
-      }),
-      fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
-        language: 'en-US',
-        sort_by: 'popularity.desc',
-        'air_date.gte': todayStr,
-        'air_date.lte': futureDateStr,
-        page: 2,
-      }),
-      fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
-        language: 'en-US',
-        sort_by: 'popularity.desc',
-        'air_date.gte': todayStr,
-        'air_date.lte': futureDateStr,
-        page: 3,
-      }),
-    ]);
+let memoryGlobalAiringCache: GlobalAiringCacheEntry | null = null;
+let globalAiringFetchPromise: Promise<TMDBShow[]> | null = null;
 
-    const combinedData = [...(p1?.results || []), ...(p2?.results || []), ...(p3?.results || [])];
-    const uniqueMap = new Map<number, TMDBShow>();
-    combinedData.forEach((s) => {
-      if (!uniqueMap.has(s.id)) uniqueMap.set(s.id, s);
-    });
+function readStoredGlobalAiring(): TMDBShow[] | null {
+  const now = Date.now();
 
-    const detailedShows = await Promise.all(
-      Array.from(uniqueMap.keys()).map((id) => getShowDetails(String(id)))
-    );
-
-    return detailedShows.filter(
-      (s): s is TMDBShow =>
-        Boolean(s && s.next_episode_to_air && new Date(s.next_episode_to_air.air_date) >= new Date() && s.poster_path)
-    );
-  } catch (err) {
-    console.error('Global Airing Shows Error:', err);
-    return [];
+  // 1. Check in-process RAM cache
+  if (memoryGlobalAiringCache && (now - memoryGlobalAiringCache.timestamp < GLOBAL_AIRING_TTL_MS)) {
+    return memoryGlobalAiringCache.data;
   }
+
+  // 2. Check localStorage in browser
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(GLOBAL_AIRING_CACHE_KEY);
+      if (stored) {
+        const parsed: GlobalAiringCacheEntry = JSON.parse(stored);
+        if (parsed && Array.isArray(parsed.data) && (now - parsed.timestamp < GLOBAL_AIRING_TTL_MS)) {
+          memoryGlobalAiringCache = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {
+      // Storage unavailable or quota exceeded
+    }
+  }
+
+  return null;
+}
+
+function writeStoredGlobalAiring(data: TMDBShow[]): void {
+  const entry: GlobalAiringCacheEntry = {
+    timestamp: Date.now(),
+    data,
+  };
+  memoryGlobalAiringCache = entry;
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(GLOBAL_AIRING_CACHE_KEY, JSON.stringify(entry));
+    } catch {
+      // Storage unavailable or quota exceeded
+    }
+  }
+}
+
+export const getGlobalAiringShows = async (): Promise<TMDBShow[]> => {
+  // 1. FAST PATH: Return cached result instantly if valid (< 24h)
+  const cached = readStoredGlobalAiring();
+  if (cached && cached.length > 0) {
+    return cached;
+  }
+
+  // 2. Prevent duplicate concurrent fetches
+  if (globalAiringFetchPromise) {
+    return globalAiringFetchPromise;
+  }
+
+  globalAiringFetchPromise = (async () => {
+    try {
+      const today = new Date();
+      const futureDate = new Date();
+      futureDate.setDate(today.getDate() + 90);
+
+      const todayStr = today.toISOString().split('T')[0];
+      const futureDateStr = futureDate.toISOString().split('T')[0];
+
+      // Fetch top popular airing candidates (at most 2 pages instead of 3)
+      const [p1, p2] = await Promise.all([
+        fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
+          language: 'en-US',
+          sort_by: 'popularity.desc',
+          'air_date.gte': todayStr,
+          'air_date.lte': futureDateStr,
+          page: 1,
+        }),
+        fetchFromGateway<{ results: TMDBShow[] }>('discover/tv', {
+          language: 'en-US',
+          sort_by: 'popularity.desc',
+          'air_date.gte': todayStr,
+          'air_date.lte': futureDateStr,
+          page: 2,
+        }),
+      ]);
+
+      const candidates = [...(p1?.results || []), ...(p2?.results || [])];
+      const uniqueCandidateIds: number[] = [];
+      const seen = new Set<number>();
+
+      for (const s of candidates) {
+        if (s && s.id && !seen.has(s.id) && s.poster_path) {
+          seen.add(s.id);
+          uniqueCandidateIds.push(s.id);
+        }
+      }
+
+      // Limit to top 20 candidate shows and use getShowDetailsLite (1 single request per show + hits Step 1 server LRU cache)
+      const topIds = uniqueCandidateIds.slice(0, 20);
+      const detailedShows = await Promise.all(
+        topIds.map((id) => getShowDetailsLite(String(id)))
+      );
+
+      const validAiringShows = detailedShows.filter(
+        (s): s is TMDBShow =>
+          Boolean(s && s.next_episode_to_air && new Date(s.next_episode_to_air.air_date) >= new Date() && s.poster_path)
+      );
+
+      if (validAiringShows.length > 0) {
+        writeStoredGlobalAiring(validAiringShows);
+      }
+
+      return validAiringShows;
+    } catch (err) {
+      console.error('Global Airing Shows Error:', err);
+      return [];
+    } finally {
+      globalAiringFetchPromise = null;
+    }
+  })();
+
+  return globalAiringFetchPromise;
 };
 
 // 9. Similar & Recommendations

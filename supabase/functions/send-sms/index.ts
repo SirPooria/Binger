@@ -1,6 +1,8 @@
 // Supabase Edge Functions run on Deno, while this repository's main TypeScript config targets Next.js.
 // @ts-expect-error Deno resolves this URL import when the function is deployed.
 import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0';
+// @ts-expect-error Deno resolves this URL import when the function is deployed.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 
 declare const Deno: {
   env: { get(name: string): string | undefined };
@@ -20,8 +22,23 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-async function sendSmsWithRetry(body: URLSearchParams, maxRetries = 3): Promise<boolean> {
+function maskOtpCode(code: string): string {
+  if (!code) return '******';
+  const clean = code.trim();
+  if (clean.length <= 4) return '****';
+  return clean.slice(0, 2) + '**' + clean.slice(-2);
+}
+
+interface SendSmsResult {
+  success: boolean;
+  recId?: string;
+  errorMessage?: string;
+}
+
+async function sendSmsWithRetry(body: URLSearchParams, maxRetries = 3): Promise<SendSmsResult> {
   let delay = 350;
+  let lastError = '';
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(MELIPAYAMAK_URL, {
@@ -40,11 +57,13 @@ async function sendSmsWithRetry(body: URLSearchParams, maxRetries = 3): Promise<
 
       if (response.ok && /^\d+$/.test(result) && !result.startsWith('-')) {
         console.log(`Mellipayamak SMS sent successfully on attempt ${attempt}, ID:`, result);
-        return true;
+        return { success: true, recId: result };
       }
 
+      lastError = `Melipayamak rejected code: ${result}`;
       console.warn(`Mellipayamak rejected attempt ${attempt} with code:`, result);
     } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
       console.error(`Mellipayamak network error on attempt ${attempt}:`, err);
     }
 
@@ -53,7 +72,50 @@ async function sendSmsWithRetry(body: URLSearchParams, maxRetries = 3): Promise<
       delay *= 2;
     }
   }
-  return false;
+
+  return { success: false, errorMessage: lastError || 'Unknown provider error' };
+}
+
+/**
+ * Persists SMS delivery status and details into Supabase sms_logs table.
+ * Uses SUPABASE_SERVICE_ROLE_KEY to bypass RLS.
+ */
+async function logSmsDelivery(params: {
+  phone: string;
+  code: string;
+  status: 'sent' | 'failed';
+  recId?: string;
+  errorMessage?: string;
+}): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.warn('[logSmsDelivery] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+      return;
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { error } = await supabase.from('sms_logs').insert({
+      phone: params.phone,
+      code: maskOtpCode(params.code),
+      status: params.status,
+      provider: 'melipayamak',
+      rec_id: params.recId || null,
+      error_message: params.errorMessage || null,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error('[logSmsDelivery] Failed to insert into sms_logs:', error.message);
+    } else {
+      console.log('[logSmsDelivery] Successfully logged SMS to sms_logs for', params.phone);
+    }
+  } catch (logErr) {
+    console.error('[logSmsDelivery] Unexpected logging exception:', logErr);
+  }
 }
 
 Deno.serve(async (request) => {
@@ -93,12 +155,23 @@ Deno.serve(async (request) => {
       bodyId,
     });
 
-    const sendTask = sendSmsWithRetry(formParams, 3);
+    // Execute SMS send and database logging
+    const processTask = (async () => {
+      const sendResult = await sendSmsWithRetry(formParams, 3);
+      await logSmsDelivery({
+        phone,
+        code: otp,
+        status: sendResult.success ? 'sent' : 'failed',
+        recId: sendResult.recId,
+        errorMessage: sendResult.errorMessage,
+      });
+      return sendResult;
+    })();
 
     if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
-      EdgeRuntime.waitUntil(sendTask);
+      EdgeRuntime.waitUntil(processTask);
     } else {
-      await sendTask;
+      await processTask;
     }
 
     return jsonResponse({ success: true });

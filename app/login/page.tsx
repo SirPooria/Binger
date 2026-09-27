@@ -269,7 +269,7 @@ export default function LoginPage() {
 
   return (
     <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] relative flex flex-col justify-between p-4 sm:p-6 md:p-8 overflow-x-hidden selection:bg-[#ccff00] selection:text-black">
-      
+
       {/* --- AMBIENT NEON GLOWS --- */}
       <div className="fixed top-1/4 right-1/4 w-[450px] h-[450px] bg-[#ccff00]/10 blur-[150px] rounded-full pointer-events-none -z-10 animate-pulse" />
       <div className="fixed bottom-1/4 left-1/4 w-[400px] h-[400px] bg-purple-600/10 blur-[160px] rounded-full pointer-events-none -z-10" />
@@ -296,7 +296,7 @@ export default function LoginPage() {
       {/* --- MAIN HERO WRAPPER --- */}
       <main className="w-full max-w-6xl mx-auto my-auto py-6 sm:py-10 z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
-          
+
           {/* بخش ویترینی و متنی (دسکتاپ) */}
           <div className="hidden lg:flex lg:col-span-7 flex-col space-y-6">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-xs font-black w-fit shadow-[0_0_20px_rgba(204,255,0,0.15)]">
@@ -307,7 +307,7 @@ export default function LoginPage() {
             <h2 className="text-3xl xl:text-4xl font-black text-white leading-[1.3] tracking-tight">
               جهان سینما در مشت شما؛ <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ccff00] via-[#d4ff33] to-white">
-                هوشمند، شخصی‌سازی‌شده و بی‌پایان
+                هوشمند، شخصی‌سازی‌شده و بی انتها
               </span>
             </h2>
 
@@ -371,11 +371,11 @@ export default function LoginPage() {
                   <Sparkles size={12} />
                   <span>ورود یا ثبت‌نام سریع و امن</span>
                 </div>
-                
+
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   ورود به <span className="text-[#ccff00]">بینجر</span>
                 </h1>
-                
+
                 <p className="text-gray-400 text-xs sm:text-sm leading-relaxed">
                   {step === 1
                     ? 'شماره موبایل خود را وارد کنید تا کد ورود ارسال شود'
@@ -406,7 +406,7 @@ export default function LoginPage() {
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="relative group">
                         <input
                           id="phone-input"
@@ -415,11 +415,10 @@ export default function LoginPage() {
                           required
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
-                          className={`w-full bg-black/60 border rounded-2xl p-3.5 pr-4 pl-14 text-white placeholder:text-gray-600 focus:outline-none transition-all text-left ltr tracking-wider text-sm font-mono shadow-inner group-hover:border-white/30 ${
-                            isPhoneValid
+                          className={`w-full bg-black/60 border rounded-2xl p-3.5 pr-4 pl-14 text-white placeholder:text-gray-600 focus:outline-none transition-all text-left ltr tracking-wider text-sm font-mono shadow-inner group-hover:border-white/30 ${isPhoneValid
                               ? 'border-[#ccff00]/60 focus:border-[#ccff00] focus:ring-1 focus:ring-[#ccff00]'
                               : 'border-white/15 focus:border-[#ccff00]'
-                          }`}
+                            }`}
                           placeholder="09123456789"
                           disabled={loading}
                           autoFocus
@@ -482,7 +481,7 @@ export default function LoginPage() {
                       <label className="text-xs font-bold text-gray-300 mb-2 block">
                         کد تایید ۶ رقمی
                       </label>
-                      
+
                       <div dir="ltr" className="flex items-center justify-center gap-2 sm:gap-2.5 my-3">
                         {otpDigits.map((digit, index) => (
                           <input
@@ -498,16 +497,15 @@ export default function LoginPage() {
                             onKeyDown={(e) => handleDigitKeyDown(index, e)}
                             onPaste={handleDigitPaste}
                             onFocus={(e) => e.target.select()}
-                            className={`w-11 h-14 sm:w-13 sm:h-15 rounded-2xl bg-black/60 border text-center font-mono font-black text-2xl transition-all outline-none ${
-                              digit
+                            className={`w-11 h-14 sm:w-13 sm:h-15 rounded-2xl bg-black/60 border text-center font-mono font-black text-2xl transition-all outline-none ${digit
                                 ? 'border-[#ccff00] text-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_15px_rgba(204,255,0,0.3)]'
                                 : 'border-white/15 text-white focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/40'
-                            }`}
+                              }`}
                             disabled={loading}
                           />
                         ))}
                       </div>
-                      
+
                       <span className="text-[10px] text-gray-500 text-center block mt-1">
                         ارقام از چپ به راست وارد می‌شوند
                       </span>
@@ -553,11 +551,10 @@ export default function LoginPage() {
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`mt-4 p-3 rounded-2xl text-xs font-bold flex items-center gap-2 leading-relaxed ${
-                    isError
+                  className={`mt-4 p-3 rounded-2xl text-xs font-bold flex items-center gap-2 leading-relaxed ${isError
                       ? 'bg-red-500/10 border border-red-500/30 text-red-300'
                       : 'bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00]'
-                  }`}
+                    }`}
                 >
                   {isError ? <AlertCircle size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
                   <span>{message}</span>

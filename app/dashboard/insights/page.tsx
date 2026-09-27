@@ -11,6 +11,7 @@ import {
 import { createClient } from '@/lib/supabase';
 import { getShowWithCredits, getImageUrl, type TMDBShow } from '@/lib/tmdbClient';
 import { VipUsername } from '../components/VipBadge';
+import { useWatched } from '@/lib/watchedContext';
 
 interface WatchedRow {
   show_id: number;
@@ -62,6 +63,7 @@ const PERSIAN_MONTHS = [
 export default function InsightsPage() {
   const router = useRouter();
   const supabase = createClient() as any;
+  const { getWatchedRecords } = useWatched();
 
   const [loading, setLoading] = useState(true);
   const [dataProgress, setDataProgress] = useState({ current: 0, total: 0 });
@@ -108,31 +110,8 @@ export default function InsightsPage() {
           });
         }
 
-        // دریافت نامحدود تمامی اپیزودهای تماشاشده
-        let allWatched: WatchedRow[] = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from('watched')
-            .select('show_id, episode_id, created_at')
-            .eq('user_id', currentUser.id)
-            .order('created_at', { ascending: false })
-            .range(page * pageSize, (page + 1) * pageSize - 1);
-
-          if (error || !data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allWatched = [...allWatched, ...data];
-            if (data.length < pageSize) {
-              hasMore = false;
-            } else {
-              page++;
-            }
-          }
-        }
+        // دریافت نامحدود تمامی اپیزودهای تماشاشده از کانتکست یکپارچه سراسری
+        const allWatched = (await getWatchedRecords()) as WatchedRow[];
 
         if (cancelled) return;
         setWatchedList(allWatched);
@@ -783,7 +762,7 @@ export default function InsightsPage() {
                     {/* عکس بازیگر */}
                     <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-white/10 bg-black/50 mb-3 shadow-md">
                       <img
-                        src={getImageUrl(actor.profile_path)}
+                        src={getImageUrl(actor.profile_path, 'w185')}
                         alt={actor.name}
                         className="w-full h-full object-cover"
                       />
@@ -867,7 +846,7 @@ export default function InsightsPage() {
                   >
                     <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0 border border-white/10 bg-black/40">
                       <img
-                        src={getImageUrl(dir.profile_path)}
+                        src={getImageUrl(dir.profile_path, 'w185')}
                         alt={dir.name}
                         className="w-full h-full object-cover"
                       />

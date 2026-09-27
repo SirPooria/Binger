@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 import { 
   getTrendingShows, getImageUrl, getBackdropUrl, 
-  getShowDetails, getIranianShows, getTopRatedShows,
+  getShowDetails, getShowWithCredits, getIranianShows, getTopRatedShows,
   getKoreanShows, getTeenShows, getMiniSeries, getAnimeShows,
   searchShows, advancedDiscoverShows,
   getShowsByGenre, getReleasedEpisodeCount
@@ -21,6 +21,7 @@ import {
 import { ShowCardProgress } from '../components/ShowProgressBar';
 import { VipUsername } from '../components/VipBadge';
 import { WatchlistButton } from '../components/WatchlistButton';
+import { useWatched } from '@/lib/watchedContext';
 
 // --- GENRE TRANSLATIONS ---
 const GENRE_MAP: Record<number, string> = {
@@ -95,6 +96,7 @@ export default function Dashboard() {
 function DashboardContent() {
   const supabase = createClient() as any;
   const router = useRouter();
+  const { getWatchedRecords } = useWatched();
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -221,29 +223,9 @@ function DashboardContent() {
         if (isCancelled) return;
         setUser(user);
 
-        // ۱. دریافت دیتای کاربر از دیتابیس
+        // ۱. دریافت دیتای کاربر از دیتابیس و کانتکست یکپارچه
         const { data: wList } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
-
-        let allWatchedRows: any[] = [];
-        let page = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data } = await supabase
-            .from('watched')
-            .select('show_id')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .range(page * 1000, (page + 1) * 1000 - 1);
-
-          if (!data || data.length === 0) {
-            hasMore = false;
-          } else {
-            allWatchedRows = [...allWatchedRows, ...data];
-            if (data.length < 1000) hasMore = false;
-            else page++;
-          }
-        }
+        const allWatchedRows = await getWatchedRecords();
 
         const wIds: number[] = wList?.map((i: any) => Number(i.show_id)) || [];
         const wEdIds: number[] = allWatchedRows?.map((i: any) => Number(i.show_id)) || [];
@@ -966,23 +948,24 @@ function DashboardContent() {
 
 // ================= زیرکامپوننت‌ها =================
 
-// لیست ۱۶ تخصص پزشکی-سینمایی بینجر
+// عناوین گرایش‌ها و سبک‌های سینمایی بینجر (کاملاً سینمایی و بدون اصطلاحات دکتری/پزشکی)
 const SPECIALTIES = [
-  { id: 'comedy', name: 'فوق تخصص قهقهه', genreId: 35, desc: 'عاشق کمدی و سیت‌کام' },
-  { id: 'mystery', name: 'متخصص مغز و اعصاب', genreId: 9648, desc: 'عاشق معما، فضاهای دارک و روانشناختی' },
-  { id: 'kdrama', name: 'دکتر کی‌دراما', isKdrama: true, desc: 'طرفدار پر و پا قرص سریال‌های کره‌ای' },
-  { id: 'horror', name: 'فوق تخصص ترس', genreId: 27, desc: 'معتاد هیجان، ترس و زامبی' },
-  { id: 'crime', name: 'متخصص پزشکی قانونی', genreId: 80, desc: 'عاشق پرونده‌های جنایی و کارآگاهی' },
-  { id: 'epic', name: 'دکتر اپیک', genreId: 10765, desc: 'غرق در فانتزی، تاریخ و دنیاهای حماسی' },
-  { id: 'mini', name: 'مینی دکتر', isMini: true, desc: 'متخصص مینی‌سریال‌های کوتاه و جمع‌وجور' },
-  { id: 'action', name: 'دکتر آدرنالین', genreId: 10759, desc: 'عاشق اکشن، هیجان و بقا' },
-  { id: 'teen', name: 'دکتر تین', isTeen: true, desc: 'علاقه‌مند به درام‌های دبیرستانی و تین‌ایجری' },
-  { id: 'romance', name: 'دکتر رومنس', genreId: 10766, desc: 'پیگیر داستان‌های عاشقانه و رمانتیک' },
-  { id: 'scifi', name: 'دکتر خیالباف', isScifi: true, genreId: 10765, desc: 'سفر در زمان و دنیاهای آینده' },
-  { id: 'western', name: 'دکتر کابوی', genreId: 37, desc: 'طرفدار دوآتیشه وسترن' },
-  { id: 'musical', name: 'متخصص موزیکولوژی', genreId: 10402, desc: 'عاشق موزیکال و موسیقی' },
-  { id: 'doc', name: 'متخصص فکتولوژی', genreId: 99, desc: 'پیگیر مستندها و حقایق واقعی' },
-  { id: 'biography', name: 'مدیر بایگانی', isBio: true, desc: 'علاقه‌مند به سرگذشت‌نامه و داستان‌های واقعی' },
+  { id: 'comedy', name: 'سیت‌کام‌باز قهار', genreId: 35, desc: 'شیفته کمدی ناب، خنده و سیت‌کام‌های ماندگار' },
+  { id: 'mystery', name: 'استاد تعلیق و معما', genreId: 9648, desc: 'عاشق گره‌های داستانی پیچیده، پلات‌تویست و فضاهای روان‌شناختی' },
+  { id: 'kdrama', name: 'کی‌دراماباز حرفه‌ای', isKdrama: true, desc: 'دنبال‌کننده پروپاقرص درام‌های کره‌ای و سینمای شرق آسیا' },
+  { id: 'horror', name: 'وحشت‌شناس و شکارچی دلهره', genreId: 27, desc: 'عاشق اتمسفر ترس، رازهای تاریک و هیجان دلهره‌آور' },
+  { id: 'crime', name: 'کارآگاه کارکشته جنایی', genreId: 80, desc: 'شیفته پرونده‌های پلیسی پیچیده، نوآر و مافیا' },
+  { id: 'epic', name: 'حماسه‌شناس جهان‌های فانتزی', genreId: 10765, desc: 'غرق در دنیاهای خیالی، نبردهای اسطوره‌ای و روایت‌های حماسی' },
+  { id: 'mini', name: 'گزیده‌بین مینی‌سریال‌ها', isMini: true, desc: 'شیفته شاهکارهای کوتاه، داستان‌های موجز و فشرده' },
+  { id: 'action', name: 'آدرنالین‌خوار و خوره اکشن', genreId: 10759, desc: 'معتاد هیجان خالص، صحنه‌های تعقیب‌وگریز و نبردهای بقا' },
+  { id: 'teen', name: 'روایت‌شناس درام‌های جوانی', isTeen: true, desc: 'علاقه‌مند به روابط، بلوغ و درام‌های پرشور نسل جدید' },
+  { id: 'romance', name: 'عاشقانه‌پژوه سینمایی', genreId: 10766, desc: 'پیگیر درام‌های احساسی، پیوندهای عاطفی و عاشقانه‌های لطیف' },
+  { id: 'scifi', name: 'مسافر فضا و زمان', isScifi: true, genreId: 10765, desc: 'شیفته سفر در زمان، سایبرپانک و دنیاهای شگفت‌انگیز آینده' },
+  { id: 'western', name: 'هفت‌تیرکش غرب وحشی', genreId: 37, desc: 'طرفدار دوآتیشه داستان‌های وسترن و دنیای بی‌قانون غرب' },
+  { id: 'musical', name: 'شیفته سینمای موزیکال', genreId: 10402, desc: 'همگام با ریتم موسیقی، ملودی و شور نمایش‌های صحنه‌ای' },
+  { id: 'doc', name: 'مستندبین حقیقت‌جو', genreId: 99, desc: 'پیگیر کشف حقایق واقعی، تاریخ معاصر و مستندهای افشاگر' },
+  { id: 'biography', name: 'راوی سرگذشت‌های واقعی', isBio: true, desc: 'علاقه‌مند به زندگینامه شخصیت‌های تأثیرگذار و تاریخ‌ساز' },
+  { id: 'animation', name: 'جهان‌ساز انیمه و انیمیشن', genreId: 16, desc: 'شیفته انیمه‌های عمیق، استاپ‌موشن و جهان‌های نامحدود تخیل' },
 ];
 
 // کارت هویت و تحلیل سلیقه و DNA سینمایی کاربر
@@ -996,6 +979,7 @@ function CinematicIdentityCard({
   userProfile?: any;
 }) {
   const supabase = createClient() as any;
+  const { getWatchedRecords } = useWatched();
 
   const [loading, setLoading] = useState(true);
   const [watchedCount, setWatchedCount] = useState(0);
@@ -1042,32 +1026,16 @@ function CinematicIdentityCard({
         let watchedIds: number[] = propsWatchedIds || [];
         let allShowIds: number[] = propsAllShowIds || [];
 
-        // دریافت نامحدود تمام اپیزودهای تماشا شده از دیتابیس
-        if (watchedIds.length === 0 && user) {
-          let allWatchedRows: any[] = [];
-          let page = 0;
-          let hasMore = true;
-
-          while (hasMore) {
-            const { data } = await supabase
-              .from('watched')
-              .select('show_id')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .range(page * 1000, (page + 1) * 1000 - 1);
-
-            if (!data || data.length === 0) {
-              hasMore = false;
-            } else {
-              allWatchedRows = [...allWatchedRows, ...data];
-              if (data.length < 1000) {
-                hasMore = false;
-              } else {
-                page++;
-              }
-            }
+        // دریافت نامحدود تمام اپیزودهای تماشا شده از کانتکست سراسری
+        const allWatchedRows = await getWatchedRecords().catch(() => []);
+        const epCountMap: Record<number, number> = {};
+        allWatchedRows.forEach((r: any) => {
+          if (r?.show_id) {
+            epCountMap[r.show_id] = (epCountMap[r.show_id] || 0) + 1;
           }
+        });
 
+        if (watchedIds.length === 0 && user) {
           const { data: watchlistRes } = await supabase
             .from('watchlist')
             .select('show_id')
@@ -1087,11 +1055,13 @@ function CinematicIdentityCard({
           return;
         }
 
-        // ۱. دریافت مشخصات سریال‌های تماشا شده از TMDB
+        // ۱. دریافت مشخصات سریال‌های تماشا شده از TMDB همراه با اطلاعات کارگردانان (credits)
         const showsDetails = await Promise.all(
-          watchedIds.slice(0, 30).map(id => getShowDetails(String(id)).catch(() => null))
+          watchedIds.slice(0, 25).map(id =>
+            getShowWithCredits(String(id)).catch(() => getShowDetails(String(id)).catch(() => null))
+          )
         );
-        const validShows = showsDetails.filter(Boolean);
+        const validShows = showsDetails.filter(Boolean) as any[];
 
         if (validShows.length === 0) {
           setLoading(false);
@@ -1100,8 +1070,7 @@ function CinematicIdentityCard({
 
         // ۲. پردازش آماری و دسته‌بندی
         const genreHoursMap: Record<string, { name: string; hours: number; count: number; id: number }> = {};
-        const creatorsCountMap: Record<string, number> = {};
-        const creatorsShowsMap: Record<string, string[]> = {};
+        const directorStats: Record<string, { name: string; showTitles: Set<string>; score: number; episodeCount: number }> = {};
         let kdramaCount = 0;
         let miniCount = 0;
         let recentCount = 0;
@@ -1126,18 +1095,51 @@ function CinematicIdentityCard({
           if (show.origin_country?.includes('KR')) kdramaCount++;
           if (episodeCount <= 8) miniCount++;
 
-          // ثبت دقیق سازندگان و نام سریال‌هایشان
-          show.created_by?.forEach((c: any) => {
-            if (c.name) {
-              creatorsCountMap[c.name] = (creatorsCountMap[c.name] || 0) + 1;
-              if (!creatorsShowsMap[c.name]) {
-                creatorsShowsMap[c.name] = [];
-              }
-              const showTitle = show.name || show.original_name;
-              if (showTitle && !creatorsShowsMap[c.name].includes(showTitle)) {
-                creatorsShowsMap[c.name].push(showTitle);
-              }
+          // جمع‌آوری کارگردانان و سازندگان معتبر برای این سریال
+          const showTitle = show.name || show.original_name || 'سریال';
+          const epWatched = epCountMap[show.id] || episodeCount;
+          const voteAvg = show.vote_average || 7.5;
+          const directorsForShow = new Set<string>();
+
+          // ۱) سازندگان اصلی (created_by)
+          (show.created_by || []).forEach((c: any) => {
+            if (c?.name && typeof c.name === 'string') {
+              const trimmed = c.name.trim();
+              if (trimmed) directorsForShow.add(trimmed);
             }
+          });
+
+          // ۲) کارگردانان از تیتراژ و عوامل (credits.crew)
+          const crew = (show.credits?.crew || []) as any[];
+          crew.forEach((m: any) => {
+            if (m?.name && (m.job === 'Director' || m.department === 'Directing')) {
+              const trimmed = m.name.trim();
+              if (trimmed) directorsForShow.add(trimmed);
+            }
+          });
+
+          // ۳) سازندگان یا نویسندگان ارشد در صورت نبود فیلدهای بالا
+          if (directorsForShow.size === 0) {
+            crew.forEach((m: any) => {
+              if (m?.name && (m.job === 'Showrunner' || m.job === 'Writer' || m.job === 'Executive Producer')) {
+                const trimmed = m.name.trim();
+                if (trimmed) directorsForShow.add(trimmed);
+              }
+            });
+          }
+
+          directorsForShow.forEach((dirName) => {
+            if (!directorStats[dirName]) {
+              directorStats[dirName] = {
+                name: dirName,
+                showTitles: new Set<string>(),
+                score: 0,
+                episodeCount: 0,
+              };
+            }
+            directorStats[dirName].showTitles.add(showTitle);
+            directorStats[dirName].episodeCount += epWatched;
+            directorStats[dirName].score += 50 + (epWatched * 2) + Math.round(voteAvg * 3);
           });
 
           show.genres?.forEach((g: any) => {
@@ -1186,11 +1188,27 @@ function CinematicIdentityCard({
           color: idx === 0 ? 'from-fuchsia-500 to-purple-600' : idx === 1 ? 'from-cyan-400 to-blue-500' : 'from-emerald-400 to-teal-500'
         }));
 
-        // ۶. بهترین سازنده و آثار مرتبط با او
-        const sortedCreators = Object.entries(creatorsCountMap).sort(([nameA, countA], [nameB, countB]) => countB - countA);
-        const [firstCreator] = sortedCreators;
-        const topCreatorName = firstCreator ? firstCreator[0] : 'کارگردانان برجسته';
-        const topCreatorShows = firstCreator ? (creatorsShowsMap[topCreatorName] || []) : [];
+        // ۶. بهترین کارگردان / سازنده و آثار مرتبط با او
+        const sortedDirectors = Object.values(directorStats).sort((a, b) => {
+          if (a.showTitles.size !== b.showTitles.size) {
+            return b.showTitles.size - a.showTitles.size;
+          }
+          return b.score - a.score;
+        });
+
+        let topCreatorName = '';
+        let topCreatorShows: string[] = [];
+
+        if (sortedDirectors.length > 0) {
+          const best = sortedDirectors[0];
+          topCreatorName = best.name;
+          topCreatorShows = Array.from(best.showTitles);
+        } else {
+          const topShow = validShows[0];
+          const topTitle = topShow?.name || topShow?.original_name || 'آثار برتر شما';
+          topCreatorName = `تیم کارگردانی ${topTitle}`;
+          topCreatorShows = [topTitle];
+        }
 
         setDnaData({
           specialty: assignedSpecialty,
@@ -1312,7 +1330,7 @@ function CinematicIdentityCard({
 
         <div className="flex flex-wrap gap-2 pt-1">
           <div className="text-xs font-bold bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 sm:px-3 py-1.5 rounded-xl">
-            تخصص: {dnaData.specialty.name}
+            گرایش سینمایی: {dnaData.specialty.name}
           </div>
           <div className="text-xs font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 px-2.5 sm:px-3 py-1.5 rounded-xl ltr">
             {dnaData.specialtyHours} ساعت در این ژانر
@@ -1328,19 +1346,19 @@ function CinematicIdentityCard({
         </div>
       </div>
 
-      {/* خط سازنده محبوب با تولتیپ دلیل انتخاب */}
+      {/* خط کارگردان مورد علاقه با تولتیپ دلیل انتخاب */}
       <div className="mt-6 pt-4 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
         <div className="flex items-center gap-2">
           <Clapperboard size={14} className="text-purple-400 shrink-0" />
-          <span>سازنده محبوب شما:</span>
+          <span>کارگردان مورد علاقه شما:</span>
           <div className="relative group/creator cursor-help">
             <strong className="text-white hover:text-[#ccff00] transition-colors underline decoration-dotted decoration-white/40 underline-offset-4">
               {dnaData.topCreator}
             </strong>
             {dnaData.topCreatorShows?.length > 0 && (
-              <div className="absolute bottom-full right-0 sm:right-1/2 sm:translate-x-1/2 mb-2 w-60 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/creator:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
-                <strong className="text-[#ccff00] block mb-1">دلیل انتخاب در هویت شما:</strong>
-                به خاطر تماشای سریال‌های:
+              <div className="absolute bottom-full right-0 sm:right-1/2 sm:translate-x-1/2 mb-2 w-64 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/creator:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
+                <strong className="text-[#ccff00] block mb-1">دلیل انتخاب در هویت سینمایی:</strong>
+                به خاطر کارگردانی و خلق:
                 <span className="text-white font-bold block mt-0.5">
                   {dnaData.topCreatorShows.join('، ')}
                 </span>
@@ -1350,7 +1368,10 @@ function CinematicIdentityCard({
         </div>
         {dnaData.topCreatorShows?.length > 0 && (
           <span className="text-[10px] text-gray-500 hidden sm:inline">
-            ({dnaData.topCreatorShows.length} اثر در پرونده شما)
+            {dnaData.topCreatorShows.length > 1 
+              ? `(${dnaData.topCreatorShows.length} اثر در پرونده شما)`
+              : `(سریال ${dnaData.topCreatorShows[0]})`
+            }
           </span>
         )}
       </div>
@@ -1417,7 +1438,7 @@ function CinematicIdentityCard({
 
               {/* ۳. گرید ۳ سریال برتر */}
               <div className="relative z-10 my-auto">
-                <p className="text-[10px] font-bold text-gray-400 mb-2">آثار منتخب این تخصص در پرونده من:</p>
+                <p className="text-[10px] font-bold text-gray-400 mb-2">آثار منتخب این سبک در پرونده من:</p>
                 <div className="grid grid-cols-3 gap-2">
                   {dnaData.favoriteShows?.slice(0, 3).map((show: any, idx: number) => (
                     <div key={idx} className="relative group rounded-xl overflow-hidden aspect-[2/3] border border-white/15 shadow-xl shadow-black/80 bg-black/50">
@@ -1435,12 +1456,12 @@ function CinematicIdentityCard({
               {/* ۴. ردیف آمار ساعت تماشا */}
               <div className="relative z-10 space-y-2 my-auto">
                 <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex items-center justify-between text-xs">
-                  <span className="text-gray-400">ساعت تماشای تخصصی:</span>
+                  <span className="text-gray-400">ساعت تماشای این ژانر:</span>
                   <span className="font-black text-[#ccff00] ltr">🔥 {dnaData.specialtyHours} ساعت</span>
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl py-1.5 px-3 text-[11px] text-gray-300 truncate">
-                  🎬 سازنده محبوب: <strong className="text-white">{dnaData.topCreator}</strong>
+                  🎬 کارگردان مورد علاقه: <strong className="text-white">{dnaData.topCreator}</strong>
                 </div>
               </div>
 
@@ -1472,7 +1493,7 @@ function CinematicIdentityCard({
 
 // کارت پیشنهاد ویژه هوشمند (با شرط عکس کاور، توضیح فارسی و یادداشت دلیل انتخاب)
 function SpotlightShowCard({ show, reason, isAdded, onToggle, router }: any) {
-  const backdrop = getBackdropUrl(show.backdrop_path || show.poster_path);
+  const backdrop = getBackdropUrl(show.backdrop_path || show.poster_path, 'w780');
   const rating = show.vote_average ? show.vote_average.toFixed(1) : '-';
   const year = show.first_air_date ? show.first_air_date.substring(0, 4) : '';
   const genres = show.genres?.slice(0, 3).map((g: any) => g.name).join(' • ') || '';

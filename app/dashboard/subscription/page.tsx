@@ -8,6 +8,8 @@ import {
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
+import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
+import { SubscriptionStatusCard } from '../components/SubscriptionComponents';
 
 const VIP_FEATURES = [
   {
@@ -69,7 +71,7 @@ export default function SubscriptionPage() {
   const router = useRouter();
   const supabase = createClient() as any;
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
-  const [isVip, setIsVip] = useState(false);
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,14 +79,17 @@ export default function SubscriptionPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { data } = await supabase
+          const { data: profile } = await supabase
             .from('profiles')
-            .select('is_vip, role')
+            .select('*')
             .eq('id', user.id)
-            .single();
-          if (data?.is_vip || data?.role === 'admin') {
-            setIsVip(true);
-          }
+            .maybeSingle();
+
+          const status = calculateSubscriptionDetails({
+            ...(profile || {}),
+            user_metadata: user.user_metadata,
+          });
+          setSubStatus(status);
         }
       } catch (err) {
         console.error('Error fetching VIP status:', err);
@@ -140,10 +145,10 @@ export default function SubscriptionPage() {
             با اشتراک VIP، سقف ۳ لیست را بشکنید، کالکشن‌هایتان را در صدر پروفایل پین کنید، به نمودارهای دقیق بازیگران و کارگردان‌ها دست پیدا کنید و کارت سالنامه Binger Wrapped خود را دریافت نمایید.
           </p>
 
-          {isVip && (
-            <div className="mt-6 flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)]">
-              <ShieldCheck size={22} />
-              <span className="text-sm font-black">اشتراک ویژه VIP هم‌اکنون روی حساب کاربری شما فعال و نامحدود است!</span>
+          {/* کارت وضعیت اشتراک و روزهای باقی‌مانده */}
+          {subStatus && (subStatus.isActive || subStatus.isExpired) && (
+            <div className="mt-8 text-right">
+              <SubscriptionStatusCard status={subStatus} />
             </div>
           )}
         </section>
@@ -267,10 +272,16 @@ export default function SubscriptionPage() {
           <button
             type="button"
             disabled
-            className="mt-6 w-full cursor-not-allowed rounded-2xl border border-white/10 bg-white/10 py-4 text-sm font-black text-gray-400 opacity-80"
+            className="mt-6 w-full cursor-not-allowed rounded-2xl border border-amber-400/20 bg-amber-400/10 py-4 text-sm font-black text-amber-300 opacity-90 transition-all"
           >
-            خرید اشتراک {selectedPlan === 'monthly' ? 'ماهانه' : 'سالانه'} — به‌زودی در دسترس قرار می‌گیرد
+            {subStatus?.isActive ? 'تمدید اشتراک' : 'خرید اشتراک'}{' '}
+            {selectedPlan === 'monthly' ? 'ماهانه (۳۰ روز)' : 'سالانه (۱۲ ماه)'} — اتصال درگاه شاپرک به‌زودی
           </button>
+          {subStatus?.isActive && !subStatus.isLifetime && (
+            <p className="mt-2 text-center text-[11px] text-gray-400">
+              با هر تمدید ماهانه، ۳۰ روز به اعتبار باقی‌مانده فعلی شما ({subStatus.formattedDaysRemaining}) اضافه خواهد شد.
+            </p>
+          )}
         </section>
 
       </div>

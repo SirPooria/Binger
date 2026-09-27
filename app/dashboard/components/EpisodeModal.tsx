@@ -1,16 +1,21 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   X, Check, Star, Play, Clock, Calendar, MessageSquare, Heart,
   ChevronRight, ChevronLeft, Share2, Loader2, Send, Lock,
   CheckCircle2, Eye, Award, Reply, ArrowRight, CornerDownLeft,
-  Image as ImageIcon
+  Image as ImageIcon, Tv, ExternalLink, Sparkles
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { getSeasonDetails, getImageUrl, getShowDetails, getReleasedEpisodeCount } from '@/lib/tmdbClient';
 import confetti from 'canvas-confetti';
 import { VipUsername } from './VipBadge';
+import GifPickerModal from './GifPickerModal';
+import CommentRenderer from './CommentRenderer';
+import { formatCommentWithGif } from '@/lib/klipyClient';
+import { useWatched } from '@/lib/watchedContext';
 
 interface EpisodeModalProps {
   showId: string;
@@ -37,7 +42,13 @@ export default function EpisodeModal({
   onClose,
   onWatchedChange
 }: EpisodeModalProps) {
+  const router = useRouter();
   const supabase = createClient() as any;
+  const {
+    isEpisodeWatched,
+    getShowWatchedEpisodes,
+    toggleWatchedEpisode,
+  } = useWatched();
 
   const [currentEpNum, setCurrentEpNum] = useState(initialEpNum);
   const [seasonEpisodes, setSeasonEpisodes] = useState<any[]>([]);
@@ -71,6 +82,12 @@ export default function EpisodeModal({
   const [submittingComment, setSubmittingComment] = useState(false);
   const [commentAuthors, setCommentAuthors] = useState<Record<string, { username: string; avatar_url: string; percent: number; is_vip?: boolean }>>({});
   const [friendsWatchedCount, setFriendsWatchedCount] = useState(0);
+
+  // گیف‌های Klipy
+  const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
+  const [gifPickerTarget, setGifPickerTarget] = useState<'main' | 'reply'>('main');
+  const [selectedGif, setSelectedGif] = useState<{ url: string; previewUrl: string; title: string } | null>(null);
+  const [replyGif, setReplyGif] = useState<{ url: string; previewUrl: string; title: string } | null>(null);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -138,15 +155,8 @@ export default function EpisodeModal({
     setCastList(finalCast);
 
     if (currentEp && user) {
-      // بررسی وضعیت تماشا
-      supabase
-        .from('watched')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('show_id', Number(showId))
-        .eq('episode_id', currentEp.id)
-        .maybeSingle()
-        .then(({ data }: any) => setIsWatched(!!data));
+      // بررسی وضعیت تماشا از کانتکست یکپارچه
+      setIsWatched(isEpisodeWatched(currentEp.id));
 
       // شمارش کاربران تماشا کرده
       supabase
@@ -327,32 +337,14 @@ export default function EpisodeModal({
     setIsWatched(nextState);
 
     try {
-      if (!nextState) {
-        const { error } = await supabase
-          .from('watched')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('show_id', Number(showId))
-          .eq('episode_id', episode.id);
-        if (error) throw error;
+      const ok = await toggleWatchedEpisode(showId, episode.id, !nextState);
+      if (!ok) throw new Error("Toggle failed");
 
+      if (!nextState) {
         showToast('علامت تماشا برداشته شد.');
       } else {
-        const { error } = await supabase
-          .from('watched')
-          .upsert([{
-            user_id: user.id,
-            show_id: Number(showId),
-            episode_id: episode.id
-          }], { onConflict: 'user_id, episode_id' });
-        if (error) throw error;
-
         triggerCelebration();
         showToast('دیدم! تالار نظرات و نظرسنجی باز شد 🎉');
-      }
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('binger:watched-updated', { detail: { showId: Number(showId) } }));
       }
 
       if (onWatchedChange) onWatchedChange();
@@ -457,15 +449,18 @@ export default function EpisodeModal({
   // ارسال نظر یا پاسخ در فروم
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !episode || !newComment.trim()) return;
+    const activeGif = replyingTo ? replyGif : selectedGif;
+    if (!user || !episode || (!newComment.trim() && !activeGif)) return;
 
     setSubmittingComment(true);
     try {
+      const finalContent = formatCommentWithGif(newComment, activeGif?.url);
+
       const commentPayload: any = {
         user_id: user.id,
         show_id: Number(showId),
         episode_id: episode.id,
-        content: newComment.trim(),
+        content: finalContent,
         created_at: new Date().toISOString()
       };
 
@@ -481,16 +476,10 @@ export default function EpisodeModal({
 
       if (error) throw error;
 
-      // محاسبه فوری درصد کاربر
-      const { data: userWatched } = await supabase
-        .from('watched')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('show_id', Number(showId));
-
+      // محاسبه فوری درصد کاربر از کانتکست یکپارچه
+      const userCount = getShowWatchedEpisodes(showId).length;
       const showData = await getShowDetails(String(showId));
       const totalEps = getReleasedEpisodeCount(showData) || (seasonEpisodes.length > 0 ? seasonEpisodes.length : 1);
-      const userCount = Math.min(userWatched?.length || 0, totalEps);
       const myPercent = totalEps > 0 ? Math.min(100, Math.round((userCount / totalEps) * 100)) : 100;
 
       const { data: myProf } = await supabase.from('profiles').select('is_vip, role').eq('id', user.id).maybeSingle();
@@ -508,6 +497,8 @@ export default function EpisodeModal({
 
       setComments(prev => [data, ...prev]);
       setNewComment('');
+      setSelectedGif(null);
+      setReplyGif(null);
       setReplyingTo(null);
       showToast(replyingTo ? 'پاسخ شما با موفقیت ارسال شد!' : 'نظر شما در تالار ثبت شد!');
 
@@ -584,6 +575,18 @@ export default function EpisodeModal({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => {
+                onClose();
+                router.push(`/dashboard/tv/${showId}`);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ccff00]/10 hover:bg-[#ccff00] text-[#ccff00] hover:text-black border border-[#ccff00]/30 transition-all text-xs font-black cursor-pointer shadow-sm active:scale-95"
+              title="رفتن به صفحه کامل این سریال"
+            >
+              <Tv size={14} />
+              <span className="hidden sm:inline">صفحه سریال</span>
+            </button>
+
+            <button
               onClick={handleShareEpisode}
               className="p-2 rounded-xl bg-white/5 hover:bg-white/15 text-gray-300 hover:text-white transition-all cursor-pointer"
               title="اشتراک‌گذاری"
@@ -642,6 +645,18 @@ export default function EpisodeModal({
                         <h3 className="text-lg sm:text-2xl font-black text-white leading-tight drop-shadow-md">
                           {episode.name}
                         </h3>
+
+                        <button
+                          onClick={() => {
+                            onClose();
+                            router.push(`/dashboard/tv/${showId}`);
+                          }}
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#ccff00] hover:underline font-bold transition-all cursor-pointer"
+                        >
+                          <Tv size={13} />
+                          <span>مشاهده صفحه کامل سریال</span>
+                          <ChevronLeft size={13} />
+                        </button>
                       </div>
 
                       {episode.vote_average > 0 && (
@@ -936,28 +951,61 @@ export default function EpisodeModal({
                   rows={2}
                   value={replyingTo ? '' : newComment}
                   onChange={(e) => { setReplyingTo(null); setNewComment(e.target.value); }}
-                  placeholder="نظرت یا تحلیلت درباره این قسمت چیه؟ (بدون اسپویل)..."
+                  placeholder="نظرت یا تحلیلت درباره این قسمت چیه؟ (یا یک گیف ارسال کن)..."
                   className="w-full bg-[#0a0a0a] border border-white/15 rounded-xl p-3 text-xs text-white placeholder-gray-500 focus:border-[#ccff00] focus:outline-none resize-none leading-relaxed"
                 />
               </div>
+
+              {/* پیش‌نمایش گیف انتخاب‌شده */}
+              {!replyingTo && selectedGif && (
+                <div className="relative inline-flex items-center gap-2 p-1.5 pr-2.5 bg-black/60 border border-[#ccff00]/40 rounded-xl mt-2 animate-in fade-in">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden border border-white/10 shrink-0 bg-black">
+                    <img src={selectedGif.previewUrl || selectedGif.url} alt="GIF Preview" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex flex-col min-w-0 pr-1">
+                    <span className="text-[11px] font-bold text-white flex items-center gap-1">
+                      <Sparkles size={11} className="text-[#ccff00]" />
+                      <span>گیف پیوست شد</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400 truncate max-w-[140px] sm:max-w-[200px]">
+                      {selectedGif.title || 'Klipy GIF'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGif(null)}
+                    className="p-1 text-gray-400 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors mr-2 cursor-pointer"
+                    title="حذف گیف"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
 
               <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => showToast('ارسال گیف (Giphy) در نسخه نهایی فعال خواهد شد 🎬')}
-                    className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-[#ccff00] bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-                    title="افزودن گیف"
+                    onClick={() => {
+                      setGifPickerTarget('main');
+                      setIsGifPickerOpen(true);
+                    }}
+                    className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl transition-all cursor-pointer border ${
+                      selectedGif
+                        ? 'bg-[#ccff00]/15 text-[#ccff00] border-[#ccff00]/40 shadow-sm'
+                        : 'text-gray-300 hover:text-[#ccff00] bg-white/5 hover:bg-white/10 border-white/10'
+                    }`}
+                    title="افزودن گیف از Klipy"
                   >
-                    <ImageIcon size={14} />
-                    <span>GIF</span>
+                    <ImageIcon size={14} className={selectedGif ? 'text-[#ccff00]' : 'text-gray-400'} />
+                    <span className="font-bold">GIF</span>
                   </button>
                   <span className="text-[10px] text-gray-500 hidden sm:inline">نقد محترمانه و بدون اسپویل</span>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={submittingComment || replyingTo !== null || !newComment.trim()}
+                  disabled={submittingComment || replyingTo !== null || (!newComment.trim() && !selectedGif)}
                   className="bg-[#ccff00] hover:bg-[#b3e600] disabled:opacity-20 text-black font-black text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
                 >
                   {submittingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -1032,9 +1080,9 @@ export default function EpisodeModal({
                           </div>
                         </div>
 
-                        <p className="text-xs sm:text-sm text-gray-200 leading-relaxed pr-10">
-                          {comment.content}
-                        </p>
+                        <div className="pr-10">
+                          <CommentRenderer content={comment.content} />
+                        </div>
 
                         {/* پروگرس‌بار درصد تماشای سریال */}
                         <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] pr-10">
@@ -1068,7 +1116,7 @@ export default function EpisodeModal({
                               </span>
                               <button
                                 type="button"
-                                onClick={() => { setReplyingTo(null); setNewComment(''); }}
+                                onClick={() => { setReplyingTo(null); setNewComment(''); setReplyGif(null); }}
                                 className="text-red-400 hover:text-red-300 text-xs cursor-pointer"
                               >
                                 انصراف
@@ -1080,14 +1128,51 @@ export default function EpisodeModal({
                               rows={2}
                               value={newComment}
                               onChange={(e) => setNewComment(e.target.value)}
-                              placeholder={`پاسخ خود به ${author.username} را بنویسید...`}
+                              placeholder={`پاسخ خود به ${author.username} را بنویسید (یا یک گیف ارسال کنید)...`}
                               className="w-full bg-[#0a0a0a] border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-gray-500 focus:border-[#ccff00] focus:outline-none resize-none leading-relaxed"
                             />
 
-                            <div className="flex justify-end gap-2">
+                            {/* پیش‌نمایش گیف در پاسخ */}
+                            {replyGif && (
+                              <div className="relative inline-flex items-center gap-2 p-1.5 pr-2.5 bg-black/60 border border-[#ccff00]/40 rounded-xl animate-in fade-in">
+                                <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0 bg-black">
+                                  <img src={replyGif.previewUrl || replyGif.url} alt="GIF" className="w-full h-full object-cover" />
+                                </div>
+                                <span className="text-[10px] text-gray-300 truncate max-w-[130px]">
+                                  {replyGif.title || 'Klipy GIF'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setReplyGif(null)}
+                                  className="p-1 text-gray-400 hover:text-red-400 rounded-lg hover:bg-white/10 cursor-pointer"
+                                  title="حذف گیف"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setGifPickerTarget('reply');
+                                  setIsGifPickerOpen(true);
+                                }}
+                                className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg transition-colors cursor-pointer border ${
+                                  replyGif
+                                    ? 'bg-[#ccff00]/15 text-[#ccff00] border-[#ccff00]/40'
+                                    : 'text-gray-400 hover:text-[#ccff00] bg-white/5 border-white/10'
+                                }`}
+                                title="افزودن گیف از Klipy"
+                              >
+                                <ImageIcon size={13} />
+                                <span>GIF</span>
+                              </button>
+
                               <button
                                 type="submit"
-                                disabled={submittingComment || !newComment.trim()}
+                                disabled={submittingComment || (!newComment.trim() && !replyGif)}
                                 className="bg-[#ccff00] hover:bg-[#b3e600] disabled:opacity-20 text-black font-black text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
                               >
                                 {submittingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -1128,9 +1213,9 @@ export default function EpisodeModal({
                                   </span>
                                 </div>
 
-                                <p className="text-xs text-gray-300 leading-relaxed pr-8">
-                                  {rep.content}
-                                </p>
+                                <div className="pr-8">
+                                  <CommentRenderer content={rep.content} textClassName="text-xs text-gray-300 leading-relaxed" />
+                                </div>
                               </div>
                             );
                           })}
@@ -1151,6 +1236,19 @@ export default function EpisodeModal({
         )}
 
       </div>
+
+      {/* مدال انتخاب گیف Klipy */}
+      <GifPickerModal
+        isOpen={isGifPickerOpen}
+        onClose={() => setIsGifPickerOpen(false)}
+        onSelect={(gif) => {
+          if (gifPickerTarget === 'reply') {
+            setReplyGif(gif);
+          } else {
+            setSelectedGif(gif);
+          }
+        }}
+      />
 
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1c1c1c] text-[#ccff00] border border-[#ccff00]/40 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl z-[200] flex items-center gap-2">

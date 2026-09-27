@@ -359,6 +359,104 @@ export type Database = {
         };
         Relationships: [];
       };
+      sms_logs: {
+        Row: {
+          id: number;
+          phone: string;
+          code: string | null;
+          status: string;
+          provider: string;
+          rec_id: string | null;
+          error_message: string | null;
+          ip_address: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          phone: string;
+          code?: string | null;
+          status?: string;
+          provider?: string;
+          rec_id?: string | null;
+          error_message?: string | null;
+          ip_address?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          phone?: string;
+          code?: string | null;
+          status?: string;
+          provider?: string;
+          rec_id?: string | null;
+          error_message?: string | null;
+          ip_address?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      cached_shows: {
+        Row: {
+          id: number;
+          data: Json;
+          updated_at: string;
+        };
+        Insert: {
+          id: number;
+          data: Json;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          data?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      posts: {
+        Row: {
+          id: number;
+          title: string;
+          slug: string;
+          content: string;
+          cover_image: string | null;
+          author_id: string | null;
+          published: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          title: string;
+          slug: string;
+          content?: string;
+          cover_image?: string | null;
+          author_id?: string | null;
+          published?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          title?: string;
+          slug?: string;
+          content?: string;
+          cover_image?: string | null;
+          author_id?: string | null;
+          published?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "posts_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -428,6 +526,55 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
+      };
+      get_top_watched_shows: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          show_id: number;
+          view_count: number;
+        }[];
+      };
+      get_power_users: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          user_id: string;
+          username: string | null;
+          avatar_url: string | null;
+          phone: string | null;
+          watched_count: number;
+        }[];
+      };
+      get_most_discussed_shows: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          show_id: number;
+          comment_count: number;
+        }[];
+      };
+      get_30_day_growth: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          date: string;
+          new_users: number;
+          episodes_watched: number;
+        }[];
+      };
+      get_churning_users: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          user_id: string;
+          username: string | null;
+          phone: string | null;
+          last_active: string;
+        }[];
       };
     };
     Enums: {

@@ -1,500 +1,481 @@
-"use client";
-
-import React, { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { 
-  Users, Tv, MessageSquare, Flame, 
-  Trash2, Search, ArrowRight, ShieldAlert, CheckCircle2, 
-  Loader2, Sparkles, Shield
-} from 'lucide-react';
+import React from 'react';
 import Link from 'next/link';
-import ConfirmModal from '../dashboard/components/ConfirmModal';
+import {
+  Users,
+  Crown,
+  ShieldCheck,
+  Flame,
+  ArrowUpRight,
+  TrendingUp,
+  Sparkles,
+  Layers,
+  Activity,
+  CreditCard,
+  Trophy,
+  Medal,
+  Award,
+  Tv,
+  MessageSquare,
+} from 'lucide-react';
+import { verifyAdminSession } from '@/lib/adminAuth';
+import { toPersianDigits } from '@/lib/subscription';
+import { getShowDetails, getImageUrl, type TMDBShow } from '@/lib/tmdbClient';
 
-interface AdminStats {
-  totalUsers: number;
-  totalWatched: number;
-  totalComments: number;
-  totalReactions: number;
+export const dynamic = 'force-dynamic';
+
+interface TopWatchedShowRecord {
+  show_id: number;
+  view_count: number;
+  show: TMDBShow | null;
 }
 
-interface AdminUserItem {
-  id: string;
-  username: string;
-  avatar_url: string;
-  role: string;
-  is_vip: boolean;
-  created_at: string;
-  phone: string;
-  watchedCount: number;
-}
+export default async function AdminDashboardPage() {
+  const { authorized, supabase } = await verifyAdminSession();
 
-interface AdminCommentItem {
-  id: number;
-  user_id: string;
-  show_id: number | null;
-  episode_id: number | null;
-  content: string | null;
-  created_at: string;
-  authorName: string;
-  authorAvatar: string;
-}
+  // Metrics state
+  let totalUsers = 0;
+  let totalVips = 0;
+  let totalAdmins = 0;
+  let totalWatched = 0;
+  let topWatchedShows: TopWatchedShowRecord[] = [];
 
-export default function AdminPage() {
-  const router = useRouter();
+  const VIP_PRICE_TOMANS = 149_000;
 
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'comments'>('stats');
-
-  const [stats, setStats] = useState<AdminStats>({
-    totalUsers: 0,
-    totalWatched: 0,
-    totalComments: 0,
-    totalReactions: 0,
-  });
-
-  const [usersList, setUsersList] = useState<AdminUserItem[]>([]);
-  const [userSearch, setUserSearch] = useState('');
-
-  const [commentsList, setCommentsList] = useState<AdminCommentItem[]>([]);
-  const [deletingCommentId, setDeletingCommentId] = useState<number | null>(null);
-  const [confirmDeleteCommentId, setConfirmDeleteCommentId] = useState<number | null>(null);
-
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 2500);
-  }, []);
-
-  const loadStats = useCallback(async () => {
+  if (authorized && supabase) {
     try {
-      const res = await fetch('/api/admin/stats');
-      if (!res.ok) throw new Error('Stats fetch failed');
-      const data = await res.json() as AdminStats;
-      setStats(data);
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-    }
-  }, []);
+      // 1. Fetch core high-level metrics & RPC in parallel
+      const [usersRes, vipsRes, adminsRes, watchedRes, topShowsRes] = await Promise.all([
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('is_vip', true),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'admin'),
+        supabase.from('watched').select('id', { count: 'exact', head: true }),
+        supabase.rpc('get_top_watched_shows', { p_limit: 10 }),
+      ]);
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/users');
-      if (!res.ok) throw new Error('Users fetch failed');
-      const data = await res.json() as { users: AdminUserItem[] };
-      setUsersList(data.users || []);
-    } catch (err) {
-      console.error('Failed to load users:', err);
-    }
-  }, []);
+      totalUsers = usersRes.count || 0;
+      totalVips = vipsRes.count || 0;
+      totalAdmins = adminsRes.count || 0;
+      totalWatched = watchedRes.count || 0;
 
-  const loadComments = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/comments');
-      if (!res.ok) throw new Error('Comments fetch failed');
-      const data = await res.json() as { comments: AdminCommentItem[] };
-      setCommentsList(data.comments || []);
-    } catch (err) {
-      console.error('Failed to load comments:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    const initAdmin = async () => {
-      try {
-        setLoading(true);
-        // Verify admin access through server API
-        const statsRes = await fetch('/api/admin/stats');
-        if (statsRes.status === 401 || statsRes.status === 403) {
-          setIsAdmin(false);
-          setLoading(false);
-          return;
-        }
-
-        if (!statsRes.ok) {
-          setIsAdmin(false);
-          setLoading(false);
-          return;
-        }
-
-        setIsAdmin(true);
-        const statsData = await statsRes.json() as AdminStats;
-        setStats(statsData);
-
-        await Promise.all([loadUsers(), loadComments()]);
-      } catch (err) {
-        console.error('Admin init error:', err);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
+      // 2. Enrich top watched shows with Persian titles and posters via getShowDetails
+      if (!topShowsRes.error && Array.isArray(topShowsRes.data) && topShowsRes.data.length > 0) {
+        topWatchedShows = await Promise.all(
+          topShowsRes.data.map(async (item: { show_id: number; view_count: number }) => {
+            try {
+              const show = await getShowDetails(String(item.show_id));
+              return {
+                show_id: item.show_id,
+                view_count: Number(item.view_count),
+                show,
+              };
+            } catch {
+              return {
+                show_id: item.show_id,
+                view_count: Number(item.view_count),
+                show: null,
+              };
+            }
+          })
+        );
       }
-    };
-
-    initAdmin();
-  }, [loadUsers, loadComments]);
-
-  const handleConfirmDeleteComment = async () => {
-    if (!confirmDeleteCommentId) return;
-    const commentId = confirmDeleteCommentId;
-    setDeletingCommentId(commentId);
-    try {
-      const res = await fetch(`/api/admin/comments?id=${commentId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) throw new Error('Failed to delete comment');
-
-      setCommentsList((prev) => prev.filter((c) => c.id !== commentId));
-      showToast('نظر با موفقیت حذف شد.');
-      setConfirmDeleteCommentId(null);
     } catch (err) {
-      console.error(err);
-      showToast('خطا در حذف نظر.');
-    } finally {
-      setDeletingCommentId(null);
+      console.error('Error fetching admin metrics or leaderboard:', err);
     }
-  };
-
-  const handleToggleRole = async (targetUserId: string, currentRole: string) => {
-    const nextRole = currentRole === 'vip' ? 'user' : 'vip';
-    try {
-      const res = await fetch('/api/admin/toggle-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserId, nextRole }),
-      });
-
-      if (!res.ok) throw new Error('Failed to update role');
-
-      setUsersList((prev) =>
-        prev.map((u) => (u.id === targetUserId ? { ...u, role: nextRole, is_vip: nextRole === 'vip' } : u))
-      );
-      showToast(`نقش کاربر به ${nextRole === 'vip' ? 'ویژه (VIP)' : 'عادی'} تغییر یافت.`);
-    } catch (err) {
-      console.error(err);
-      showToast('خطا در تغییر نقش کاربر.');
-    }
-  };
-
-  const filteredUsers = usersList.filter((u) => {
-    if (!userSearch.trim()) return true;
-    const q = userSearch.toLowerCase();
-    const name = (u.username || '').toLowerCase();
-    const phone = (u.phone || '').toLowerCase();
-    return name.includes(q) || phone.includes(q);
-  });
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center text-[#ccff00]">
-        <Loader2 className="animate-spin" size={44} aria-label="در حال بارگذاری..." />
-      </div>
-    );
   }
 
-  if (!isAdmin) {
-    return (
-      <div dir="rtl" className="min-h-screen bg-[#050505] flex items-center justify-center p-4 font-['Vazirmatn'] text-white">
-        <div className="bg-[#121212] border border-red-500/30 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
-          <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center text-red-400 mx-auto mb-4 shadow-inner">
-            <ShieldAlert size={32} />
-          </div>
-          <h1 className="text-xl font-black mb-2 text-white">عدم دسترسی به پنل مدیریت</h1>
-          <p className="text-xs text-gray-400 mb-6 leading-relaxed">
-            این بخش فقط مخصوص مدیران سیستم است و دسترسی شما مجاز شناخته نشد.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className="w-full bg-white/10 hover:bg-white/20 text-white py-3 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
-          >
-            <span>بازگشت به داشبورد</span>
-            <ArrowRight size={16} />
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const vipPercentage = totalUsers > 0 ? Math.round((totalVips / totalUsers) * 100) : 0;
+  const vipRevenue = totalVips * VIP_PRICE_TOMANS;
+  const maxViews = topWatchedShows.length > 0 ? Math.max(...topWatchedShows.map((s) => s.view_count)) : 1;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] selection:bg-[#ccff00] selection:text-black pb-24">
-      {/* Toast */}
-      {toastMsg && (
-        <div className="fixed bottom-6 left-6 z-50 bg-[#ccff00] text-black font-bold text-xs px-5 py-3 rounded-2xl shadow-[0_0_30px_rgba(204,255,0,0.3)] flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <CheckCircle2 size={16} />
-          <span>{toastMsg}</span>
-        </div>
-      )}
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/[0.05] via-white/[0.02] to-transparent border border-white/10 p-6 sm:p-8">
+        <div className="absolute top-0 left-0 -translate-x-12 -translate-y-12 w-72 h-72 bg-[#ccff00]/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Header */}
-      <header className="border-b border-white/5 bg-[#0a0a0a]/80 backdrop-blur-xl sticky top-0 z-40 px-4 sm:px-8 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#ccff00]/10 border border-[#ccff00]/20 flex items-center justify-center text-[#ccff00]">
-              <Shield size={20} />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/20 text-[#ccff00] text-xs font-bold">
+              <Activity className="w-3.5 h-3.5 animate-pulse" />
+              <span>داشبورد تحلیلی و مدیریتی Binger</span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-black tracking-tight">پنل مدیریت بینجر</h1>
-                <span className="text-[10px] bg-[#ccff00] text-black font-black px-2 py-0.5 rounded-full uppercase">Admin</span>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              نمای کلی سیستم، درآمد و رفتار کاربران
+            </h1>
+            <p className="text-sm text-gray-400 max-w-xl leading-relaxed">
+              گزارش آمار بلادرنگ کاربران، درآمدهای اشتراک VIP، پرتماشاترین سریال‌های پلتفرم و شاخص‌های کلیدی تعامل.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/users"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#ccff00] text-black font-bold text-xs hover:bg-[#b8e600] transition shadow-lg shadow-[#ccff00]/20"
+            >
+              <Users className="w-4 h-4" />
+              <span>مشاهده و مدیریت کاربران</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* High-Level Metrics Grid (5 Stat Cards) */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+            <Layers className="w-5 h-5 text-[#ccff00]" />
+            <span>شاخص‌های اصلی (Core Metrics)</span>
+          </h2>
+          <span className="text-xs text-gray-500 font-mono">Live DB Sync</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {/* 1. Total Users */}
+          <div className="relative overflow-hidden p-5 rounded-2xl bg-[#0e0e0e] border border-white/10 hover:border-white/20 transition-all group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-blue-500/10 transition" />
+            <div className="flex items-center justify-between text-gray-400 mb-3">
+              <span className="text-xs font-bold">کاربران کل (Total Users)</span>
+              <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                <Users className="w-4 h-4" />
               </div>
-              <p className="text-[11px] text-gray-500">نظارت بر آمار، کاربران و دیدگاه‌ها</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
+                {toPersianDigits(totalUsers)}
+              </p>
+              <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                <span className="text-emerald-400 font-bold">۱۰۰٪</span>
+                <span>پروفایل‌های ثبت‌شده</span>
+              </p>
             </div>
           </div>
 
-          <Link
-            href="/dashboard"
-            className="bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white px-3 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
-          >
-            <span>داشبورد</span>
-            <ArrowRight size={14} />
-          </Link>
+          {/* 2. Total VIPs */}
+          <div className="relative overflow-hidden p-5 rounded-2xl bg-[#0e0e0e] border border-white/10 hover:border-amber-500/30 transition-all group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/15 transition" />
+            <div className="flex items-center justify-between text-gray-400 mb-3">
+              <span className="text-xs font-bold">اعضای ویژه (Total VIPs)</span>
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Crown className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-2xl sm:text-3xl font-black text-amber-400 font-mono tracking-tight">
+                {toPersianDigits(totalVips)}
+              </p>
+              <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                <span className="text-amber-400 font-mono font-bold">{toPersianDigits(vipPercentage)}٪</span>
+                <span>نرخ تبدیل به VIP</span>
+              </p>
+            </div>
+          </div>
+
+          {/* 3. VIP Revenue Stat Card */}
+          <div className="relative overflow-hidden p-5 rounded-2xl bg-[#0e0e0e] border border-white/10 hover:border-[#ccff00]/40 transition-all group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-[#ccff00]/10 rounded-full blur-xl pointer-events-none group-hover:bg-[#ccff00]/20 transition" />
+            <div className="flex items-center justify-between text-gray-400 mb-3">
+              <span className="text-xs font-bold text-white">درآمد VIP (Revenue)</span>
+              <div className="w-9 h-9 rounded-xl bg-[#ccff00]/15 border border-[#ccff00]/30 text-[#ccff00] flex items-center justify-center shadow-sm shadow-[#ccff00]/20">
+                <CreditCard className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <p className="text-2xl sm:text-3xl font-black text-[#ccff00] font-mono tracking-tight">
+                  {toPersianDigits(vipRevenue.toLocaleString('en-US'))}
+                </p>
+                <span className="text-xs font-bold text-gray-400">تومان</span>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-gray-400">
+                مبنا: ۱۴۹,۰۰۰ تومان به‌ازای هر اشتراک
+              </p>
+            </div>
+          </div>
+
+          {/* 4. Total Admins */}
+          <div className="relative overflow-hidden p-5 rounded-2xl bg-[#0e0e0e] border border-white/10 hover:border-emerald-500/30 transition-all group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/15 transition" />
+            <div className="flex items-center justify-between text-gray-400 mb-3">
+              <span className="text-xs font-bold">مدیران سیستم (Admins)</span>
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono tracking-tight">
+                {toPersianDigits(totalAdmins)}
+              </p>
+              <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                <span className="text-emerald-400 font-bold">Admin Roles</span>
+                <span>دسترسی کامل مدیریتی</span>
+              </p>
+            </div>
+          </div>
+
+          {/* 5. Total Watched Records */}
+          <div className="relative overflow-hidden p-5 rounded-2xl bg-[#0e0e0e] border border-white/10 hover:border-purple-500/30 transition-all group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-purple-500/15 transition" />
+            <div className="flex items-center justify-between text-gray-400 mb-3">
+              <span className="text-xs font-bold">تماشاها (Watched)</span>
+              <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                <Flame className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-2xl sm:text-3xl font-black text-purple-400 font-mono tracking-tight">
+                {toPersianDigits(totalWatched.toLocaleString('en-US'))}
+              </p>
+              <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                <span>کل لاگ‌های تماشای ثبت‌شده</span>
+              </p>
+            </div>
+          </div>
         </div>
-      </header>
+      </section>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-8">
-        {/* Navigation Tabs */}
-        <nav aria-label="تب‌های پنل ادمین" className="flex items-center gap-2 mb-8 bg-[#111] p-1.5 rounded-2xl border border-white/5 w-fit">
-          <button
-            type="button"
-            onClick={() => setActiveTab('stats')}
-            className={`px-4 sm:px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-              activeTab === 'stats'
-                ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Flame size={14} />
-            <span>آمار کلی</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('users')}
-            className={`px-4 sm:px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-              activeTab === 'users'
-                ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Users size={14} />
-            <span>کاربران ({usersList.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('comments')}
-            className={`px-4 sm:px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${
-              activeTab === 'comments'
-                ? 'bg-[#ccff00] text-black shadow-lg shadow-[#ccff00]/10'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <MessageSquare size={14} />
-            <span>دیدگاه‌ها ({commentsList.length})</span>
-          </button>
-        </nav>
+      {/* Top Watched Shows Leaderboard Section */}
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              <span>پرتماشاترین سریال‌ها (Top Watched Shows Leaderboard)</span>
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              رتبه‌بندی ۱۰ سریال با بیشترین دفعات تماشا توسط کاربران در Binger
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-xs self-start sm:self-auto font-mono">
+            <Flame className="w-3.5 h-3.5 text-amber-400" />
+            <span>Top 10 Leaderboard</span>
+          </div>
+        </div>
 
-        {/* Tab 1: Stats */}
-        {activeTab === 'stats' && (
-          <section aria-labelledby="stats-heading" className="space-y-6">
-            <h2 id="stats-heading" className="sr-only">آمار کلی سامانه</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-[#101010] border border-white/5 rounded-3xl p-5 relative overflow-hidden group hover:border-[#ccff00]/30 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs text-gray-400 font-medium">کل کاربران</span>
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
-                    <Users size={16} />
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black tracking-tight">{stats.totalUsers.toLocaleString('fa-IR')}</div>
-              </div>
+        {topWatchedShows.length === 0 ? (
+          <div className="p-8 rounded-2xl border border-white/10 bg-[#0e0e0e] text-center text-gray-500">
+            <Tv className="w-10 h-10 mx-auto opacity-30 mb-2" />
+            <p className="text-sm">هنوز رکوردی در جدول تماشای کاربران ثبت نشده است.</p>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e0e] shadow-xl">
+            <div className="divide-y divide-white/5">
+              {topWatchedShows.map((item, index) => {
+                const rank = index + 1;
+                const show = item.show;
+                const persianName = show?.name_fa || show?.name || `سریال #${item.show_id}`;
+                const originalName = show?.name_en || show?.original_name || show?.name;
+                const posterUrl = show?.poster_path ? getImageUrl(show.poster_path, 'w185') : null;
+                const airYear = show?.first_air_date ? new Date(show.first_air_date).getFullYear() : null;
+                const percentOfMax = Math.max(8, Math.round((item.view_count / maxViews) * 100));
 
-              <div className="bg-[#101010] border border-white/5 rounded-3xl p-5 relative overflow-hidden group hover:border-[#ccff00]/30 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs text-gray-400 font-medium">اپیزودهای دیده‌شده</span>
-                  <div className="w-8 h-8 rounded-lg bg-[#ccff00]/10 text-[#ccff00] flex items-center justify-center">
-                    <Tv size={16} />
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black tracking-tight">{stats.totalWatched.toLocaleString('fa-IR')}</div>
-              </div>
+                // Rank Badge Styling
+                const getRankBadge = () => {
+                  if (rank === 1) {
+                    return (
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-yellow-300 via-amber-400 to-amber-600 text-black font-black flex items-center justify-center text-xs shadow-md shadow-amber-500/25 shrink-0 ring-1 ring-amber-300">
+                        <Trophy className="w-4 h-4" />
+                      </div>
+                    );
+                  }
+                  if (rank === 2) {
+                    return (
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-slate-200 via-gray-300 to-slate-400 text-slate-900 font-black flex items-center justify-center text-xs shadow-md shadow-slate-400/20 shrink-0 ring-1 ring-slate-200">
+                        <Medal className="w-4 h-4" />
+                      </div>
+                    );
+                  }
+                  if (rank === 3) {
+                    return (
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-600 via-amber-700 to-amber-900 text-amber-100 font-black flex items-center justify-center text-xs shadow-md shadow-amber-700/20 shrink-0 ring-1 ring-amber-500">
+                        <Award className="w-4 h-4" />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-gray-400 font-bold flex items-center justify-center text-xs font-mono shrink-0">
+                      {toPersianDigits(rank)}
+                    </div>
+                  );
+                };
 
-              <div className="bg-[#101010] border border-white/5 rounded-3xl p-5 relative overflow-hidden group hover:border-[#ccff00]/30 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs text-gray-400 font-medium">کل دیدگاه‌ها</span>
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
-                    <MessageSquare size={16} />
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black tracking-tight">{stats.totalComments.toLocaleString('fa-IR')}</div>
-              </div>
+                return (
+                  <div
+                    key={item.show_id}
+                    className="p-3.5 sm:p-4 hover:bg-white/[0.03] transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 group"
+                  >
+                    {/* Left/Start side: Rank + Poster + Title info */}
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                      {/* Rank Badge */}
+                      {getRankBadge()}
 
-              <div className="bg-[#101010] border border-white/5 rounded-3xl p-5 relative overflow-hidden group hover:border-[#ccff00]/30 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs text-gray-400 font-medium">لایک و تعاملات</span>
-                  <div className="w-8 h-8 rounded-lg bg-pink-500/10 text-pink-400 flex items-center justify-center">
-                    <Flame size={16} />
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black tracking-tight">{stats.totalReactions.toLocaleString('fa-IR')}</div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Tab 2: Users */}
-        {activeTab === 'users' && (
-          <section aria-labelledby="users-heading" className="space-y-4">
-            <h2 id="users-heading" className="sr-only">مدیریت کاربران</h2>
-            <div className="relative">
-              <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-              <input
-                type="text"
-                placeholder="جستجو بر اساس نام کاربری یا شماره تماس..."
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                className="w-full bg-[#101010] border border-white/10 rounded-2xl py-3 pr-11 pl-4 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#ccff00] transition-colors"
-              />
-            </div>
-
-            <div className="bg-[#101010] border border-white/5 rounded-3xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-right text-xs">
-                  <thead className="bg-[#151515] text-gray-400 font-bold border-b border-white/5">
-                    <tr>
-                      <th className="p-4">کاربر</th>
-                      <th className="p-4">شماره تماس (ماسک‌شده)</th>
-                      <th className="p-4">اپیزودهای تماشا شده</th>
-                      <th className="p-4">نقش فعلی</th>
-                      <th className="p-4 text-left">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {filteredUsers.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="p-8 text-center text-gray-500">
-                          کاربری یافت نشد.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredUsers.map((u) => (
-                        <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="p-4 flex items-center gap-3">
-                            <span className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-base">
-                              {u.avatar_url || '😎'}
-                            </span>
-                            <div>
-                              <div className="font-bold text-white flex items-center gap-1.5">
-                                <span>{u.username}</span>
-                                {u.role === 'admin' && (
-                                  <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.2 rounded font-black">
-                                    ADMIN
-                                  </span>
-                                )}
-                                {u.is_vip && (
-                                  <span className="text-[9px] bg-[#ccff00]/20 text-[#ccff00] border border-[#ccff00]/30 px-1.5 py-0.2 rounded font-black">
-                                    VIP
-                                  </span>
-                                )}
-                              </div>
-                              <span className="text-[10px] text-gray-500 font-mono">{u.id.slice(0, 8)}...</span>
-                            </div>
-                          </td>
-                          <td className="p-4 font-mono text-gray-400 ltr text-right">{u.phone || '—'}</td>
-                          <td className="p-4 font-bold">{u.watchedCount.toLocaleString('fa-IR')} اپیزود</td>
-                          <td className="p-4">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                u.role === 'vip' || u.is_vip
-                                  ? 'bg-[#ccff00]/10 text-[#ccff00] border border-[#ccff00]/20'
-                                  : u.role === 'admin'
-                                  ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                  : 'bg-white/5 text-gray-400'
-                              }`}
-                            >
-                              {u.role === 'vip' || u.is_vip ? 'ویژه (VIP)' : u.role === 'admin' ? 'مدیر' : 'عادی'}
-                            </span>
-                          </td>
-                          <td className="p-4 text-left">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleRole(u.id, u.role)}
-                              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/5 text-[11px] font-bold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
-                            >
-                              {u.role === 'vip' || u.is_vip ? 'تنزیل به عادی' : 'ارتقا به VIP'}
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Tab 3: Comments */}
-        {activeTab === 'comments' && (
-          <section aria-labelledby="comments-heading" className="space-y-4">
-            <h2 id="comments-heading" className="sr-only">مدیریت دیدگاه‌ها</h2>
-            <div className="bg-[#101010] border border-white/5 rounded-3xl p-6">
-              {commentsList.length === 0 ? (
-                <p className="text-gray-500 text-center py-8 text-xs">هیچ دیدگاهی برای نمایش وجود ندارد.</p>
-              ) : (
-                <div className="divide-y divide-white/5">
-                  {commentsList.map((c) => (
-                    <div key={c.id} className="py-4 first:pt-0 last:pb-0 flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <span className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-sm shrink-0">
-                          {c.authorAvatar || '😎'}
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-bold text-xs text-white">{c.authorName}</span>
-                            <span className="text-[10px] text-gray-500">
-                              {new Date(c.created_at).toLocaleDateString('fa-IR')}
-                            </span>
+                      {/* Poster Thumbnail */}
+                      <div className="w-11 h-16 sm:w-12 sm:h-18 rounded-xl overflow-hidden bg-white/5 border border-white/10 shrink-0 relative shadow-sm">
+                        {posterUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={posterUrl}
+                            alt={persianName}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-500">
+                            <Tv className="w-5 h-5 opacity-40" />
                           </div>
-                          <p className="text-xs text-gray-300 leading-relaxed max-w-2xl">{c.content}</p>
+                        )}
+                      </div>
+
+                      {/* Title & Metadata */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link
+                            href={`/dashboard/tv/${item.show_id}`}
+                            className="font-bold text-white hover:text-[#ccff00] text-sm sm:base transition truncate"
+                          >
+                            {persianName}
+                          </Link>
+                          {airYear && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-400 font-mono">
+                              {toPersianDigits(airYear)}
+                            </span>
+                          )}
+                          {show?.vote_average && show.vote_average > 0 && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold font-mono">
+                              ★ {show.vote_average.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+
+                        {originalName && originalName !== persianName && (
+                          <p className="text-xs text-gray-400 font-sans tracking-wide truncate mt-0.5">
+                            {originalName}
+                          </p>
+                        )}
+
+                        <span className="text-[10px] font-mono text-gray-500 block mt-0.5">
+                          TMDB ID: {item.show_id}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Right side: View count + Visual Proportional Bar + View Details Link */}
+                    <div className="flex items-center gap-4 sm:gap-6 justify-between md:justify-end shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
+                      {/* Popularity Visual Bar & Count */}
+                      <div className="flex flex-col items-start md:items-end gap-1.5 w-44 sm:w-56">
+                        <div className="flex items-center justify-between w-full text-xs">
+                          <span className="text-gray-400 font-medium">مجموع تماشا:</span>
+                          <span className="font-mono font-bold text-[#ccff00] flex items-center gap-1">
+                            <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            {toPersianDigits(item.view_count.toLocaleString('en-US'))} قسمت
+                          </span>
+                        </div>
+
+                        {/* Progress Bar Container */}
+                        <div className="w-full h-2 rounded-full bg-white/5 border border-white/10 overflow-hidden relative">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              rank === 1
+                                ? 'bg-gradient-to-r from-amber-500 to-[#ccff00]'
+                                : rank <= 3
+                                ? 'bg-gradient-to-r from-emerald-500 to-[#ccff00]'
+                                : 'bg-gradient-to-r from-blue-500 to-indigo-500'
+                            }`}
+                            style={{ width: `${percentOfMax}%` }}
+                          />
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteCommentId(c.id)}
-                        disabled={deletingCommentId === c.id}
-                        aria-label={`حذف نظر کاربر ${c.authorName}`}
-                        className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0 disabled:opacity-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400"
+                      {/* Link to Show */}
+                      <Link
+                        href={`/dashboard/tv/${item.show_id}`}
+                        title="مشاهده صفحه سریال"
+                        className="p-2 sm:px-3 sm:py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10 transition text-xs flex items-center gap-1.5 shrink-0"
                       >
-                        {deletingCommentId === c.id ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={16} />
-                        )}
-                      </button>
+                        <span className="hidden sm:inline">مشاهده</span>
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                      </Link>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                );
+              })}
             </div>
-          </section>
+          </div>
         )}
-      </main>
-      {/* مدال اختصاصی تأیید حذف نظر */}
-      <ConfirmModal
-        isOpen={Boolean(confirmDeleteCommentId)}
-        onClose={() => {
-          if (!deletingCommentId) setConfirmDeleteCommentId(null);
-        }}
-        onConfirm={handleConfirmDeleteComment}
-        title="حذف نظر کاربر"
-        description="آیا از حذف دائمی این نظر مطمئن هستید؟ این عملیات غیرقابل بازگشت است."
-        confirmText="بله، حذف نظر"
-        cancelText="انصراف"
-        variant="danger"
-        loading={Boolean(deletingCommentId)}
-      />
+      </section>
+
+      {/* Quick Navigation Cards */}
+      <section className="space-y-4">
+        <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-[#ccff00]" />
+          <span>بخش‌های مدیریت و نظارت سیستم</span>
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Users Management */}
+          <Link
+            href="/admin/users"
+            className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/15 hover:bg-white/[0.04] transition flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-[#ccff00]/10 border border-[#ccff00]/20 text-[#ccff00] flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm group-hover:text-[#ccff00] transition">
+                  جدول و مدیریت کاربران
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  جستجو و خروجی CSV از {toPersianDigits(totalUsers)} کاربر
+                </p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-gray-500 group-hover:text-white transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+
+          {/* VIP Management */}
+          <Link
+            href="/admin/vip"
+            className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-amber-500/20 hover:bg-white/[0.04] transition flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm group-hover:text-amber-400 transition">
+                  مدیریت اشتراک‌های ویژه
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  نظارت بر {toPersianDigits(totalVips)} کاربر فعال VIP
+                </p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-gray-500 group-hover:text-white transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+
+          {/* SMS Logs Monitoring */}
+          <Link
+            href="/admin/sms"
+            className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-blue-500/20 hover:bg-white/[0.04] transition flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm group-hover:text-blue-400 transition">
+                  گزارشات و لاگ‌های پیامک
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  نظارت بر وضعیت ارسال کدهای OTP و ملی پیامک
+                </p>
+              </div>
+            </div>
+            <ArrowUpRight className="w-4 h-4 text-gray-500 group-hover:text-white transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

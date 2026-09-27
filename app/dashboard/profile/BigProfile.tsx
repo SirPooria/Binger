@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
 import { WatchlistButton } from '../components/WatchlistButton';
+import { CommentRenderer } from '../components/CommentRenderer';
+import { useWatched } from '@/lib/watchedContext';
 
 // --- مدال‌ها ---
 const ALL_ACHIEVEMENTS = [
@@ -25,6 +27,7 @@ const ALL_ACHIEVEMENTS = [
 export default function ProfilePage() {
   const supabase = createClient() as any; 
   const router = useRouter();
+  const { getWatchedRecords } = useWatched();
   
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -54,8 +57,8 @@ export default function ProfilePage() {
       if (!user) { window.location.href = '/login'; return; }
       setUser(user);
 
-      // Data Fetching (Watched)
-      const { data: watchedData } = await supabase.from('watched').select('show_id, created_at').eq('user_id', user.id);
+      // Data Fetching (Watched from unified global context)
+      const watchedData = await getWatchedRecords();
       
       if (watchedData && watchedData.length > 0) {
         setTotalEpisodes(watchedData.length);
@@ -444,7 +447,7 @@ const openListModal = async (type: 'followers' | 'following' | 'comments' | 'lea
                                                 <span className="text-xs font-bold text-[#ccff00] bg-[#ccff00]/10 px-2 py-1 rounded-md">{item.title || 'Unknown Show'}</span>
                                                 <span className="text-[10px] text-gray-500">{item.subtitle}</span>
                                             </div>
-                                            <p className="text-sm text-gray-300 leading-relaxed">"{item.content}"</p>
+                                            <CommentRenderer content={item.content} textClassName="text-sm text-gray-300 leading-relaxed" />
                                         </div>
                                     </>
                                 ) : (

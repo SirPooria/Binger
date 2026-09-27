@@ -7,12 +7,15 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Loader2, Zap, MessageSquare, Heart, 
-  Plus, Award, X, Clock, Play, User as UserIcon, 
+  Plus, Award, X, Clock, Play, User as UserIcon, Crown,
   Lock, CheckCircle, CheckCircle2, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck,
   BarChart3, Sparkles, Pin, Feather
 } from 'lucide-react';
+import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
+import { SubscriptionBadge, SubscriptionStatusCard } from '../components/SubscriptionComponents';
 import { VipUsername, CriticBadge } from '../components/VipBadge';
 import { WatchlistButton } from '../components/WatchlistButton';
+import { CommentRenderer } from '../components/CommentRenderer';
 import { 
   checkCriticEligibility, 
   fetchCriticReviewsByUser, 
@@ -31,13 +34,36 @@ import {
   clearAllProfileCaches,
   type CachedProfileData 
 } from '@/lib/profileCache';
+import { useWatched } from '@/lib/watchedContext';
 
 export default function ProfilePage() {
   const supabase = createClient() as any; 
   const router = useRouter();
+  const { getWatchedRecords } = useWatched();
   
   const [user, setUser] = useState<any>(null);
-  const [profileInfo, setProfileInfo] = useState<{ username: string; bio: string; avatar_url: string; is_vip: boolean; role?: string }>({ username: '', bio: '', avatar_url: '😎', is_vip: false });
+  const [profileInfo, setProfileInfo] = useState<{
+    username: string;
+    bio: string;
+    avatar_url: string;
+    is_vip: boolean;
+    role?: string;
+    created_at?: string;
+    updated_at?: string | null;
+    vip_until?: string | null;
+  }>({ username: '', bio: '', avatar_url: '😎', is_vip: false });
+
+  const subStatus = React.useMemo(() => {
+    return calculateSubscriptionDetails({
+      is_vip: profileInfo.is_vip,
+      role: profileInfo.role,
+      vip_until: profileInfo.vip_until,
+      created_at: profileInfo.created_at,
+      updated_at: profileInfo.updated_at,
+      user_metadata: user?.user_metadata,
+    });
+  }, [profileInfo, user]);
+
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   
@@ -102,6 +128,9 @@ export default function ProfilePage() {
           avatar_url: profileRes.data.avatar_url || currentUser.user_metadata?.avatar_url || '😎',
           is_vip: profileRes.data.is_vip === true || profileRes.data.role === 'admin',
           role: profileRes.data.role,
+          created_at: profileRes.data.created_at,
+          updated_at: profileRes.data.updated_at,
+          vip_until: (profileRes.data as any).vip_until,
         });
       }
       setSocialStats({ followers: followersRes.count || 0, following: followingRes.count || 0, comments: commentsRes.count || 0 });
@@ -193,39 +222,17 @@ export default function ProfilePage() {
                   avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎',
                   is_vip: profileData.is_vip === true || profileData.role === 'admin',
                   role: profileData.role,
+                  created_at: profileData.created_at,
+                  updated_at: profileData.updated_at,
+                  vip_until: (profileData as any).vip_until,
               };
-              payload.profileInfo = nextProfileInfo;
+              payload.profileInfo = nextProfileInfo as any;
               setProfileInfo(nextProfileInfo);
           }
 
         // ۲. دریافت اطلاعات تماشا شده‌ها و محاسبه پروگرس‌بارها
-        // ۲. دریافت نامحدود تمام اپیزودهای تماشا شده (شکستن سقف ۱۰۰۰تایی سوپابیس)
-          let allWatchedData: any[] = [];
-          let page = 0;
-          const pageSize = 1000;
-          let hasMore = true;
-
-          while (hasMore) {
-            const { data, error } = await supabase
-              .from('watched')
-              .select('show_id, episode_id, created_at')
-              .eq('user_id', user.id)
-              .order('created_at', { ascending: false })
-              .range(page * pageSize, (page + 1) * pageSize - 1);
-
-            if (error || !data || data.length === 0) {
-              hasMore = false;
-            } else {
-              allWatchedData = [...allWatchedData, ...data];
-              if (data.length < pageSize) {
-                hasMore = false;
-              } else {
-                page++;
-              }
-            }
-          }
-
-          const watchedData = allWatchedData;
+        // ۲. دریافت اطلاعات تماشا شده‌ها از کانتکست یکپارچه سراسری
+        const watchedData = await getWatchedRecords();
         const [commentsRes, followingRes, followersRes, favoritesRes] = await Promise.all([
           supabase.from('comments').select('id, show_id, episode_id, parent_id, created_at').eq('user_id', user.id).order('created_at', { ascending: true }),
           supabase.from('follows').select('following_id, created_at').eq('follower_id', user.id),
@@ -239,7 +246,7 @@ export default function ProfilePage() {
           supabase.from('achievement_events').select('event_type').eq('user_id', user.id),
         ]);
         setAchievementStats({
-          watchedRows: watchedData,
+          watchedRows: watchedData as any,
           comments: commentsRes.data || [],
           followingIds: (followingRes.data || []).map((item: any) => item.following_id),
           followerIds: (followersRes.data || []).map((item: any) => item.follower_id),
@@ -250,7 +257,7 @@ export default function ProfilePage() {
           eventTypes: (eventsRes.data || []).map((item: any) => item.event_type),
         });
         payload.achievementStats = {
-          watchedRows: watchedData,
+          watchedRows: watchedData as any,
           comments: commentsRes.data || [],
           followingIds: (followingRes.data || []).map((item: any) => item.following_id),
           followerIds: (followersRes.data || []).map((item: any) => item.follower_id),
@@ -660,6 +667,9 @@ export default function ProfilePage() {
               {criticStatus.isCritic && (
                 <CriticBadge size="sm" className="mr-1" />
               )}
+
+              {/* نشان وضعیت اشتراک با شمارش روزهای باقی‌مانده */}
+              <SubscriptionBadge status={subStatus} className="mr-1" />
             </div>
             
             {profileInfo.bio && (
@@ -692,6 +702,19 @@ export default function ProfilePage() {
                 )}
               </Link>
 
+              <Link
+                href="/dashboard/subscription"
+                className={`flex items-center gap-1.5 text-xs font-black px-4 py-2.5 rounded-full border transition-all text-center shadow-lg group ${
+                  subStatus.isActive
+                    ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 hover:from-amber-500/30 hover:to-yellow-500/30 border-amber-400/40 text-amber-300 hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                    : 'bg-white/10 hover:bg-white/20 border-white/10 text-gray-300'
+                }`}
+                title="مدیریت و مشاهده اشتراک VIP"
+              >
+                <Crown size={15} className="text-amber-400 group-hover:rotate-6 transition-transform" />
+                <span>{subStatus.isLifetime ? 'VIP دائمی' : subStatus.isActive ? `${subStatus.formattedDaysRemaining} تا تمدید` : 'خرید اشتراک VIP'}</span>
+              </Link>
+
               <Link href="/dashboard/leaderboard" className="w-9 h-9 bg-purple-600 text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-[0_0_15px_rgba(147,51,234,0.4)] cursor-pointer border border-purple-400" title="جدول امتیازات">
                 <Trophy size={18} />
               </Link>
@@ -711,6 +734,9 @@ export default function ProfilePage() {
 
         {/* --- CONTENT --- */}
         <div className="max-w-5xl mx-auto px-4 mt-16 sm:mt-20 space-y-8 sm:space-y-12 mb-20">
+          
+          {/* کارت وضعیت جامع اشتراک VIP با نمایش دقیق روزهای باقی‌مانده */}
+          <SubscriptionStatusCard status={subStatus} />
           
           {/* کارت وضعیت یا نقدهای منتقد رسمی */}
           {criticStatus.isCritic ? (
@@ -1223,7 +1249,7 @@ export default function ProfilePage() {
                             <span className="text-xs font-bold text-[#ccff00] bg-[#ccff00]/10 px-2 py-1 rounded-md">{item.title}</span>
                             <span className="text-[10px] text-gray-500">{item.subtitle}</span>
                           </div>
-                          <p className="text-sm text-gray-300 leading-relaxed">{item.content}</p>
+                          <CommentRenderer content={item.content} textClassName="text-sm text-gray-300 leading-relaxed" />
                         </div>
                       </>
                     ) : (

@@ -4,15 +4,17 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Home, Search, List, User, LogOut,
+  Home, Search, List, User, LogOut, Crown,
   X, Sparkles, Menu, Loader2, Star, ChevronRight, SlidersHorizontal,
-  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check, Compass, Feather
+  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check, Compass, Feather, BookOpen
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { searchShows, advancedDiscoverShows, getPopularShows, getImageUrl } from '@/lib/tmdbClient';
 import { WatchedProvider } from '@/lib/watchedContext';
 import { ShowCardProgress } from './components/ShowProgressBar';
 import { WatchlistButton } from './components/WatchlistButton';
+import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
+import { SubscriptionBadge } from './components/SubscriptionComponents';
 
 // ژانرهای برتر برای فیلتر سریع
 const QUICK_GENRES = [
@@ -84,16 +86,29 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [hasMoreResults, setHasMoreResults] = useState(true);
   // ذخیره و خواندن واچ‌لیست برای دکمه کارت‌ها
   const [watchlistIds, setWatchlistIds] = useState<Set<number>>(new Set());
+  const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
 
   useEffect(() => {
-    const fetchUserWatchlist = async () => {
+    const fetchUserData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
-        if (data) setWatchlistIds(new Set(data.map((item: any) => Number(item.show_id))));
+        const [watchlistRes, profileRes] = await Promise.all([
+          supabase.from('watchlist').select('show_id').eq('user_id', user.id),
+          supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+        ]);
+
+        if (watchlistRes.data) {
+          setWatchlistIds(new Set(watchlistRes.data.map((item: any) => Number(item.show_id))));
+        }
+
+        const status = calculateSubscriptionDetails({
+          ...(profileRes.data || {}),
+          user_metadata: user.user_metadata,
+        });
+        setSubStatus(status);
       }
     };
-    fetchUserWatchlist();
+    fetchUserData();
   }, []);
 
   const toggleWatchlist = async (e: React.MouseEvent, showId: number) => {
@@ -520,12 +535,20 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 w-full space-y-2">
-          <MenuItem icon={<Home size={20} />} label="صفحه اصلی" active={pathname === '/dashboard'} onClick={() => router.push('/dashboard')} />
-          <MenuItem icon={<Compass size={20} />} label="اکسپلور" active={pathname === '/dashboard/explore'} onClick={() => router.push('/dashboard/explore')} />
-          <MenuItem icon={<Feather size={20} className="text-amber-400" />} label="باشگاه منتقدین" active={pathname === '/dashboard/critics'} onClick={() => router.push('/dashboard/critics')} />
-          <MenuItem icon={<List size={20} />} label="سریال های من" active={pathname === '/dashboard/lists'} onClick={() => router.push('/dashboard/lists')} />
-          <MenuItem icon={<Sparkles size={20} className="text-purple-400" />} label=" پیشنهاد سریال " active={pathname === '/dashboard/mood'} onClick={() => router.push('/dashboard/mood')} />
-          <MenuItem icon={<User size={20} />} label="پروفایل" active={pathname === '/dashboard/profile'} onClick={() => router.push('/dashboard/profile')} />
+          <MenuItem icon={<Home size={20} />} label="صفحه اصلی" active={pathname === '/dashboard'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard'); }} />
+          <MenuItem icon={<Compass size={20} />} label="اکسپلور" active={pathname === '/dashboard/explore'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/explore'); }} />
+          <MenuItem icon={<BookOpen size={20} className="text-[#ccff00]" />} label="مجله بینجر" active={pathname.startsWith('/blog')} onClick={() => { setIsSidebarOpen(false); router.push('/blog'); }} />
+          <MenuItem icon={<Feather size={20} className="text-amber-400" />} label="باشگاه منتقدین" active={pathname === '/dashboard/critics'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/critics'); }} />
+          <MenuItem icon={<List size={20} />} label="سریال های من" active={pathname === '/dashboard/lists'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/lists'); }} />
+          <MenuItem icon={<Sparkles size={20} className="text-purple-400" />} label=" پیشنهاد سریال " active={pathname === '/dashboard/mood'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/mood'); }} />
+          <MenuItem icon={<User size={20} />} label="پروفایل" active={pathname === '/dashboard/profile'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/profile'); }} />
+          <MenuItem 
+            icon={<Crown size={20} className={subStatus?.isActive ? "text-amber-400" : "text-gray-400"} />} 
+            label="اشتراک VIP" 
+            badge={subStatus?.isLifetime ? "VIP دائمی" : subStatus?.isActive ? `${subStatus.formattedDaysRemaining} مانده` : "ارتقا ✨"}
+            active={pathname === '/dashboard/subscription'} 
+            onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/subscription'); }} 
+          />
         </nav>
 
         <div className="mt-auto pt-6 border-t border-white/5">
@@ -567,8 +590,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
         
-        {/* سمت چپ: دکمه سرچ شناور بدون باکس (بهینه برای اپلیکیشن موبایل) */}
-        <div className="pointer-events-auto">
+        {/* سمت چپ: دکمه وضعیت اشتراک با روزهای مانده + دکمه سرچ شناور */}
+        <div className="pointer-events-auto flex items-center gap-2">
+          {subStatus && pathname !== '/dashboard' && (
+            <SubscriptionBadge status={subStatus} />
+          )}
           <button 
             type="button"
             onClick={() => setShowSearchOverlay(true)} 
@@ -624,22 +650,36 @@ interface MenuItemProps {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  badge?: string;
   onClick: () => void;
 }
 
-function MenuItem({ icon, label, active = false, onClick }: MenuItemProps) {
+function MenuItem({ icon, label, active = false, badge, onClick }: MenuItemProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-3 p-3 mx-2 rounded-xl text-right transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${active
+      className={`w-full flex items-center justify-between p-3 mx-2 rounded-xl text-right transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-[#ccff00] cursor-pointer ${
+        active
           ? 'bg-[#ccff00] text-black font-bold shadow-lg shadow-[#ccff00]/20'
           : 'text-gray-400 hover:bg-white/5 hover:text-white'
-        }`}
+      }`}
     >
-      <span className={`transition-transform group-hover:scale-110 ${active ? 'scale-110' : ''}`}>{icon}</span>
-      <span className="text-sm">{label}</span>
-      {active && <div className="mr-auto w-1.5 h-1.5 rounded-full bg-black"></div>}
+      <div className="flex items-center gap-3 min-w-0">
+        <span className={`transition-transform group-hover:scale-110 shrink-0 ${active ? 'scale-110' : ''}`}>{icon}</span>
+        <span className="text-sm truncate">{label}</span>
+      </div>
+      {badge ? (
+        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border shrink-0 mr-2 ${
+          active
+            ? 'bg-black/20 text-black border-black/30'
+            : 'bg-amber-400/15 text-amber-300 border-amber-400/30'
+        }`}>
+          {badge}
+        </span>
+      ) : active ? (
+        <div className="mr-auto w-1.5 h-1.5 rounded-full bg-black shrink-0"></div>
+      ) : null}
     </button>
   );
 }

@@ -44,13 +44,22 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
+    const adminEmails = (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+
+    const isEmailAdmin = Boolean(user.email && adminEmails.includes(user.email.toLowerCase()));
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (profile?.role !== 'admin') {
+    const isRoleAdmin = profile?.role === 'admin';
+
+    if (!isRoleAdmin && !isEmailAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = '/dashboard';
       return NextResponse.redirect(url);
@@ -61,6 +70,10 @@ export async function middleware(request: NextRequest) {
 
   // سناریو ۱: کاربر لاگین نکرده و می‌خواهد برود داشبورد -> بفرست لاگین
   if (!user && pathname.startsWith('/dashboard')) {
+    // اجازه دسترسی عمومی به جزئیات سریال‌ها برای خزنده‌های سئو (Googlebot) و لینک‌های اشتراک‌گذاری
+    if (pathname.startsWith('/dashboard/tv/')) {
+      return response;
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

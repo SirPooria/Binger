@@ -11,7 +11,7 @@ interface RateLimitEntry {
 }
 const rateLimitMap = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 120; // 120 requests per minute per IP
+const MAX_REQUESTS_PER_WINDOW = 600; // 600 requests per minute per IP
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
@@ -34,6 +34,103 @@ function isRateLimited(ip: string): boolean {
 
   entry.count++;
   return false;
+}
+
+// ==========================================
+// IN-MEMORY LRU CACHE IMPLEMENTATION
+// ==========================================
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+class InProcessLRUCache<T> {
+  private readonly max: number;
+  private readonly cache = new Map<string, CacheEntry<T>>();
+
+  constructor(max = 3000) {
+    this.max = max;
+  }
+
+  get(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    // Check expiration
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    // Refresh LRU order (delete & re-insert)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry.data;
+  }
+
+  set(key: string, data: T, ttlMs: number): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.max) {
+      // Evict least recently used item (the oldest insertion in Map)
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
+
+    this.cache.set(key, {
+      data,
+      expiresAt: Date.now() + ttlMs,
+    });
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+}
+
+// Preserve cache across Next.js dev reloads via globalThis
+const globalForCache = globalThis as unknown as {
+  __bingerTmdbLruCache?: InProcessLRUCache<any>;
+};
+const tmdbLruCache = globalForCache.__bingerTmdbLruCache || new InProcessLRUCache<any>(3000);
+if (process.env.NODE_ENV !== 'production') {
+  globalForCache.__bingerTmdbLruCache = tmdbLruCache;
+}
+
+// TTL determination helper
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;      // 7 days for standard show & season details
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;         // 12 hours for trending, airing & discover data
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;             // 6 hours for search queries
+
+function getTtlForPath(fullPath: string): { ttlMs: number; cacheControlHeader: string } {
+  // 1. Search queries (6 hours)
+  if (fullPath.startsWith('search/')) {
+    return {
+      ttlMs: SIX_HOURS_MS,
+      cacheControlHeader: 'public, max-age=21600, stale-while-revalidate=43200',
+    };
+  }
+
+  // 2. Trending, airing & discover queries (12 hours)
+  if (
+    fullPath.startsWith('trending/') ||
+    fullPath.startsWith('discover/') ||
+    fullPath === 'tv/on_the_air' ||
+    fullPath === 'tv/top_rated'
+  ) {
+    return {
+      ttlMs: TWELVE_HOURS_MS,
+      cacheControlHeader: 'public, max-age=43200, stale-while-revalidate=86400',
+    };
+  }
+
+  // 3. Standard static show details, seasons, episodes, credits, people, similar, recommendations (7 days)
+  return {
+    ttlMs: SEVEN_DAYS_MS,
+    cacheControlHeader: 'public, max-age=604800, stale-while-revalidate=1209600',
+  };
 }
 
 // Strict path allowlist validation
@@ -97,6 +194,8 @@ export async function GET(
       return NextResponse.json({ error: 'مسیر درخواست‌شده در دسترس نیست' }, { status: 403 });
     }
 
+    const fullPath = path.join('/');
+
     // IP extraction for rate limiting
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
       request.headers.get('x-real-ip') ||
@@ -109,23 +208,43 @@ export async function GET(
       );
     }
 
-    // Build safe upstream URL
+    // Build safe upstream URL and normalized cache key
     const searchParams = request.nextUrl.searchParams;
     const sanitizedParams = new URLSearchParams();
 
-    // Injected server-side only
+    // Injected server-side only for upstream call
     sanitizedParams.set('api_key', TMDB_API_KEY);
 
-    for (const [key, value] of searchParams.entries()) {
+    // Collect and sort query params for canonical cache key
+    const cacheParams = new URLSearchParams();
+    const sortedKeys = Array.from(searchParams.keys()).sort();
+
+    for (const key of sortedKeys) {
       if (ALLOWED_QUERY_PARAMS.has(key)) {
-        // Basic length check to avoid param bloating
+        const value = searchParams.get(key) || '';
         if (value.length <= 200) {
           sanitizedParams.set(key, value);
+          cacheParams.set(key, value);
         }
       }
     }
 
-    const upstreamUrl = `${TMDB_BASE_URL}/${path.join('/')}?${sanitizedParams.toString()}`;
+    const cacheKey = `${fullPath}?${cacheParams.toString()}`;
+    const { ttlMs, cacheControlHeader } = getTtlForPath(fullPath);
+
+    // 1. FAST PATH: Check In-Memory LRU Cache (HIT)
+    const cachedData = tmdbLruCache.get(cacheKey);
+    if (cachedData !== null) {
+      return NextResponse.json(cachedData, {
+        headers: {
+          'X-Cache': 'HIT',
+          'Cache-Control': cacheControlHeader,
+        },
+      });
+    }
+
+    // 2. SLOW PATH: Fetch from upstream (MISS)
+    const upstreamUrl = `${TMDB_BASE_URL}/${fullPath}?${sanitizedParams.toString()}`;
 
     // 8-second timeout controller
     const controller = new AbortController();
@@ -150,9 +269,14 @@ export async function GET(
       }
 
       const data = await upstreamRes.json();
+
+      // Store in In-Memory LRU Cache with specified TTL
+      tmdbLruCache.set(cacheKey, data, ttlMs);
+
       return NextResponse.json(data, {
         headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+          'X-Cache': 'MISS',
+          'Cache-Control': cacheControlHeader,
         },
       });
     } catch (fetchErr: unknown) {

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   ArrowLeft, ArrowRight, Tv, User, Sparkles, Play, CheckCircle2,
   Calendar, Flame, ShieldCheck, Heart, Trophy, Bot, Star,
-  Compass, Eye, Film, Layers, Feather, Clock, Check
+  Compass, Eye, Film, Layers, Feather, Clock, Check, BookOpen
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { getTrendingShows, getImageUrl } from '@/lib/tmdbClient';
@@ -91,6 +91,10 @@ export default function WelcomePage() {
             <a href="#features" className="hover:text-[#ccff00] transition-colors">
               ویژگی‌های کلیدی
             </a>
+            <Link href="/blog" className="hover:text-[#ccff00] transition-colors flex items-center gap-1">
+              <span>مجله سینمایی</span>
+              <BookOpen size={14} className="text-[#ccff00]" />
+            </Link>
             <Link href="/dashboard/explore" className="hover:text-[#ccff00] transition-colors flex items-center gap-1">
               <span>کاوش سریال‌ها</span>
               <Compass size={14} className="text-[#ccff00]" />
