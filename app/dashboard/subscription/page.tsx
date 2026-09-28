@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { 
   ArrowRight, Check, X, Crown, Sparkles, Clock, ShieldCheck, 
-  BarChart3, Pin, Layers, Dna, Tv, Film, Award, CheckCircle2 
+  BarChart3, Pin, Layers, Dna, Tv, Film, Award, CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
 import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
+import { initiatePayment } from '@/app/actions/paymentActions';
+
 import { SubscriptionStatusCard } from '../components/SubscriptionComponents';
 
 const VIP_FEATURES = [
@@ -73,6 +76,26 @@ export default function SubscriptionPage() {
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
   const [subStatus, setSubStatus] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handlePay = async () => {
+    setIsConnecting(true);
+    setErrorMsg(null);
+    try {
+      const res = await initiatePayment(selectedPlan);
+      if (res.success && res.url) {
+        window.location.href = res.url;
+      } else {
+        setErrorMsg(res.error || 'خطا در ارتباط با درگاه زیبال');
+        setIsConnecting(false);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'خطا در آغاز پرداخت');
+      setIsConnecting(false);
+    }
+  };
+
 
   useEffect(() => {
     async function checkVipStatus() {
@@ -258,30 +281,40 @@ export default function SubscriptionPage() {
             </div>
           </div>
 
-          {/* اطلاع‌رسانی درگاه پرداخت */}
-          <div className="mt-8 rounded-2xl border border-white/10 bg-black/50 p-4 text-center">
-            <div className="flex items-center justify-center gap-2 text-amber-300 font-bold text-sm mb-1">
-              <Clock size={16} />
-              <span>اتصال درگاه بانکی مستقیم شاپرک در مرحله نهایی است</span>
+          {/* پیام خطا در صورت وجود */}
+          {errorMsg && (
+            <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold text-center">
+              {errorMsg}
             </div>
-            <p className="text-xs text-gray-400 leading-relaxed max-w-xl mx-auto">
-              جهت حفظ حقوق کاربران، درگاه خرید مستقیم کارت‌های شتاب در روزهای آینده فعال خواهد شد. در فاز فعلی، اشتراک‌های VIP از طریق ایونت‌های معرفی دوستان (جام بینجر)، پیش‌ثبت‌نام و کدهای هدیه فعال می‌شوند.
-            </p>
-          </div>
+          )}
 
           <button
             type="button"
-            disabled
-            className="mt-6 w-full cursor-not-allowed rounded-2xl border border-amber-400/20 bg-amber-400/10 py-4 text-sm font-black text-amber-300 opacity-90 transition-all"
+            disabled={isConnecting}
+            onClick={handlePay}
+            className="mt-6 w-full cursor-pointer rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:brightness-110 py-4 text-sm font-black text-black shadow-[0_0_25px_rgba(251,191,36,0.35)] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
-            {subStatus?.isActive ? 'تمدید اشتراک' : 'خرید اشتراک'}{' '}
-            {selectedPlan === 'monthly' ? 'ماهانه (۳۰ روز)' : 'سالانه (۱۲ ماه)'} — اتصال درگاه شاپرک به‌زودی
+            {isConnecting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>در حال انتقال به درگاه پرداخت زیبال...</span>
+              </>
+            ) : (
+              <>
+                <Crown size={18} />
+                <span>
+                  {subStatus?.isActive ? 'تمدید اشتراک' : 'خرید اشتراک'}{' '}
+                  {selectedPlan === 'monthly' ? 'ماهانه (۱۴۹,۰۰۰ تومان)' : 'سالانه (۱,۴۹۰,۰۰۰ تومان با ۲ ماه هدیه)'}
+                </span>
+              </>
+            )}
           </button>
           {subStatus?.isActive && !subStatus.isLifetime && (
             <p className="mt-2 text-center text-[11px] text-gray-400">
-              با هر تمدید ماهانه، ۳۰ روز به اعتبار باقی‌مانده فعلی شما ({subStatus.formattedDaysRemaining}) اضافه خواهد شد.
+              با هر تمدید، دوره به انتهای اعتبار باقی‌مانده فعلی شما ({subStatus.formattedDaysRemaining}) افزوده خواهد شد.
             </p>
           )}
+
         </section>
 
       </div>

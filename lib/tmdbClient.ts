@@ -690,6 +690,51 @@ export const getRecommendations = async (showId: number): Promise<TMDBShow[]> =>
   return data?.results || [];
 };
 
+/**
+ * دریافت لیست ترکیبی و غنی از سریال‌های مشابه و پیشنهادی بر اساس یک سریال خاص
+ * همراه با فالبک دسته‌بندی برای تضمین کامل بودن کاروزل پیشنهادات
+ */
+export const getRelatedShowsForShow = async (
+  showId: number | string,
+  genreId?: number,
+  limit = 20
+): Promise<TMDBShow[]> => {
+  const numId = Number(showId);
+  if (isNaN(numId) || numId <= 0) return [];
+
+  try {
+    const [recData, simData] = await Promise.all([
+      fetchFromGateway<{ results: TMDBShow[] }>(`tv/${numId}/recommendations`, { language: 'en-US', page: 1 }).catch(() => null),
+      fetchFromGateway<{ results: TMDBShow[] }>(`tv/${numId}/similar`, { language: 'en-US', page: 1 }).catch(() => null),
+    ]);
+
+    const recs = recData?.results || [];
+    const sims = simData?.results || [];
+    const unique = new Map<number, TMDBShow>();
+
+    [...recs, ...sims].forEach((s) => {
+      if (s && s.id !== numId && s.poster_path && s.name && !unique.has(s.id)) {
+        unique.set(s.id, s);
+      }
+    });
+
+    // در صورتی که تعداد پیشنهادات مستقیم کم باشد، با برترین‌های همان ژانر تکمیل می‌شود
+    if (unique.size < 10 && genreId) {
+      const genreShows = await getShowsByGenre(genreId).catch(() => []);
+      genreShows.forEach((s) => {
+        if (s && s.id !== numId && s.poster_path && s.name && !unique.has(s.id)) {
+          unique.set(s.id, s);
+        }
+      });
+    }
+
+    return Array.from(unique.values()).slice(0, limit);
+  } catch (err) {
+    console.error(`[getRelatedShowsForShow] Failed for ${showId}:`, err);
+    return [];
+  }
+};
+
 export const advancedDiscoverShows = async (filters: {
   genreId?: number | null;
   minRating?: number | null;

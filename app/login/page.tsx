@@ -354,9 +354,7 @@ export default function LoginPage() {
                 <span>۱۰۰٪ رایگان و بدون پسورد</span>
               </div>
             </div>
-
           </div>
-
           {/* کارت فرم ورود شیشه‌ای (مدرن، ساده و بدون خطوط اضافی) */}
           <div className="w-full max-w-[430px] mx-auto lg:col-span-5">
             <motion.div
@@ -407,26 +405,37 @@ export default function LoginPage() {
                         )}
                       </div>
 
-                      <div className="relative group">
+                      <div
+                        dir="ltr"
+                        className={`flex items-center w-full bg-black/60 border rounded-2xl transition-all shadow-inner group overflow-hidden ${
+                          isPhoneValid
+                            ? 'border-[#ccff00]/60 focus-within:border-[#ccff00] focus-within:ring-1 focus-within:ring-[#ccff00]'
+                            : 'border-white/15 focus-within:border-[#ccff00] hover:border-white/30'
+                        }`}
+                      >
+                        <div
+                          onClick={() => document.getElementById('phone-input')?.focus()}
+                          className="flex items-center gap-1.5 pl-3.5 pr-3 py-3.5 bg-white/[0.03] border-r border-white/10 text-gray-400 select-none shrink-0 cursor-pointer"
+                        >
+                          <Phone size={14} className="text-[#ccff00]/70" />
+                          <span className="text-xs font-mono font-bold text-gray-300 tracking-wider">
+                            +۹۸
+                          </span>
+                        </div>
+
                         <input
                           id="phone-input"
                           type="tel"
+                          dir="ltr"
                           autoComplete="tel"
                           required
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
-                          className={`w-full bg-black/60 border rounded-2xl p-3.5 pr-4 pl-14 text-white placeholder:text-gray-600 focus:outline-none transition-all text-left ltr tracking-wider text-sm font-mono shadow-inner group-hover:border-white/30 ${isPhoneValid
-                              ? 'border-[#ccff00]/60 focus:border-[#ccff00] focus:ring-1 focus:ring-[#ccff00]'
-                              : 'border-white/15 focus:border-[#ccff00]'
-                            }`}
+                          className="w-full bg-transparent px-4 py-3.5 text-white placeholder:text-gray-600 focus:outline-none text-left tracking-wider text-sm font-mono"
                           placeholder="09123456789"
                           disabled={loading}
                           autoFocus
                         />
-                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-gray-400">
-                          <span className="text-[11px] font-bold font-mono border-r border-white/15 pr-1.5">🇮🇷 +۹۸</span>
-                          <Phone size={15} />
-                        </div>
                       </div>
                       <span className="text-[10px] text-gray-500 mt-1 block">
                         فرمت‌های مجاز: ۰۹۱۲۳۴۵۶۷۸۹ یا ۹۱۲۳۴۵۶۷۸۹
@@ -498,8 +507,8 @@ export default function LoginPage() {
                             onPaste={handleDigitPaste}
                             onFocus={(e) => e.target.select()}
                             className={`w-11 h-14 sm:w-13 sm:h-15 rounded-2xl bg-black/60 border text-center font-mono font-black text-2xl transition-all outline-none ${digit
-                                ? 'border-[#ccff00] text-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_15px_rgba(204,255,0,0.3)]'
-                                : 'border-white/15 text-white focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/40'
+                              ? 'border-[#ccff00] text-[#ccff00] bg-[#ccff00]/10 shadow-[0_0_15px_rgba(204,255,0,0.3)]'
+                              : 'border-white/15 text-white focus:border-[#ccff00] focus:ring-2 focus:ring-[#ccff00]/40'
                               }`}
                             disabled={loading}
                           />
@@ -552,8 +561,8 @@ export default function LoginPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={`mt-4 p-3 rounded-2xl text-xs font-bold flex items-center gap-2 leading-relaxed ${isError
-                      ? 'bg-red-500/10 border border-red-500/30 text-red-300'
-                      : 'bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00]'
+                    ? 'bg-red-500/10 border border-red-500/30 text-red-300'
+                    : 'bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00]'
                     }`}
                 >
                   {isError ? <AlertCircle size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}

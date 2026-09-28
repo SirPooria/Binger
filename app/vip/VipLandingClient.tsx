@@ -18,11 +18,13 @@ import {
   Star,
   Lock,
   ChevronDown,
-  Info,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { toPersianDigits } from '@/lib/subscription';
+import { initiatePayment } from '@/app/actions/paymentActions';
+
 
 interface PlanDetails {
   id: 'monthly' | 'yearly';
@@ -145,6 +147,8 @@ export default function VipLandingClient() {
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [processingPlan, setProcessingPlan] = useState<'monthly' | 'yearly' | null>(null);
+
 
   useEffect(() => {
     async function checkAuth() {
@@ -175,20 +179,28 @@ export default function VipLandingClient() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handlePurchase = (planId: 'monthly' | 'yearly') => {
-    const plan = PLANS.find((p) => p.id === planId);
-    console.log('[VIP Upgrade] Purchase initiated for plan:', {
-      planId,
-      planTitle: plan?.title,
-      price: plan?.price,
-      userId: currentUser?.id || 'guest',
-      timestamp: new Date().toISOString(),
-    });
+  const handlePurchase = async (planId: 'monthly' | 'yearly') => {
+    if (!currentUser) {
+      router.push('/login?next=/vip');
+      return;
+    }
 
-    showToast(
-      `درگاه پرداخت آنلاین به‌زودی متصل می‌شود! پلن «${plan?.title}» برای حساب شما ثبت اولیه شد 🚀`
-    );
+    setProcessingPlan(planId);
+    try {
+      const res = await initiatePayment(planId);
+      if (res.success && res.url) {
+        window.location.href = res.url;
+      } else {
+        showToast(res.error || 'خطا در برقراری ارتباط با درگاه پرداخت');
+        setProcessingPlan(null);
+      }
+    } catch (err: any) {
+      console.error('[VIP] Payment error:', err);
+      showToast(err?.message || 'خطا در شروع عملیات پرداخت');
+      setProcessingPlan(null);
+    }
   };
+
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] selection:bg-amber-400 selection:text-black relative overflow-hidden pb-24">
@@ -376,20 +388,33 @@ export default function VipLandingClient() {
                   <div className="pt-8">
                     <button
                       type="button"
+                      disabled={processingPlan !== null}
                       onClick={(e) => {
                         e.stopPropagation();
                         handlePurchase(plan.id);
                       }}
                       className={`w-full py-4 px-6 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer shadow-lg ${
-                        isYearly
+                        processingPlan === plan.id
+                          ? 'opacity-80 cursor-wait bg-amber-400 text-black'
+                          : isYearly
                           ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black hover:brightness-110 shadow-[0_0_30px_rgba(251,191,36,0.4)]'
                           : 'bg-white/10 hover:bg-white/15 text-white border border-white/10'
                       }`}
                     >
-                      <Crown className="w-4 h-4" />
-                      <span>{isYearly ? 'خرید اشتراک سالانه (با ۲ ماه هدیه)' : 'خرید اشتراک ماهانه'}</span>
+                      {processingPlan === plan.id ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>در حال اتصال به درگاه زیبال...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Crown className="w-4 h-4" />
+                          <span>{isYearly ? 'خرید اشتراک سالانه (با ۲ ماه هدیه)' : 'خرید اشتراک ماهانه'}</span>
+                        </>
+                      )}
                     </button>
                   </div>
+
                 </div>
               );
             })}
@@ -450,11 +475,20 @@ export default function VipLandingClient() {
 
           <button
             type="button"
+            disabled={processingPlan !== null}
             onClick={() => handlePurchase(selectedPlan)}
-            className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black transition shrink-0 shadow-[0_0_20px_rgba(251,191,36,0.3)] cursor-pointer"
+            className="px-6 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black transition shrink-0 shadow-[0_0_20px_rgba(251,191,36,0.3)] cursor-pointer flex items-center gap-2"
           >
-            شروع ارتقای حساب
+            {processingPlan === selectedPlan ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>در حال اتصال به زیبال...</span>
+              </>
+            ) : (
+              <span>شروع ارتقای حساب</span>
+            )}
           </button>
+
         </section>
 
         {/* FAQs Section */}

@@ -11,16 +11,33 @@ import {
   Tv,
 } from 'lucide-react';
 
+import { getSiteText } from '@/lib/settings';
+import { verifyAdminSession } from '@/lib/adminAuth';
+import EditableText from '@/app/components/EditableText';
+
 export const metadata = {
   title: 'مجله و وبلاگ سینمایی | Binger Magazine',
   description: 'نقد و تحلیل سریال‌ها، معرفی آثار برتر، اخبار روز سینما و مقالات اختصاصی پلتفرم بینجر',
 };
 
-export default function BlogLayout({
+export default async function BlogLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [footerDesc, footerCopyright, adminSession] = await Promise.all([
+    getSiteText(
+      'footer_description',
+      'مرجع نقد، بررسی، اخبار و تحلیل سریال‌ها و فیلم‌های برتر سینمای ایران و جهان.'
+    ),
+    getSiteText(
+      'footer_copyright',
+      '© تمامی حقوق برای پلتفرم بینجر (Binger) محفوظ است.'
+    ),
+    verifyAdminSession().catch(() => ({ authorized: false })),
+  ]);
+
+  const isAdmin = adminSession?.authorized === true;
   return (
     <div
       dir="rtl"
@@ -107,9 +124,14 @@ export default function BlogLayout({
               <img src="/Logo.png" alt="Binger" className="h-8 w-auto object-contain" />
               <span className="text-sm font-bold text-white">مجله سینمایی بینجر</span>
             </div>
-            <p className="text-xs text-gray-500 max-w-md">
-              مرجع نقد، بررسی، اخبار و تحلیل سریال‌ها و فیلم‌های برتر سینمای ایران و جهان.
-            </p>
+            <EditableText
+              settingKey="footer_description"
+              initialValue={footerDesc || 'مرجع نقد، بررسی، اخبار و تحلیل سریال‌ها و فیلم‌های برتر سینمای ایران و جهان.'}
+              isAdmin={isAdmin}
+              as="p"
+              description="توضیح کوتاه فوتر در مجله"
+              className="text-xs text-gray-500 max-w-md"
+            />
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-5 text-xs text-gray-400 font-medium">
@@ -121,7 +143,14 @@ export default function BlogLayout({
           </div>
         </div>
         <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-gray-600">
-          <p>© تمامی حقوق برای پلتفرم بینجر (Binger) محفوظ است.</p>
+          <EditableText
+            settingKey="footer_copyright"
+            initialValue={footerCopyright || '© تمامی حقوق برای پلتفرم بینجر (Binger) محفوظ است.'}
+            isAdmin={isAdmin}
+            as="p"
+            description="متن کپی‌رایت فوتر"
+            className="text-[11px] text-gray-600"
+          />
           <p className="font-mono text-gray-500">Binger Cinematic Magazine 2026</p>
         </div>
       </footer>
