@@ -194,7 +194,7 @@ export default function SubscriptionPage() {
                 </span>
               )}
             </div>
-            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">149,000 تومان</strong>
+            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">۱۴۹,۰۰۰ تومان</strong>
             <span className="mt-2 block text-xs text-gray-400">دسترسی کامل به مدت ۳۰ روز</span>
           </button>
 
@@ -217,7 +217,7 @@ export default function SubscriptionPage() {
                 </span>
               )}
             </div>
-            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">1,490,000 تومان</strong>
+            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">۱,۴۹۰,۰۰۰ تومان</strong>
             <span className="mt-2 block text-xs text-gray-400">شامل ۱۲ ماه دسترسی نامحدود (به جای 1,788,000)</span>
           </button>
         </section>
