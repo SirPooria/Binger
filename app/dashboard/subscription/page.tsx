@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { 
-  ArrowRight, Check, X, Crown, Sparkles, Clock, ShieldCheck, 
+import {
+  ArrowRight, Check, X, Crown, Sparkles, Clock, ShieldCheck,
   BarChart3, Pin, Layers, Dna, Tv, Film, Award, CheckCircle2,
   Loader2,
 } from 'lucide-react';
@@ -129,7 +129,7 @@ export default function SubscriptionPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.18),transparent_50%)]" />
 
       <div className="relative mx-auto max-w-5xl z-10">
-        
+
         {/* نوار ناوبری بالا */}
         <div className="flex items-center justify-between mb-8">
           <button
@@ -154,7 +154,7 @@ export default function SubscriptionPage() {
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-600 text-black shadow-[0_0_50px_rgba(245,158,11,0.45)]">
             <Crown size={40} />
           </div>
-          
+
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-bold text-amber-300 mb-4 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
             <Sparkles size={14} />
             <span>عضویت ویژه و ابزارهای حرفه‌ای بینجر (BINGER VIP)</span>
@@ -163,7 +163,7 @@ export default function SubscriptionPage() {
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black leading-tight tracking-tight">
             ابزارهای نامحدود، <span className="bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent">آمار پیشرفته</span> و سالنامه تماشا
           </h1>
-          
+
           <p className="mt-4 text-sm sm:text-base leading-relaxed text-gray-300 max-w-2xl mx-auto">
             با اشتراک VIP، سقف ۳ لیست را بشکنید، کالکشن‌هایتان را در صدر پروفایل پین کنید، به نمودارهای دقیق بازیگران و کارگردان‌ها دست پیدا کنید و کارت سالنامه Binger Wrapped خود را دریافت نمایید.
           </p>
@@ -181,11 +181,10 @@ export default function SubscriptionPage() {
           <button
             type="button"
             onClick={() => setSelectedPlan('monthly')}
-            className={`rounded-3xl border p-6 text-right transition-all cursor-pointer relative overflow-hidden ${
-              selectedPlan === 'monthly' 
-                ? 'border-amber-400 bg-amber-400/10 shadow-[0_0_30px_rgba(245,158,11,0.15)]' 
-                : 'border-white/10 bg-white/[0.02] hover:border-white/20'
-            }`}
+            className={`rounded-3xl border p-6 text-right transition-all cursor-pointer relative overflow-hidden ${selectedPlan === 'monthly'
+              ? 'border-amber-400 bg-amber-400/10 shadow-[0_0_30px_rgba(245,158,11,0.15)]'
+              : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+              }`}
           >
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-gray-400">پلن ماهانه</span>
@@ -195,18 +194,17 @@ export default function SubscriptionPage() {
                 </span>
               )}
             </div>
-            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">۹۹٬۰۰۰ تومان</strong>
+            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">149,000 تومان</strong>
             <span className="mt-2 block text-xs text-gray-400">دسترسی کامل به مدت ۳۰ روز</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSelectedPlan('yearly')}
-            className={`relative rounded-3xl border p-6 text-right transition-all cursor-pointer overflow-hidden ${
-              selectedPlan === 'yearly' 
-                ? 'border-amber-400 bg-amber-400/10 shadow-[0_0_30px_rgba(245,158,11,0.2)]' 
-                : 'border-white/10 bg-white/[0.02] hover:border-white/20'
-            }`}
+            className={`relative rounded-3xl border p-6 text-right transition-all cursor-pointer overflow-hidden ${selectedPlan === 'yearly'
+              ? 'border-amber-400 bg-amber-400/10 shadow-[0_0_30px_rgba(245,158,11,0.2)]'
+              : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+              }`}
           >
             <span className="absolute left-4 top-4 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 px-2.5 py-1 text-[10px] font-black text-black shadow-md">
               ۲ ماه هدیه رایگان 🔥
@@ -219,8 +217,8 @@ export default function SubscriptionPage() {
                 </span>
               )}
             </div>
-            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">۹۹۰٬۰۰۰ تومان</strong>
-            <span className="mt-2 block text-xs text-gray-400">شامل ۱۲ ماه دسترسی نامحدود (به جای ۱٬۱۸۸٬۰۰۰)</span>
+            <strong className="block text-2xl sm:text-3xl font-black text-amber-300">1,490,000 تومان</strong>
+            <span className="mt-2 block text-xs text-gray-400">شامل ۱۲ ماه دسترسی نامحدود (به جای 1,788,000)</span>
           </button>
         </section>
 
@@ -238,8 +236,8 @@ export default function SubscriptionPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             {VIP_FEATURES.map((item, idx) => (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 className="flex items-start gap-3.5 p-4 rounded-2xl bg-white/[0.03] border border-white/5 hover:border-amber-400/30 transition-colors"
               >
                 <div className="p-2 rounded-xl bg-amber-400/10 shrink-0 mt-0.5">
