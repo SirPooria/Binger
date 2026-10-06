@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [isError, setIsError] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [attempts, setAttempts] = useState(0);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -54,6 +55,12 @@ export default function LoginPage() {
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (cooldown > 0) return;
+
+    if (!agreedToTerms) {
+      setIsError(true);
+      setMessage('لطفاً پیش از ادامه، تیک موافقت با قوانین و مقررات و سیاست حریم خصوصی را فعال نمایید.');
+      return;
+    }
 
     setLoading(true);
     setMessage('');
@@ -312,7 +319,7 @@ export default function LoginPage() {
             </h2>
 
             <p className="text-gray-400 text-sm leading-relaxed max-w-xl">
-              با ورود به بینجر، بیش از ۱۰,۰۰۰ سریال و فیلم را با هوش مصنوعی خلق‌کننده مود تماشا (Mood AI)، ردیابی پیشرفت اپیزودها و نشان‌های باشگاه منتقدان تجربه کنید.
+              با عضویت در بینجر، آرشیو جامع سریال‌ها و فیلم‌ها را با دستیار هوشمند Mood AI، ردیابی دقیق اپیزودها و نشان‌های باشگاه منتقدان تجربه کنید.
             </p>
 
             {/* کارت‌های سه‌گانه مزیت‌ها */}
@@ -350,8 +357,8 @@ export default function LoginPage() {
               </div>
               <span className="text-gray-600">•</span>
               <div className="flex items-center gap-1.5 text-xs font-bold text-[#ccff00]">
-                <Flame size={15} />
-                <span>۱۰۰٪ رایگان و بدون پسورد</span>
+                <ShieldCheck size={15} />
+                <span>ورود امن و بدون نیاز به رمز عبور</span>
               </div>
             </div>
           </div>
@@ -441,10 +448,32 @@ export default function LoginPage() {
                       </span>
                     </div>
 
+                    {/* تیک رضایت با قوانین و حریم خصوصی (بدون تیک اولیه) */}
+                    <div className="flex items-start gap-2.5 pt-1 text-right">
+                      <input
+                        type="checkbox"
+                        id="login-terms-consent"
+                        checked={agreedToTerms}
+                        onChange={(e) => setAgreedToTerms(e.target.checked)}
+                        className="mt-0.5 rounded border-white/20 bg-black/80 text-[#ccff00] focus:ring-[#ccff00] cursor-pointer shrink-0"
+                      />
+                      <label htmlFor="login-terms-consent" className="text-[11px] text-gray-400 cursor-pointer leading-relaxed select-none">
+                        با ورود به بینجر،{' '}
+                        <Link href="/terms" target="_blank" className="text-neutral-200 hover:text-[#ccff00] underline underline-offset-2">
+                          قوانین و مقررات
+                        </Link>{' '}
+                        و{' '}
+                        <Link href="/privacy" target="_blank" className="text-neutral-200 hover:text-[#ccff00] underline underline-offset-2">
+                          سیاست حریم خصوصی
+                        </Link>{' '}
+                        را مطالعه کرده و می‌پذیرم.
+                      </label>
+                    </div>
+
                     <button
                       type="submit"
-                      disabled={loading || cooldown > 0}
-                      className="w-full bg-[#ccff00] hover:bg-[#b3e600] text-black py-3.5 rounded-2xl font-black text-sm sm:text-base transition-all active:scale-95 flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(204,255,0,0.35)] disabled:opacity-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
+                      disabled={loading || cooldown > 0 || !agreedToTerms}
+                      className="w-full bg-[#ccff00] hover:bg-[#b3e600] text-black py-3.5 rounded-2xl font-black text-sm sm:text-base transition-all active:scale-95 flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(204,255,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#ccff00]"
                     >
                       {loading ? (
                         <>

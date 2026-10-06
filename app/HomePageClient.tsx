@@ -287,10 +287,10 @@ export default function HomePageClient({
           </motion.div>
 
           {/* Cinema Proof Strip: Clean Metadata Line */}
-          <div className="mt-10 pt-6 border-t border-white/10 w-full max-w-xl flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs font-mono text-neutral-400">
+          <div className="mt-10 pt-6 border-t border-white/10 w-full max-w-xl flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs font-mono text-neutral-300">
             <span className="flex items-center gap-2">
               <span className="text-[#ccff00]">✓</span>
-              <span>همیشه ۱۰۰٪ رایگان</span>
+              <span>شروع ۱۰۰٪ رایگان</span>
             </span>
             <span className="text-neutral-700 hidden sm:inline">|</span>
             <span className="flex items-center gap-2">
@@ -300,7 +300,7 @@ export default function HomePageClient({
             <span className="text-neutral-700 hidden sm:inline">|</span>
             <span className="flex items-center gap-2">
               <span className="text-[#ccff00]">✓</span>
-              <span>پوشش تمام سریال‌های جهان</span>
+              <span>پوشش جامع سریال‌های جهان</span>
             </span>
           </div>
 
@@ -312,27 +312,27 @@ export default function HomePageClient({
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-white/10">
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-neutral-500 uppercase tracking-widest">[ METRIC // 01 ]</div>
-            <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">+۵۰,۰۰۰</div>
-            <div className="text-xs text-neutral-400">اپیزود ردیابی‌شده توسط کاربران</div>
+            <div className="font-mono text-xs text-neutral-400 uppercase tracking-widest">[ ARCHIVE // 01 ]</div>
+            <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">آرشیو جامع</div>
+            <div className="text-xs text-neutral-300">ردیابی و مدیریت هزاران اپیزود سریال</div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-neutral-500 uppercase tracking-widest">[ PERSONAS // 02 ]</div>
-            <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">۱۶ سبک</div>
-            <div className="text-xs text-neutral-400">هویت و تحلیل تخصصی سلیقه</div>
+            <div className="font-mono text-xs text-neutral-400 uppercase tracking-widest">[ PERSONAS // 02 ]</div>
+            <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">۱۶ سبک</div>
+            <div className="text-xs text-neutral-300">هویت و تحلیل تخصصی سلیقه</div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-neutral-500 uppercase tracking-widest">[ INTEGRITY // 03 ]</div>
-            <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">۱۰۰٪</div>
-            <div className="text-xs text-neutral-400">تحلیل‌های بدون افشای داستان</div>
+            <div className="font-mono text-xs text-neutral-400 uppercase tracking-widest">[ INTEGRITY // 03 ]</div>
+            <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">سپر اسپویل</div>
+            <div className="text-xs text-neutral-300">تحلیل‌های تفکیک‌شده بدون افشای داستان</div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-2">
             <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">[ RADAR AI // 04 ]</div>
-            <div className="text-4xl sm:text-5xl font-black text-[#ccff00] font-mono tracking-tight">رادار مود</div>
-            <div className="text-xs text-neutral-400">پیشنهاد هوشمند طبق حس لحظه</div>
+            <div className="text-3xl sm:text-4xl font-black text-[#ccff00] font-mono tracking-tight">رادار مود</div>
+            <div className="text-xs text-neutral-300">پیشنهاد هوشمند طبق حس لحظه</div>
           </div>
 
         </div>
@@ -449,9 +449,9 @@ export default function HomePageClient({
                 <span>تخصص احراز‌شده:</span>
                 <span className="text-[#ccff00] font-bold">فوق‌تخصص بریکینگ‌بدولوژی</span>
               </div>
-              <div className="flex justify-between text-neutral-500">
-                <span>رتبه تحلیل:</span>
-                <span className="text-white">۹۸٪ برتر کشوری</span>
+              <div className="flex justify-between text-neutral-400">
+                <span>نشان تحلیلی:</span>
+                <span className="text-white">نشان طلایی منتقد</span>
               </div>
               <div className="flex justify-between text-neutral-500">
                 <span>شناسه پاسپورت:</span>
@@ -540,47 +540,66 @@ export default function HomePageClient({
       </section>
 
       {/* --- ARCHITECTURAL FOOTER --- */}
-      <footer className="relative z-10 bg-[#050505] py-12 px-4 sm:px-8 text-xs text-neutral-500 font-mono">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <footer className="relative z-10 bg-[#050505] py-12 px-4 sm:px-8 text-xs text-neutral-400 font-mono border-t border-white/10">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
 
-          {/* Brand */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-right">
-            <div className="flex items-center gap-3">
-              <img src="/Logo.png" alt="Binger" className="h-7 w-auto object-contain opacity-90" />
-              <span className="font-bold text-neutral-300 font-sans">بینجر • Binger</span>
+            {/* Brand */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-right">
+              <div className="flex items-center gap-3">
+                <img src="/Logo.png" alt="لوگوی بینجر" className="h-7 w-auto object-contain opacity-90" />
+                <span className="font-bold text-neutral-200 font-sans">بینجر • Binger</span>
+              </div>
+              {footerDescription && (
+                <span className="hidden sm:inline text-neutral-700">|</span>
+              )}
+              {footerDescription && (
+                <EditableText
+                  settingKey="footer_description"
+                  initialValue={footerDescription}
+                  isAdmin={isAdmin}
+                  as="p"
+                  description="متن کوتاه معرفی در فوتر"
+                  className="text-[11px] text-neutral-300 font-sans max-w-md"
+                />
+              )}
             </div>
-            {footerDescription && (
-              <span className="hidden sm:inline text-neutral-700">|</span>
-            )}
-            {footerDescription && (
-              <EditableText
-                settingKey="footer_description"
-                initialValue={footerDescription}
-                isAdmin={isAdmin}
-                as="p"
-                description="متن کوتاه معرفی در فوتر"
-                className="text-[11px] text-neutral-400 font-sans max-w-md"
-              />
-            )}
+
+            {/* Navigation & Legal Links */}
+            <div className="flex flex-wrap items-center justify-center gap-5 text-neutral-300 text-xs">
+              <Link href="/landing" className="hover:text-white transition-colors">جام بینجر</Link>
+              <Link href="/dashboard/explore" className="hover:text-white transition-colors">کاوش سریال‌ها</Link>
+              <Link href="/dashboard/critics" className="hover:text-white transition-colors">باشگاه منتقدین</Link>
+              <Link href="/terms" className="hover:text-[#ccff00] transition-colors font-bold">قوانین و مقررات</Link>
+              <Link href="/privacy" className="hover:text-[#ccff00] transition-colors font-bold">حریم خصوصی</Link>
+              <Link href="/cookies" className="hover:text-[#ccff00] transition-colors font-bold">سیاست کوکی‌ها</Link>
+            </div>
           </div>
 
-          {/* Links */}
-          <div className="flex flex-wrap items-center justify-center gap-6 text-neutral-400">
-            <Link href="/landing" className="hover:text-white transition-colors">جام بینجر</Link>
-            <Link href="/dashboard/explore" className="hover:text-white transition-colors">کاوش سریال‌ها</Link>
-            <Link href="/dashboard/critics" className="hover:text-white transition-colors">باشگاه منتقدین</Link>
-            <Link href="/login" className="hover:text-white transition-colors">حساب کاربری</Link>
+          {/* TMDB Attribution & Legal Disclaimer Bar */}
+          <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-neutral-400 font-sans">
+            <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-right">
+              <span className="text-neutral-300 font-bold">سلب مسئولیت رسانه:</span>
+              <span>بینجر فایل ویدیویی میزبانی نمی‌کند. کلیه ابرداده‌ها و تصاویر از API وب‌سایت TMDB دریافت شده‌اند.</span>
+            </div>
+
+            <div className="flex items-center gap-4 text-neutral-400 font-mono">
+              <span>پشتیبانی: support@binger.ir</span>
+            </div>
           </div>
 
           {/* Copyright */}
-          <EditableText
-            settingKey="footer_copyright"
-            initialValue={footerCopyright}
-            isAdmin={isAdmin}
-            as="p"
-            description="متن کپی‌رایت انتهای صفحات"
-            className="text-[11px] text-neutral-600"
-          />
+          <div className="flex justify-between items-center text-[11px] text-neutral-400 border-t border-white/5 pt-4">
+            <EditableText
+              settingKey="footer_copyright"
+              initialValue={footerCopyright}
+              isAdmin={isAdmin}
+              as="p"
+              description="متن کپی‌رایت انتهای صفحات"
+              className="text-[11px] text-neutral-400"
+            />
+            <span>نسخه ۲۰۲۶</span>
+          </div>
         </div>
       </footer>
 

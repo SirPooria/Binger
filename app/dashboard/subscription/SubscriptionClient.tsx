@@ -86,8 +86,13 @@ export default function SubscriptionClient({
   const [loading, setLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [termsConsent, setTermsConsent] = useState(false);
 
   const handlePay = async () => {
+    if (!termsConsent) {
+      setErrorMsg('لطفاً پیش از اتصال به درگاه، تیک موافقت با قوانین اشتراک و سیاست استرداد وجه را فعال نمایید.');
+      return;
+    }
     setIsConnecting(true);
     setErrorMsg(null);
     try {
@@ -293,12 +298,35 @@ export default function SubscriptionClient({
             </div>
           )}
 
+          {/* کادر اعلامیه شفافیت خرید اشتراک دیجیتال و قوانین استرداد وجه */}
+          <div className="mt-6 p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2 text-right">
+            <div className="flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                id="sub-terms-consent"
+                checked={termsConsent}
+                onChange={(e) => setTermsConsent(e.target.checked)}
+                className="mt-1 rounded border-amber-400/50 bg-black/80 text-amber-400 focus:ring-amber-400 cursor-pointer shrink-0"
+              />
+              <label htmlFor="sub-terms-consent" className="text-xs text-neutral-300 leading-relaxed cursor-pointer select-none">
+                شرایط خدمات اشتراک دیجیتال، استفاده از سامانه و{' '}
+                <Link href="/terms#refund" target="_blank" className="text-amber-300 hover:underline font-bold">
+                  سیاست استرداد وجه (قوانین مرجوعی)
+                </Link>{' '}
+                را مطالعه نموده و می‌پذیرم.
+              </label>
+            </div>
+            <p className="text-[11px] text-neutral-400 pr-6">
+              وفق مواد ۳۷ و ۳۸ قانون تجارت الکترونیکی، در صورت بروز نقص فنی اساسی پلتفرم یا خطای درگاه ظرف ۴۸ ساعت اول، وجه تراکنش مسترد خواهد شد.
+            </p>
+          </div>
+
           {/* دکمه خرید و انتقال به زیبال */}
           <button
             type="button"
-            disabled={isConnecting}
+            disabled={isConnecting || !termsConsent}
             onClick={handlePay}
-            className="mt-6 w-full cursor-pointer rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:brightness-110 py-4 text-sm font-black text-black shadow-[0_0_25px_rgba(251,191,36,0.35)] transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
+            className="mt-4 w-full cursor-pointer rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:brightness-110 py-4 text-sm font-black text-black shadow-[0_0_25px_rgba(251,191,36,0.35)] transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isConnecting ? (
               <>

@@ -86,7 +86,7 @@ export default function DashboardFooter({
               <BookOpen size={16} className="text-cyan-400" />
               <span>محتوا و ارتباطات</span>
             </h4>
-            <ul className="space-y-2.5 text-xs text-gray-400 mb-5">
+            <ul className="space-y-2.5 text-xs text-neutral-300 mb-5">
               <li>
                 <Link href="/blog" className="hover:text-white transition-colors">
                   مجله و اخبار سینمایی
@@ -97,16 +97,20 @@ export default function DashboardFooter({
                   باشگاه منتقدین بینجر
                 </Link>
               </li>
+              <li className="text-[11px] text-neutral-400 font-mono pt-1">
+                ایمیل: support@binger.ir
+              </li>
             </ul>
 
-            <span className="text-[11px] font-bold text-gray-500 block mb-2">ما را دنبال کنید:</span>
+            <span className="text-[11px] font-bold text-neutral-400 block mb-2">ما را دنبال کنید:</span>
             <div className="flex gap-3">
               <Link 
                 href="https://twitter.com" 
                 target="_blank" 
                 rel="noreferrer"
-                className="p-2.5 bg-white/5 rounded-xl hover:bg-[#ccff00] hover:text-black text-gray-300 transition-all cursor-pointer"
+                className="p-2.5 bg-white/5 rounded-xl hover:bg-[#ccff00] hover:text-black text-neutral-300 transition-all cursor-pointer"
                 title="Twitter / X"
+                aria-label="صفحه توییتر بینجر"
               >
                 <Twitter size={16} />
               </Link>
@@ -114,31 +118,68 @@ export default function DashboardFooter({
                 href="https://instagram.com" 
                 target="_blank" 
                 rel="noreferrer"
-                className="p-2.5 bg-white/5 rounded-xl hover:bg-gradient-to-tr hover:from-amber-500 hover:to-purple-600 hover:text-white text-gray-300 transition-all cursor-pointer"
+                className="p-2.5 bg-white/5 rounded-xl hover:bg-gradient-to-tr hover:from-amber-500 hover:to-purple-600 hover:text-white text-neutral-300 transition-all cursor-pointer"
                 title="Instagram"
+                aria-label="صفحه اینستاگرام بینجر"
               >
                 <Instagram size={16} />
               </Link>
             </div>
           </div>
 
+          {/* ستون ۴: قوانین و حریم خصوصی */}
+          <div>
+            <h4 className="font-bold text-white mb-4 text-sm flex items-center gap-2">
+              <Sparkles size={16} className="text-[#ccff00]" />
+              <span>قوانین و شفافیت</span>
+            </h4>
+            <ul className="space-y-2.5 text-xs text-neutral-300">
+              <li>
+                <Link href="/terms" className="hover:text-[#ccff00] transition-colors">
+                  قوانین و مقررات پلتفرم
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-[#ccff00] transition-colors">
+                  سیاست حفظ حریم خصوصی
+                </Link>
+              </li>
+              <li>
+                <Link href="/cookies" className="hover:text-[#ccff00] transition-colors">
+                  سیاست کوکی‌ها و حافظه
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms#refund" className="hover:text-amber-400 transition-colors">
+                  شرایط استرداد وجه VIP
+                </Link>
+              </li>
+            </ul>
+          </div>
+
         </div>
 
-        {/* کپی رایت و نشان پایین فوتر */}
-        <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs">
-          <EditableText
-            settingKey="footer_copyright"
-            initialValue={footerCopyright || '© ۲۰۲۶ تمامی حقوق برای پلتفرم بینجر (Binger) محفوظ است.'}
-            isAdmin={isAdmin}
-            as="p"
-            description="متن کپی‌رایت انتهای صفحات"
-            className="text-[11px] text-gray-500"
-          />
+        {/* سلب مسئولیت TMDB و کپی رایت */}
+        <div className="border-t border-white/10 pt-6 space-y-4 text-xs">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-neutral-400">
+            <p>
+              <strong>سلب مسئولیت رسانه:</strong> بینجر یک پلتفرم کاتالوگ و ردیابی رسانه است و هیچ‌گونه فایل ویدیویی را میزبانی یا استریم نمی‌کند. این محصول از API پایگاه داده TMDB استفاده می‌کند اما توسط TMDB تایید یا گواهی نشده است.
+            </p>
+          </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-            <span>طراحی‌شده با</span>
-            <Heart size={13} className="text-rose-500 fill-rose-500 animate-pulse" />
-            <span>برای شیفتگان واقعی فیلم و سریال</span>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-xs pt-2 border-t border-white/5">
+            <EditableText
+              settingKey="footer_copyright"
+              initialValue={footerCopyright || '© ۲۰۲۶ تمامی حقوق برای پلتفرم بینجر (Binger) محفوظ است.'}
+              isAdmin={isAdmin}
+              as="p"
+              description="متن کپی‌رایت انتهای صفحات"
+              className="text-[11px] text-neutral-400"
+            />
+
+            <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+              <span>طراحی‌شده برای شیفتگان واقعی فیلم و سریال</span>
+            </div>
           </div>
         </div>
 

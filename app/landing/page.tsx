@@ -94,7 +94,7 @@ function LandingContent() {
   const [cooldown, setCooldown] = useState(0);
   const [username, setUsername] = useState("");
   const [redeemCode, setRedeemCode] = useState("");
-  const [consent, setConsent] = useState(true);
+  const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState("");
   const [assignedCode, setAssignedCode] = useState<string | null>(null);
@@ -817,24 +817,32 @@ function LandingContent() {
                 )}
               </div>
 
-              {/* موافقت با پیامک */}
-              <div className="flex items-center gap-2 pt-1">
+              {/* موافقت با پیامک و قوانین */}
+              <div className="flex items-start gap-2 pt-1 text-right">
                 <input
                   type="checkbox"
                   id="consent-check"
                   checked={consent}
                   onChange={(e) => setConsent(e.target.checked)}
-                  className="rounded border-gray-700 bg-gray-900 text-[#ccff00] focus:ring-[#ccff00] cursor-pointer"
+                  className="mt-0.5 rounded border-gray-700 bg-gray-900 text-[#ccff00] focus:ring-[#ccff00] cursor-pointer shrink-0"
                 />
-                <label htmlFor="consent-check" className="text-[11px] text-gray-400 cursor-pointer">
-                  موافقم که هنگام انتشار عمومی اپلیکیشن و اعلام برندگان، از طریق پیامک مطلع شوم.
+                <label htmlFor="consent-check" className="text-[11px] text-gray-400 cursor-pointer leading-relaxed select-none">
+                  با ثبت‌نام در رویداد،{' '}
+                  <Link href="/terms" target="_blank" className="text-neutral-200 hover:text-[#ccff00] underline underline-offset-2">
+                    قوانین و مقررات
+                  </Link>{' '}
+                  و{' '}
+                  <Link href="/privacy" target="_blank" className="text-neutral-200 hover:text-[#ccff00] underline underline-offset-2">
+                    سیاست حریم خصوصی
+                  </Link>{' '}
+                  بینجر را می‌پذیرم و با دریافت پیامک تایید و رویداد موافقم.
                 </label>
               </div>
 
               {/* دکمه درخواست کد پیامکی */}
               <button
                 type="submit"
-                disabled={status === 'loading' || usernameCheckStatus === 'taken'}
+                disabled={status === 'loading' || usernameCheckStatus === 'taken' || !consent}
                 className="w-full bg-[#ccff00] hover:bg-[#b3e600] active:scale-[0.98] text-black font-black text-sm sm:text-base py-4 rounded-2xl transition-all shadow-[0_0_25px_rgba(204,255,0,0.35)] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {status === 'loading' ? (
