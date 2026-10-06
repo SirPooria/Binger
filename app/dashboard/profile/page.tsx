@@ -32,6 +32,7 @@ import {
   writeProfileCache, 
   clearProfileCache, 
   clearAllProfileCaches,
+  getLatestProfileCache,
   type CachedProfileData 
 } from '@/lib/profileCache';
 import { useWatched } from '@/lib/watchedContext';
@@ -41,6 +42,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { getWatchedRecords } = useWatched();
   
+  const initialCache = getLatestProfileCache();
   const [user, setUser] = useState<any>(null);
   const [profileInfo, setProfileInfo] = useState<{
     username: string;
@@ -51,7 +53,7 @@ export default function ProfilePage() {
     created_at?: string;
     updated_at?: string | null;
     vip_until?: string | null;
-  }>({ username: '', bio: '', avatar_url: '😎', is_vip: false });
+  }>(() => initialCache?.profileInfo || { username: '', bio: '', avatar_url: '😎', is_vip: false });
 
   const subStatus = React.useMemo(() => {
     return calculateSubscriptionDetails({
@@ -64,14 +66,14 @@ export default function ProfilePage() {
     });
   }, [profileInfo, user]);
 
-  const [loading, setLoading] = useState(true);
-  const [contentLoading, setContentLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialCache);
+  const [contentLoading, setContentLoading] = useState(!initialCache);
   
   // Stats
-  const [timeStats, setTimeStats] = useState({ months: 0, days: 0, hours: 0 });
-  const [totalEpisodes, setTotalEpisodes] = useState(0);
-  const [socialStats, setSocialStats] = useState({ followers: 0, following: 0, comments: 0 });
-  const [achievementStats, setAchievementStats] = useState({
+  const [timeStats, setTimeStats] = useState(() => initialCache?.timeStats || { months: 0, days: 0, hours: 0 });
+  const [totalEpisodes, setTotalEpisodes] = useState(() => initialCache?.totalEpisodes || 0);
+  const [socialStats, setSocialStats] = useState(() => initialCache?.socialStats || { followers: 0, following: 0, comments: 0 });
+  const [achievementStats, setAchievementStats] = useState(() => initialCache?.achievementStats || {
     watchedRows: [] as any[],
     comments: [] as any[],
     followingIds: [] as string[],
@@ -84,12 +86,12 @@ export default function ProfilePage() {
   });
   
   // Lists
-  const [favorites, setFavorites] = useState<any[]>([]);
-  const [watchedShows, setWatchedShows] = useState<any[]>([]);
-  const [customLists, setCustomLists] = useState<any[]>([]);
-  const [savedLists, setSavedLists] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<any[]>(() => initialCache?.favorites || []);
+  const [watchedShows, setWatchedShows] = useState<any[]>(() => initialCache?.watchedShows || []);
+  const [customLists, setCustomLists] = useState<any[]>(() => initialCache?.customLists || []);
+  const [savedLists, setSavedLists] = useState<any[]>(() => initialCache?.savedLists || []);
   const [criticReviews, setCriticReviews] = useState<CriticReviewData[]>([]);
-  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [coverImage, setCoverImage] = useState<string | null>(() => initialCache?.coverImage || null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {

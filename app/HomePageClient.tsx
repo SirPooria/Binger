@@ -4,8 +4,21 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
-  ArrowLeft, Tv, User, Sparkles, Play, CheckCircle2,
-  Trophy, Star, Compass, Check, BookOpen
+  ArrowLeft,
+  User,
+  Play,
+  Check,
+  BookOpen,
+  Film,
+  Compass,
+  ShieldCheck,
+  Flame,
+  Clock,
+  Sparkles,
+  Tv,
+  Radio,
+  SlidersHorizontal,
+  ChevronLeft
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { getTrendingShows, getImageUrl } from '@/lib/tmdbClient';
@@ -19,7 +32,6 @@ interface HomePageClientProps {
   footerCopyright: string;
   isAdmin?: boolean;
 }
-
 
 export default function HomePageClient({
   heroTitle,
@@ -77,63 +89,84 @@ export default function HomePageClient({
   ];
 
   return (
-    <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-white font-['Vazirmatn'] relative overflow-x-hidden selection:bg-[#ccff00] selection:text-black">
+    <div dir="rtl" className="min-h-screen w-full bg-[#050505] text-neutral-100 font-['Vazirmatn'] selection:bg-[#ccff00] selection:text-black">
 
-      {/* --- AMBIENT NEON GLOWS --- */}
-      <div className="fixed top-0 right-1/4 w-96 h-96 bg-[#ccff00]/10 blur-[140px] rounded-full pointer-events-none -z-10 animate-pulse" />
-      <div className="fixed bottom-1/4 left-1/4 w-[28rem] h-[28rem] bg-purple-600/10 blur-[150px] rounded-full pointer-events-none -z-10" />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl h-[30rem] bg-cyan-500/5 blur-[160px] rounded-full pointer-events-none -z-10" />
+      {/* --- CINEMA ARCHIVE MASTHEAD & TOP BAR --- */}
+      <div className="w-full bg-[#050505] border-b border-white/[0.08] text-[11px] font-mono text-neutral-400 py-1.5 px-4 sm:px-8">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="inline-block w-1.5 h-1.5 bg-[#ccff00]" />
+            <span className="tracking-widest uppercase text-neutral-300">BINGER // OPERATING SYSTEM FOR CINEPHILES</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-4 text-neutral-500">
+            <span>RELEASE: 2026.4</span>
+            <span>•</span>
+            <span>SERVER: TEH-NODE-01</span>
+          </div>
+        </div>
+      </div>
 
-      {/* --- FLOATING HEADER --- */}
-      <header className="sticky top-0 z-50 w-full backdrop-blur-xl bg-[#050505]/75 border-b border-white/10 px-4 md:px-8 py-3.5 transition-all">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+      {/* --- SHARP ARCHITECTURAL NAVIGATION --- */}
+      <header className="sticky top-0 z-50 w-full bg-[#050505]/95 backdrop-blur-md border-b border-white/10 transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 h-16 flex items-center justify-between">
 
-          {/* لوگو و عنوان */}
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="relative">
+          {/* Logo & Direct Links */}
+          <div className="flex items-center gap-8">
+            <Link href="/" className="flex items-center gap-3 group focus:outline-none">
               <img
                 src="/Logo.png"
                 alt="Binger Logo"
-                className="h-9 sm:h-11 w-auto object-contain transition-transform group-hover:scale-105 drop-shadow-[0_0_15px_rgba(204,255,0,0.3)]"
+                className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
               />
-            </div>
-          </Link>
+            </Link>
 
-          {/* پیوندهای میانی هدر (در دسکتاپ) */}
-          <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-gray-300">
-            <Link href="/landing" className="hover:text-[#ccff00] transition-colors flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#ccff00] animate-ping" />
-              <span>جام بینجر و رزرو آیدی</span>
-            </Link>
-            <a href="#features" className="hover:text-[#ccff00] transition-colors">
-              ویژگی‌های کلیدی
-            </a>
-            <Link href="/blog" className="hover:text-[#ccff00] transition-colors flex items-center gap-1">
-              <span>مجله سینمایی</span>
-              <BookOpen size={14} className="text-[#ccff00]" />
-            </Link>
-            <Link href="/dashboard/explore" className="hover:text-[#ccff00] transition-colors flex items-center gap-1">
-              <span>کاوش سریال‌ها</span>
-              <Compass size={14} className="text-[#ccff00]" />
-            </Link>
-          </nav>
+            <nav className="hidden md:flex items-center text-xs font-semibold text-neutral-300 divide-x divide-x-reverse divide-white/10">
+              <Link
+                href="/landing"
+                className="px-4 py-2 hover:text-[#ccff00] transition-colors flex items-center gap-2 text-white"
+              >
+                <Radio size={13} className="text-[#ccff00]" />
+                <span>جام بینجر و رزرو آیدی</span>
+              </Link>
+              <a
+                href="#features"
+                className="px-4 py-2 hover:text-white transition-colors text-neutral-400"
+              >
+                میز فرمان و قابلیت‌ها
+              </a>
+              <Link
+                href="/blog"
+                className="px-4 py-2 hover:text-white transition-colors text-neutral-400 flex items-center gap-1.5"
+              >
+                <BookOpen size={13} />
+                <span>مجله سینمایی</span>
+              </Link>
+              <Link
+                href="/dashboard/explore"
+                className="px-4 py-2 hover:text-white transition-colors text-neutral-400 flex items-center gap-1.5"
+              >
+                <Compass size={13} />
+                <span>کاوش عناوین</span>
+              </Link>
+            </nav>
+          </div>
 
-          {/* اکشن ورود / داشبورد */}
+          {/* Auth Action */}
           <div className="flex items-center gap-3">
             {loading ? (
-              <div className="w-24 h-9 bg-white/10 rounded-xl animate-pulse" />
+              <div className="w-24 h-9 bg-neutral-900 border border-white/10 rounded-sm animate-pulse" />
             ) : user ? (
               <Link href="/dashboard">
-                <button className="bg-[#ccff00] hover:bg-[#b3e600] text-black text-xs font-black px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(204,255,0,0.35)] flex items-center gap-2 active:scale-95 cursor-pointer">
-                  <User size={16} />
-                  <span>ورود به داشبورد</span>
+                <button className="bg-[#ccff00] hover:bg-[#b8e600] active:scale-[0.98] text-black text-xs font-black px-5 py-2.5 rounded-sm transition-all flex items-center gap-2 cursor-pointer">
+                  <User size={14} />
+                  <span>میز فرمان من</span>
                 </button>
               </Link>
             ) : (
               <Link href="/login">
-                <button className="bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs font-bold px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl transition-all flex items-center gap-2 active:scale-95 cursor-pointer">
+                <button className="bg-transparent hover:bg-white/[0.06] text-white border border-white/20 hover:border-white/40 text-xs font-bold px-4 py-2 rounded-sm transition-all flex items-center gap-2 cursor-pointer">
                   <span>ورود / عضویت</span>
-                  <ArrowLeft size={14} />
+                  <ArrowLeft size={13} />
                 </button>
               </Link>
             )}
@@ -141,69 +174,52 @@ export default function HomePageClient({
         </div>
       </header>
 
-      {/* --- HERO SECTION --- */}
-      <section className="relative min-h-[85vh] flex flex-col items-center justify-center pt-8 md:pt-14 pb-16 px-4 overflow-hidden">
+      {/* --- HERO SECTION: COMMANDING EDITORIAL ARCHITECTURE --- */}
+      <section className="relative pt-12 sm:pt-20 pb-16 sm:pb-24 px-4 sm:px-8 border-b border-white/10 overflow-hidden">
 
-        {/* دیواره پوستر شناور متحرک در پس‌زمینه (Cinematic Marquee Wall) */}
-        <div className="absolute inset-0 z-0 opacity-25 grayscale-[30%] brightness-[0.45] pointer-events-none overflow-hidden select-none">
-          {/* ردیف اول */}
-          <div className="absolute -top-16 -left-32 w-[240%] flex gap-4 rotate-[8deg] animate-marquee-slow">
+        {/* Ambient Filmic Filmstrip Track (Subdued, Strictly Horizontal, Zero 8-deg Tilt) */}
+        <div className="absolute inset-0 z-0 opacity-15 brightness-[0.3] pointer-events-none select-none overflow-hidden">
+          <div className="absolute top-1/2 -translate-y-1/2 -left-10 w-[220%] flex gap-2 animate-marquee-slow">
             {[...displayPosters, ...displayPosters, ...displayPosters].map((src, i) => (
               <div
-                key={`hero-r1-${i}`}
-                className="w-36 h-52 sm:w-48 sm:h-72 bg-white/5 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-2xl transition-transform"
+                key={`hero-film-${i}`}
+                className="w-28 h-44 sm:w-36 sm:h-56 bg-neutral-950 shrink-0 border border-white/10 overflow-hidden"
               >
-                <img src={src} className="w-full h-full object-cover" alt="TV Poster" loading="lazy" />
+                <img src={src} className="w-full h-full object-cover grayscale" alt="Cinema Poster" loading="lazy" />
               </div>
             ))}
           </div>
-
-          {/* ردیف دوم */}
-          <div className="absolute top-52 sm:top-64 -left-32 w-[240%] flex gap-4 rotate-[8deg] animate-marquee-reverse">
-            {[...displayPosters, ...displayPosters, ...displayPosters].map((src, i) => (
-              <div
-                key={`hero-r2-${i}`}
-                className="w-36 h-52 sm:w-48 sm:h-72 bg-white/5 rounded-2xl overflow-hidden shrink-0 border border-white/10 shadow-2xl transition-transform"
-              >
-                <img src={src} className="w-full h-full object-cover" alt="TV Poster" loading="lazy" />
-              </div>
-            ))}
-          </div>
-
-          {/* ماسک گرادینت تاریک تئاتری برای خوانایی عالی */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/85 to-[#050505]/75" />
-          <div className="absolute inset-0 bg-radial-gradient from-transparent via-[#050505]/70 to-[#050505]" />
+          {/* Filmic Vignette Mask */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/95 to-[#050505]/85" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-transparent to-[#050505]" />
         </div>
 
-        {/* محتوای متنی و اکشن‌های هیرو */}
-        <div className="relative z-10 w-full max-w-3xl text-center space-y-6 sm:space-y-8 my-auto">
+        {/* Hero Content Stack */}
+        <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center text-center">
 
-          {/* بج پروموشن یا رویداد */}
+          {/* Issue/Live Marker (Sharp Architectural Bracket, NO PINGS, NO PILLS) */}
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.4 }}
+            className="mb-8"
           >
             <Link
               href="/landing"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-[#ccff00]/40 text-xs font-bold text-gray-200 transition-all shadow-[0_0_20px_rgba(204,255,0,0.15)] group"
+              className="inline-flex items-center gap-3 px-3 py-1.5 border border-white/15 bg-black hover:border-[#ccff00] text-xs font-mono text-neutral-300 transition-colors group"
             >
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ccff00] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ccff00]" />
-              </span>
-              <span className="text-[#ccff00] font-black">رویداد زنده:</span>
-              <span>رزرو آیدی سینمایی، پیش‌ثبت‌نام و جوایز میلیونی</span>
-              <ArrowLeft size={13} className="text-[#ccff00] group-hover:-translate-x-1 transition-transform" />
+              <span className="text-[#ccff00] font-bold">[ رویداد زنده ]</span>
+              <span className="text-white font-medium">جام بینجر و رزرو آیدی اختصاصی</span>
+              <span className="text-neutral-500 font-sans group-hover:text-white transition-colors">←</span>
             </Link>
           </motion.div>
 
-          {/* تیتر اصلی و توضیحات پویا با قابلیت ویرایش مستقیم درون‌متنی */}
+          {/* Primary Editorial Headline: Crisp Pure White, Zero Rainbow Gradient */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, delay: 0.1 }}
-            className="space-y-4"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="w-full max-w-4xl"
           >
             <EditableText
               settingKey="home_hero_title"
@@ -212,7 +228,7 @@ export default function HomePageClient({
               as="h1"
               multiline
               description="تیتر اصلی بخش هیرو در صفحه نخست"
-              className="text-4xl sm:text-5xl md:text-6xl font-black leading-[1.2] md:leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#ccff00] via-emerald-300 to-cyan-300 drop-shadow-[0_0_35px_rgba(204,255,0,0.35)] block text-center"
+              className="text-4xl sm:text-6xl md:text-7xl lg:text-[5rem] font-black leading-[1.08] sm:leading-[1.05] tracking-tight text-white block text-center"
             />
 
             <EditableText
@@ -222,45 +238,47 @@ export default function HomePageClient({
               as="p"
               multiline
               description="توضیحات و زیرعنوان بخش هیرو در صفحه نخست"
-              className="text-gray-300 text-sm sm:text-base md:text-lg leading-relaxed max-w-xl mx-auto pt-2 font-medium block text-center"
+              className="text-neutral-300 text-sm sm:text-base md:text-lg leading-relaxed max-w-2xl mx-auto mt-6 font-normal block text-center"
             />
           </motion.div>
 
-          {/* دکمه‌های فراخوان (CTA پویا) */}
+          {/* Focal Action Bar: Clear Unambiguous Hierarchy */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2 max-w-md mx-auto"
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md mx-auto"
           >
             {loading ? (
-              <div className="w-full h-14 bg-white/10 rounded-2xl animate-pulse" />
+              <div className="w-full h-14 bg-neutral-900 border border-white/10 rounded-sm animate-pulse" />
             ) : user ? (
               <Link href="/dashboard" className="w-full sm:w-auto flex-1">
-                <button className="w-full bg-[#ccff00] hover:bg-[#b3e600] text-black py-4 px-8 rounded-2xl font-black text-base transition-all active:scale-95 flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(204,255,0,0.45)] cursor-pointer">
-                  <Play size={20} className="fill-black" />
-                  <span>ورود به مرکز تماشا</span>
+                <button className="w-full bg-[#ccff00] hover:bg-[#b8e600] active:scale-[0.99] text-black py-4 px-8 rounded-sm font-black text-base transition-all flex items-center justify-center gap-3 cursor-pointer">
+                  <Play size={18} className="fill-black" />
+                  <span>ورود به میز فرمان من</span>
                 </button>
               </Link>
             ) : (
               <>
+                {/* Primary High-Contrast CTA Button */}
                 <Link href="/login" className="w-full sm:w-auto flex-1">
-                  <button className="w-full bg-[#ccff00] hover:bg-[#b3e600] text-black py-4 px-8 rounded-2xl font-black text-base transition-all active:scale-95 flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(204,255,0,0.45)] group cursor-pointer">
+                  <button className="w-full bg-[#ccff00] hover:bg-[#b8e600] active:scale-[0.99] text-black py-4 px-8 rounded-sm font-black text-base transition-all flex items-center justify-center gap-3 cursor-pointer group">
                     <EditableText
                       settingKey="home_cta_text"
                       initialValue={ctaText}
                       isAdmin={isAdmin}
                       as="span"
                       description="متن دکمه شروع در هیرو"
-                      className="font-black text-base"
+                      className="font-black text-base text-black"
                     />
-                    <ArrowLeft size={18} className="group-hover:-translate-x-1.5 transition-transform" />
+                    <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                   </button>
                 </Link>
 
+                {/* Secondary Action */}
                 <Link href="/dashboard/explore" className="w-full sm:w-auto">
-                  <button className="w-full bg-white/5 hover:bg-white/10 text-white border border-white/15 py-4 px-6 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer">
-                    <Compass size={18} className="text-[#ccff00]" />
+                  <button className="w-full bg-neutral-900/80 hover:bg-neutral-800 text-neutral-200 border border-white/20 py-4 px-6 rounded-sm font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <Compass size={16} className="text-neutral-400" />
                     <span>مشاهده ترندها</span>
                   </button>
                 </Link>
@@ -268,231 +286,271 @@ export default function HomePageClient({
             )}
           </motion.div>
 
-          {/* مزایای اطمینان‌بخش زیر دکمه */}
-          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 pt-3 text-[11px] text-gray-400 font-bold">
-            <span className="flex items-center gap-1.5 text-gray-300">
-              <Check size={14} className="text-[#ccff00]" strokeWidth={3} />
+          {/* Cinema Proof Strip: Clean Metadata Line */}
+          <div className="mt-10 pt-6 border-t border-white/10 w-full max-w-xl flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs font-mono text-neutral-400">
+            <span className="flex items-center gap-2">
+              <span className="text-[#ccff00]">✓</span>
               <span>همیشه ۱۰۰٪ رایگان</span>
             </span>
-            <span className="flex items-center gap-1.5 text-gray-300">
-              <Check size={14} className="text-[#ccff00]" strokeWidth={3} />
-              <span>بدون هرگونه تبلیغات آزاردهنده</span>
+            <span className="text-neutral-700 hidden sm:inline">|</span>
+            <span className="flex items-center gap-2">
+              <span className="text-[#ccff00]">✓</span>
+              <span>بدون تبلیغات آزاردهنده</span>
             </span>
-            <span className="flex items-center gap-1.5 text-gray-300">
-              <Check size={14} className="text-[#ccff00]" strokeWidth={3} />
-              <span>پوشش انیمه، کی‌دراما و شاهکارهای جهان</span>
+            <span className="text-neutral-700 hidden sm:inline">|</span>
+            <span className="flex items-center gap-2">
+              <span className="text-[#ccff00]">✓</span>
+              <span>پوشش تمام سریال‌های جهان</span>
             </span>
           </div>
 
         </div>
-
       </section>
 
-      {/* --- LIVE STATS STRIP --- */}
-      <section className="relative z-10 border-y border-white/10 bg-white/[0.02] backdrop-blur-md py-6 px-4">
-        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          <div className="space-y-1">
-            <div className="text-2xl sm:text-3xl font-black text-[#ccff00] font-mono tracking-tight">+۵۰,۰۰۰</div>
-            <div className="text-xs text-gray-400 font-medium">اپیزود ردیابی‌شده توسط کاربران</div>
+      {/* --- METRICS LEDGER: INDUSTRIAL FULL-WIDTH GAUGE (NO CARDS) --- */}
+      <section className="relative z-10 bg-[#080808] border-b border-white/10">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-white/10">
+
+          <div className="p-6 sm:p-8 space-y-2">
+            <div className="font-mono text-xs text-neutral-500 uppercase tracking-widest">[ METRIC // 01 ]</div>
+            <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">+۵۰,۰۰۰</div>
+            <div className="text-xs text-neutral-400">اپیزود ردیابی‌شده توسط کاربران</div>
           </div>
-          <div className="space-y-1">
-            <div className="text-2xl sm:text-3xl font-black text-cyan-400 font-mono tracking-tight">۱۶ سبک</div>
-            <div className="text-xs text-gray-400 font-medium">تخصص و هویت سینمایی اختصاصی</div>
+
+          <div className="p-6 sm:p-8 space-y-2">
+            <div className="font-mono text-xs text-neutral-500 uppercase tracking-widest">[ PERSONAS // 02 ]</div>
+            <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">۱۶ سبک</div>
+            <div className="text-xs text-neutral-400">هویت و تحلیل تخصصی سلیقه</div>
           </div>
-          <div className="space-y-1">
-            <div className="text-2xl sm:text-3xl font-black text-purple-400 font-mono tracking-tight">۱۰۰٪</div>
-            <div className="text-xs text-gray-400 font-medium">نقدها و تحلیل‌های بدون اسپویل</div>
+
+          <div className="p-6 sm:p-8 space-y-2">
+            <div className="font-mono text-xs text-neutral-500 uppercase tracking-widest">[ INTEGRITY // 03 ]</div>
+            <div className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">۱۰۰٪</div>
+            <div className="text-xs text-neutral-400">تحلیل‌های بدون افشای داستان</div>
           </div>
-          <div className="space-y-1">
-            <div className="text-2xl sm:text-3xl font-black text-amber-400 font-mono tracking-tight">دستیار Mood</div>
-            <div className="text-xs text-gray-400 font-medium">پیشنهاد هوش مصنوعی مطابق حس لحظه‌ای</div>
+
+          <div className="p-6 sm:p-8 space-y-2">
+            <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">[ RADAR AI // 04 ]</div>
+            <div className="text-4xl sm:text-5xl font-black text-[#ccff00] font-mono tracking-tight">رادار مود</div>
+            <div className="text-xs text-neutral-400">پیشنهاد هوشمند طبق حس لحظه</div>
           </div>
+
         </div>
       </section>
 
-      {/* --- INTERACTIVE BENTO GRID (ابر‌قدرت‌های بینجر) --- */}
-      <section id="features" className="relative z-10 py-20 px-4 md:px-8 max-w-6xl mx-auto space-y-12">
+      {/* --- ARCHITECTURAL CONSOLE (BREAKING FREE FROM BENTO CARDS) --- */}
+      <section id="features" className="relative z-10 py-20 px-4 sm:px-8 max-w-7xl mx-auto">
 
-        {/* سربرگ بخش ویژگی‌ها */}
-        <div className="text-center space-y-3 max-w-2xl mx-auto">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ccff00]/10 border border-[#ccff00]/30 text-[#ccff00] text-xs font-black">
-            <Sparkles size={14} />
-            <span>امکانات نسل بعدی</span>
-          </div>
-          <h2 className="text-3xl md:text-4xl font-black text-white">
-            چرا بینجر خانه ابدی خوره‌های سریال است؟
-          </h2>
-          <p className="text-gray-400 text-xs sm:text-sm">
-            تمام ابزارهایی که یک سریال‌بین حرفه‌ای به آن‌ها احتیاج دارد، در یک پلتفرم منسجم و چشم‌نواز گرد هم آمده‌اند.
-          </p>
-        </div>
-
-        {/* بنتو گرید ۴ تایی مدرن */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-
-          {/* کارت ۱ (عرض ۲ ستون): نوبت تماشا و تقویم اختصاصی */}
-          <div className="md:col-span-2 bg-[#0e0e0e] border border-white/10 hover:border-[#ccff00]/40 rounded-3xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group transition-all shadow-xl hover:shadow-[0_0_30px_rgba(204,255,0,0.1)]">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#ccff00]/5 blur-[80px] rounded-full pointer-events-none" />
-
-            <div className="space-y-3 relative z-10">
-              <span className="text-xs font-black text-[#ccff00] bg-[#ccff00]/10 px-3 py-1 rounded-lg inline-block">
-                ⚡ نوبت تماشا و تقویم پخش
-              </span>
-              <h3 className="text-xl sm:text-2xl font-black text-white">
-                دیگه یادت نمیره فصل قبل کجا تموم شد!
-              </h3>
-              <p className="text-xs sm:text-sm text-gray-400 leading-relaxed max-w-lg">
-                با الگوریتم «نوبت تماشا»، هر بار که وارد بینجر می‌شی، دقیقاً اپیزود بعدی سریالی که در حال دیدنش هستی جلو روت قرار می‌گیره. به همراه تقویم زنده پخش اپیزودهای جدید امروز و این هفته.
-              </p>
+        {/* Section Header */}
+        <div className="border-b border-white/10 pb-10 mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">
+              // ARCHITECTURAL CONSOLE
             </div>
-
-            {/* موک‌آپ تصویری زنده داخل کارت */}
-            <div className="mt-6 pt-4 border-t border-white/5 relative z-10 bg-black/60 rounded-2xl p-4 border border-white/10">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-16 rounded-xl bg-purple-900/40 border border-white/15 overflow-hidden shrink-0 flex items-center justify-center text-xs font-bold">
-                    🎬
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-sm font-black text-white block truncate">Breaking Bad</span>
-                    <span className="text-xs font-mono text-[#ccff00] font-bold">S05E14 • Ozymandias</span>
-                    <div className="w-32 sm:w-48 h-1.5 bg-white/15 rounded-full mt-1.5 overflow-hidden">
-                      <div className="h-full bg-[#ccff00] w-[88%]" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold bg-amber-500/15 border border-amber-500/30 text-amber-300 px-2 py-1 rounded-lg hidden sm:inline">
-                    پخش هفته آینده ⏰
-                  </span>
-                  <div className="w-9 h-9 rounded-full bg-[#ccff00] text-black flex items-center justify-center font-bold shadow-md cursor-pointer hover:scale-105 transition-transform">
-                    <Check size={16} strokeWidth={3} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* کارت ۲ (۱ ستون): هویت و DNA سینمایی */}
-          <div className="bg-[#0e0e0e] border border-white/10 hover:border-purple-500/40 rounded-3xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group transition-all shadow-xl hover:shadow-[0_0_30px_rgba(168,85,247,0.15)]">
-            <div className="absolute top-0 left-0 w-48 h-48 bg-purple-600/10 blur-[70px] rounded-full pointer-events-none" />
-
-            <div className="space-y-3 relative z-10">
-              <span className="text-xs font-black text-purple-400 bg-purple-500/10 px-3 py-1 rounded-lg inline-block">
-                🧬 هویت و DNA سینمایی
-              </span>
-              <h3 className="text-xl font-black text-white">
-                تخصص فیلم‌بازیت چیه؟
-              </h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                بینجر بر اساس ساعت‌ها تماشای سریال، هویت ۱۶ گانه سینمایی تو رو تحلیل می‌کنه؛ مثل «فوق تخصص بریکینگ‌بدولوژی» یا «دکتر کی‌دراما»، با کارت گرافیکی آماده استوری اینستاگرام!
-              </p>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-white/5 relative z-10 text-center">
-              <div className="p-3.5 bg-gradient-to-tr from-purple-950/40 to-black/60 rounded-2xl border border-purple-500/30 text-xs font-bold text-purple-300 flex items-center justify-center gap-2">
-                <span>🧪 فوق‌تخصص بریکینگ‌بدولوژی</span>
-                <span className="text-[10px] bg-purple-500/20 px-2 py-0.5 rounded-full">استوری آماده 📸</span>
-              </div>
-            </div>
-          </div>
-
-          {/* کارت ۳ (۱ ستون): دستیار هوش مصنوعی Mood */}
-          <div className="bg-[#0e0e0e] border border-white/10 hover:border-cyan-500/40 rounded-3xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group transition-all shadow-xl hover:shadow-[0_0_30px_rgba(6,182,212,0.15)]">
-            <div className="absolute bottom-0 right-0 w-48 h-48 bg-cyan-500/10 blur-[70px] rounded-full pointer-events-none" />
-
-            <div className="space-y-3 relative z-10">
-              <span className="text-xs font-black text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-lg inline-block">
-                🤖 دستیار هوشمند Mood
-              </span>
-              <h3 className="text-xl font-black text-white">
-                «حالم گرفته است، چی ببینم؟»
-              </h3>
-              <p className="text-xs text-gray-400 leading-relaxed">
-                به زبان خودمانی احساست رو بنویس. هوش مصنوعی بینجر با در نظر گرفتن سریال‌هایی که قبلاً دیدی، دقیقاً اثری رو بهت پیشنهاد می‌ده که حالتو بسازه؛ بدون هیچ اسپویلی!
-              </p>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-white/5 relative z-10">
-              <div className="bg-black/60 p-3 rounded-2xl border border-white/10 text-[11px] text-gray-300 space-y-1.5">
-                <div className="text-gray-400">👤 کاربر: «یه چیز تو مایه ترو دیتکتیو می‌خوام...»</div>
-                <div className="text-[#ccff00] font-bold">🤖 بینجر: «پیشنهاد من Mindhunter و Mare of Easttown!»</div>
-              </div>
-            </div>
-          </div>
-
-          {/* کارت ۴ (۲ ستون): کلاب منتقدین و نقد بدون اسپویل */}
-          <div className="md:col-span-2 bg-[#0e0e0e] border border-white/10 hover:border-amber-500/40 rounded-3xl p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group transition-all shadow-xl hover:shadow-[0_0_30px_rgba(245,158,11,0.1)]">
-            <div className="absolute top-0 left-0 w-64 h-64 bg-amber-500/5 blur-[80px] rounded-full pointer-events-none" />
-
-            <div className="space-y-3 relative z-10">
-              <span className="text-xs font-black text-amber-400 bg-amber-500/10 px-3 py-1 rounded-lg inline-block">
-                🪶 باشگاه منتقدین رسمی بینجر
-              </span>
-              <h3 className="text-xl sm:text-2xl font-black text-white">
-                نقد بخون، بدون اینکه داستان برات بسوزه
-              </h3>
-              <p className="text-xs sm:text-sm text-gray-400 leading-relaxed max-w-lg">
-                تنها کاربرانی که به حدنصاب تماشای ۳۰۰۰ اپیزود و تحلیل‌های عمیق می‌رسند، نشان رسمی منتقد بینجر را دریافت می‌کنند. تمام نقدها با برچسب‌های شفاف «شاهکار ماندگار»، «پیشنهاد تماشا» یا «سلیقه‌ای» علامت‌گذاری می‌شوند.
-              </p>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-white/5 relative z-10 flex flex-wrap items-center gap-3">
-              <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-300 text-xs font-bold flex items-center gap-1.5">
-                <Trophy size={14} />
-                <span>شاهکار ماندگار 🏆</span>
-              </div>
-              <div className="px-3.5 py-1.5 rounded-xl bg-[#ccff00]/15 border border-[#ccff00]/30 text-[#ccff00] text-xs font-bold flex items-center gap-1.5">
-                <CheckCircle2 size={14} />
-                <span>۱۰۰٪ بدون اسپویل</span>
-              </div>
-              <div className="px-3.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 text-xs font-bold">
-                تأیید صلاحیت با سنجش تخصص
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* --- BOTTOM CTA CALLOUT BANNER --- */}
-      <section className="relative z-10 py-16 px-4 md:px-8 max-w-5xl mx-auto">
-        <div className="relative rounded-3xl p-8 sm:p-12 bg-gradient-to-tr from-[#121212] via-[#1a1a1a] to-[#121212] border border-[#ccff00]/40 text-center overflow-hidden shadow-[0_0_50px_rgba(204,255,0,0.15)]">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-[#ccff00]/15 blur-[100px] rounded-full pointer-events-none" />
-
-          <div className="relative z-10 space-y-5 max-w-xl mx-auto">
-            <h3 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">
-              آماده‌ای پرونده سریالیت رو <br />
-              <span className="text-[#ccff00]">حرفه‌ای و لذت‌بخش</span> کنی؟
-            </h3>
-            <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
-              عضویت کمتر از ۳۰ ثانیه طول می‌کشه. بدون نیاز به نصب هیچ برنامه اضافی، در تمام دستگاه‌ها (موبایل و کامپیوتر) همیشه همراهته.
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
+              میز فرمان سینمایی بینجر
+            </h2>
+            <p className="text-neutral-400 text-sm sm:text-base leading-relaxed">
+              جایگزین یادداشت‌های پراکنده، اکسل و جستجوهای فرسایشی. ۴ ابزار اختصاصی برای کسانی که جدی سریال می‌بینند.
             </p>
+          </div>
+          <div className="font-mono text-xs text-neutral-500">
+            SYS: CORE-ENGINE-V2
+          </div>
+        </div>
 
-            <div className="pt-2">
-              <Link href={user ? "/dashboard" : "/login"}>
-                <button className="bg-[#ccff00] hover:bg-[#b3e600] text-black py-4 px-10 rounded-2xl font-black text-base transition-all shadow-[0_0_30px_rgba(204,255,0,0.4)] active:scale-95 inline-flex items-center gap-2 cursor-pointer">
-                  <span>{user ? "ورود به داشبورد من" : ctaText}</span>
-                  <ArrowLeft size={20} />
-                </button>
-              </Link>
+        {/* MASTER CONSOLE ROW 1: Wide Airing Slate (Feature 01) */}
+        <div className="border border-white/10 bg-[#080808] mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse divide-white/10 items-stretch">
+
+            {/* Left Content Column */}
+            <div className="lg:col-span-5 p-6 sm:p-10 flex flex-col justify-between space-y-6">
+              <div className="space-y-4">
+                <div className="font-mono text-xs text-[#ccff00] tracking-wider uppercase font-bold">
+                  [ 01 // WATCH QUEUE & RADAR ]
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black text-white leading-snug">
+                  نوبت تماشا: دیگر گم نمی‌کنی فصل قبل کجا بودی
+                </h3>
+                <p className="text-sm text-neutral-400 leading-relaxed">
+                  با الگوریتم «نوبت تماشا»، هر بار که وارد بینجر می‌شوی دقیقاً اپیزود بعدی سریالی که در حال دیدنش هستی جلو روت قرار می‌گیرد، همراه با تقویم زنده پخش اپیزودهای جدید امروز و این هفته.
+                </p>
+              </div>
+
+              <div className="pt-4 border-t border-white/10 flex items-center gap-6 text-xs font-mono text-neutral-400">
+                <span>AUTOPILOT: ACTIVE</span>
+                <span>•</span>
+                <span>SYNC: INSTANT</span>
+              </div>
             </div>
+
+            {/* Right Live Timeline Widget (Integrated, NO Card-in-Card) */}
+            <div className="lg:col-span-7 p-6 sm:p-10 bg-black flex flex-col justify-center space-y-6">
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <span className="font-mono text-xs text-neutral-400">ACTIVE PLAYHEAD // اپیزود در حال تماشا</span>
+                <span className="font-mono text-xs text-[#ccff00]">پخش اپیزود جدید: فردا ۲۱:۳۰</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-black text-white">Breaking Bad</span>
+                    <span className="font-mono text-xs text-neutral-400 bg-neutral-900 border border-white/10 px-2 py-0.5">TV-MA</span>
+                  </div>
+                  <div className="font-mono text-sm text-[#ccff00]">S05·E14 // Ozymandias</div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="text-left font-mono text-xs text-neutral-500">
+                    <div>PROGRESS</div>
+                    <div className="text-white font-bold">۸۵٪ تکمیل</div>
+                  </div>
+                  <button className="bg-[#ccff00] hover:bg-[#b8e600] text-black px-4 py-2.5 font-mono text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors">
+                    <Check size={14} strokeWidth={3} />
+                    <span>ثبت تماشا</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Scrubber */}
+              <div className="space-y-2">
+                <div className="w-full h-1.5 bg-neutral-900 overflow-hidden">
+                  <div className="h-full bg-[#ccff00] w-[85%]" />
+                </div>
+                <div className="flex justify-between font-mono text-[11px] text-neutral-500">
+                  <span>اپیزود ۱۴ از ۱۶</span>
+                  <span>زمان کل تماشا: ۴۸ ساعت و ۳۰ دقیقه</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* MASTER CONSOLE ROW 2: 3 Structural Columns (Features 02, 03, 04 - NO Cards) */}
+        <div className="border border-white/10 bg-[#080808] grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-white/10">
+
+          {/* Column 01: DNA & Persona */}
+          <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <div className="font-mono text-xs text-white uppercase font-bold">
+                [ 02 // CINEMA DNA ]
+              </div>
+              <h3 className="text-xl font-black text-white">
+                شناسنامه و هویت سینمایی اختصاصی
+              </h3>
+              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
+                بینجر بر اساس ساعت‌ها تماشای سریال، هویت ۱۶ گانه سینمایی تو را تحلیل می‌کند؛ با کارت شناسنامه گرافیکی آماده استوری.
+              </p>
+            </div>
+
+            <div className="border-t border-white/10 pt-4 space-y-3 font-mono text-xs">
+              <div className="flex justify-between text-neutral-400">
+                <span>تخصص احراز‌شده:</span>
+                <span className="text-[#ccff00] font-bold">فوق‌تخصص بریکینگ‌بدولوژی</span>
+              </div>
+              <div className="flex justify-between text-neutral-500">
+                <span>رتبه تحلیل:</span>
+                <span className="text-white">۹۸٪ برتر کشوری</span>
+              </div>
+              <div className="flex justify-between text-neutral-500">
+                <span>شناسه پاسپورت:</span>
+                <span>#BNG-9481</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Column 02: Mood AI Assistant */}
+          <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <div className="font-mono text-xs text-[#ccff00] uppercase font-bold">
+                [ 03 // MOOD RADAR AI ]
+              </div>
+              <h3 className="text-xl font-black text-white">
+                دستیار هوشمند بر اساس حس لحظه
+              </h3>
+              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
+                حس و حال الانت رو به زبان خودمانی بنویس. هوش مصنوعی بدون اسپویل اثری را پیشنهاد می‌دهد که با ذائقه گذشته‌ات هم‌خوانی دارد.
+              </p>
+            </div>
+
+            <div className="border-t border-white/10 pt-4 space-y-3 font-mono text-xs">
+              <div className="text-neutral-400 text-[11px]">
+                <span className="text-neutral-500">پرامپت:</span> «یه چیز معمایی تاریک مثل ترو دیتکتیو...»
+              </div>
+              <div className="bg-black border border-white/10 p-2.5 flex items-center justify-between">
+                <span className="text-white font-bold">Chernobyl // مینی‌سریال</span>
+                <span className="text-[#ccff00] font-bold">۹۸٪ تطابق</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Column 03: Spoiler-Free Ledger */}
+          <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <div className="font-mono text-xs text-white uppercase font-bold">
+                [ 04 // SPOILER-SHIELD ]
+              </div>
+              <h3 className="text-xl font-black text-white">
+                باشگاه منتقدین بدون افشای داستان
+              </h3>
+              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
+                تنها تحلیل‌گرانی که به حدنصاب تماشا رسیده‌اند نشان رسمی دریافت می‌کنند. سیستم غربال هوشمند هرگز پایان داستان را لو نمی‌دهد.
+              </p>
+            </div>
+
+            <div className="border-t border-white/10 pt-4 space-y-3 font-mono text-xs">
+              <div className="flex items-center gap-2 text-white">
+                <ShieldCheck size={16} className="text-[#ccff00]" />
+                <span className="font-bold">تأییدیه ۱۰۰٪ بدون اسپویل</span>
+              </div>
+              <div className="text-[11px] text-neutral-500">
+                برچسب‌های شفاف: شاهکار ماندگار • پیشنهاد تماشا • سلیقه‌ای
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* --- FULL-WIDTH CINEMATIC CALLOUT (NO FLOATING ROUNDED CARDS) --- */}
+      <section className="relative z-10 border-y border-white/10 bg-[#080808] py-20 px-4 sm:px-8">
+        <div className="max-w-4xl mx-auto text-center space-y-6">
+          <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">
+            // READY FOR DISCOVERY
+          </div>
+          <h3 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
+            آماده‌ای پرونده سریالیت را <br />
+            <span className="text-[#ccff00]">حرفه‌ای و منظم</span> مدیریت کنی؟
+          </h3>
+          <p className="text-neutral-400 text-sm sm:text-base leading-relaxed max-w-xl mx-auto">
+            عضویت کمتر از ۳۰ ثانیه طول می‌کشد. بدون نیاز به نصب برنامه اضافی، در تمام دستگاه‌ها (موبایل و کامپیوتر) همیشه در دسترس است.
+          </p>
+
+          <div className="pt-4">
+            <Link href={user ? "/dashboard" : "/login"}>
+              <button className="bg-[#ccff00] hover:bg-[#b8e600] active:scale-[0.99] text-black py-4 px-12 rounded-sm font-black text-base transition-all inline-flex items-center gap-3 cursor-pointer group">
+                <span>{user ? "ورود به میز فرمان من" : ctaText}</span>
+                <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+              </button>
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* --- FOOTER --- */}
-      <footer className="relative z-10 border-t border-white/10 bg-[#050505] py-8 px-4 md:px-8 text-center text-xs text-gray-500">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 text-center sm:text-right">
-            <div className="flex items-center gap-2">
-              <img src="/Logo.png" alt="Binger" className="h-8 w-auto object-contain opacity-80" />
-              <span className="font-bold text-gray-400">بینجر • Binger</span>
+      {/* --- ARCHITECTURAL FOOTER --- */}
+      <footer className="relative z-10 bg-[#050505] py-12 px-4 sm:px-8 text-xs text-neutral-500 font-mono">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+
+          {/* Brand */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-right">
+            <div className="flex items-center gap-3">
+              <img src="/Logo.png" alt="Binger" className="h-7 w-auto object-contain opacity-90" />
+              <span className="font-bold text-neutral-300 font-sans">بینجر • Binger</span>
             </div>
             {footerDescription && (
-              <span className="hidden sm:inline text-gray-600">|</span>
+              <span className="hidden sm:inline text-neutral-700">|</span>
             )}
             {footerDescription && (
               <EditableText
@@ -501,25 +559,27 @@ export default function HomePageClient({
                 isAdmin={isAdmin}
                 as="p"
                 description="متن کوتاه معرفی در فوتر"
-                className="text-[11px] text-gray-400 max-w-md"
+                className="text-[11px] text-neutral-400 font-sans max-w-md"
               />
             )}
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-5 text-gray-400 font-medium">
-            <Link href="/landing" className="hover:text-[#ccff00] transition-colors">جام بینجر</Link>
-            <Link href="/dashboard/explore" className="hover:text-[#ccff00] transition-colors">کاوش سریال‌ها</Link>
-            <Link href="/dashboard/critics" className="hover:text-[#ccff00] transition-colors">باشگاه منتقدین</Link>
-            <Link href="/login" className="hover:text-[#ccff00] transition-colors">حساب کاربری</Link>
+          {/* Links */}
+          <div className="flex flex-wrap items-center justify-center gap-6 text-neutral-400">
+            <Link href="/landing" className="hover:text-white transition-colors">جام بینجر</Link>
+            <Link href="/dashboard/explore" className="hover:text-white transition-colors">کاوش سریال‌ها</Link>
+            <Link href="/dashboard/critics" className="hover:text-white transition-colors">باشگاه منتقدین</Link>
+            <Link href="/login" className="hover:text-white transition-colors">حساب کاربری</Link>
           </div>
 
+          {/* Copyright */}
           <EditableText
             settingKey="footer_copyright"
             initialValue={footerCopyright}
             isAdmin={isAdmin}
             as="p"
             description="متن کپی‌رایت انتهای صفحات"
-            className="text-[11px] text-gray-500"
+            className="text-[11px] text-neutral-600"
           />
         </div>
       </footer>

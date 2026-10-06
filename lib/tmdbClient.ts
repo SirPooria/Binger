@@ -189,6 +189,16 @@ function getBaseApiUrl(): string {
   return `${host}/api/tmdb`;
 }
 
+// In-memory client-side gateway cache and in-flight deduplication
+const clientGatewayCache = new Map<string, { data: any; expiry: number }>();
+const clientInFlightRequests = new Map<string, Promise<any>>();
+const CLIENT_GATEWAY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+export function clearClientGatewayCache(): void {
+  clientGatewayCache.clear();
+  clientInFlightRequests.clear();
+}
+
 async function fetchFromGateway<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T | null> {
   try {
     const searchParams = new URLSearchParams();
@@ -199,11 +209,44 @@ async function fetchFromGateway<T>(path: string, params: Record<string, string |
     }
     const queryStr = searchParams.toString();
     const url = `${getBaseApiUrl()}/${path}${queryStr ? `?${queryStr}` : ''}`;
-    const res = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-    });
-    if (!res.ok) return null;
-    return await res.json() as T;
+
+    if (typeof window !== 'undefined') {
+      const cached = clientGatewayCache.get(url);
+      if (cached && Date.now() < cached.expiry) {
+        return cached.data as T;
+      }
+      const pending = clientInFlightRequests.get(url);
+      if (pending) {
+        return await pending as T;
+      }
+    }
+
+    const fetchPromise = (async () => {
+      const res = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as T;
+      if (typeof window !== 'undefined' && data) {
+        clientGatewayCache.set(url, {
+          data,
+          expiry: Date.now() + CLIENT_GATEWAY_CACHE_TTL,
+        });
+      }
+      return data;
+    })();
+
+    if (typeof window !== 'undefined') {
+      clientInFlightRequests.set(url, fetchPromise);
+      try {
+        const result = await fetchPromise;
+        return result;
+      } finally {
+        clientInFlightRequests.delete(url);
+      }
+    }
+
+    return await fetchPromise;
   } catch (error) {
     console.error(`TMDB Gateway client error (${path}):`, error);
     return null;

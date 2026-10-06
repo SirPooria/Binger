@@ -23,6 +23,13 @@ import { VipUsername } from '../components/VipBadge';
 import { WatchlistButton } from '../components/WatchlistButton';
 import { useWatched } from '@/lib/watchedContext';
 import EditableText from '@/app/components/EditableText';
+import DashboardFooter from '../components/DashboardFooter';
+import { 
+  getExploreCache, 
+  setExploreCache, 
+  hasExploreCache, 
+  isExploreCacheStale 
+} from '@/lib/pageCache';
 
 
 // --- GENRE TRANSLATIONS ---
@@ -131,17 +138,18 @@ function DashboardContent({
   const supabase = createClient() as any;
   const router = useRouter();
   const { getWatchedRecords } = useWatched();
-  const [loading, setLoading] = useState(true);
+  const cached = getExploreCache();
+  const [loading, setLoading] = useState(!cached);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   
   // Data States
-  const [watchlistIds, setWatchlistIds] = useState<Set<number>>(new Set());
-  const [watchedIds, setWatchedIds] = useState<number[]>([]);
-  const [allShowIds, setAllShowIds] = useState<number[]>([]);
+  const [watchlistIds, setWatchlistIds] = useState<Set<number>>(() => cached?.watchlistIds || new Set());
+  const [watchedIds, setWatchedIds] = useState<number[]>(() => cached?.watchedIds || []);
+  const [allShowIds, setAllShowIds] = useState<number[]>(() => cached?.allShowIds || []);
   
-  const [myFeed, setMyFeed] = useState<any[]>([]);
+  const [myFeed, setMyFeed] = useState<any[]>(() => cached?.myFeed || []);
   const [categories, setCategories] = useState<{
     iranian: any[];
     trending: any[];
@@ -150,7 +158,7 @@ function DashboardContent({
     anime: any[];
     teen: any[];
     miniSeries: any[];
-  }>({
+  }>(() => cached?.categories || {
     iranian: [],
     trending: [],
     topRated: [],
@@ -159,18 +167,18 @@ function DashboardContent({
     teen: [],
     miniSeries: [],
   });
-  const [userCustomLists, setUserCustomLists] = useState<any[]>([]);
+  const [userCustomLists, setUserCustomLists] = useState<any[]>(() => cached?.userCustomLists || []);
 
   // کاروزل هوشمند و رندوم بر اساس سابقه کاربر (چون «فلان سریال» رو دیدی...)
   const [relatedCarousel, setRelatedCarousel] = useState<{
     seedShow: any;
     isFromWatchlist?: boolean;
     items: any[];
-  } | null>(null);
+  } | null>(() => cached?.relatedCarousel || null);
 
   // AI Spotlight State (Must have Persian overview)
-  const [spotlightShow, setSpotlightShow] = useState<any | null>(null);
-  const [spotlightReason, setSpotlightReason] = useState<string>('');
+  const [spotlightShow, setSpotlightShow] = useState<any | null>(() => cached?.spotlightShow || null);
+  const [spotlightReason, setSpotlightReason] = useState<string>(() => cached?.spotlightReason || '');
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -255,6 +263,29 @@ function DashboardContent({
     let isCancelled = false;
 
     const initData = async () => {
+      // اگر کش اکسپلور وجود دارد و معتبر است، لودینگ نکن و فقط سریعاً واچ‌لیست کاربر را سینک کن
+      const hasCache = hasExploreCache();
+      const isFresh = hasCache && !isExploreCacheStale();
+
+      if (isFresh) {
+        setLoading(false);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && !isCancelled) {
+            setUser(user);
+            const { data: wList } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
+            if (wList && !isCancelled) {
+              setWatchlistIds(new Set(wList.map((i: any) => Number(i.show_id))));
+            }
+          }
+        } catch {}
+        return;
+      }
+
+      if (!hasCache) {
+        setLoading(true);
+      }
+
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { 
@@ -409,6 +440,7 @@ function DashboardContent({
         });
 
         // غنی‌سازی اطلاعات سازندگان و تعداد ذخیره‌شدن‌های هر لیست عمومی
+        let finalCustomLists: any[] = [];
         const rawLists = customListsRes?.data || [];
         if (rawLists.length > 0) {
           const userIds = Array.from(new Set(rawLists.map((l: any) => l.user_id)));
@@ -449,17 +481,41 @@ function DashboardContent({
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
           });
 
-          setUserCustomLists(enrichedLists.slice(0, 15));
+          finalCustomLists = enrichedLists.slice(0, 15);
+          setUserCustomLists(finalCustomLists);
         }
 
         // ۴. الگوریتم هوشمند پیشنهاد ویژه بالا کنار DNA سینمایی
         // شرط قطعی: فقط سریالی که برایش «توضیح فارسی» وجود دارد + یادداشت دلیل بر اساس ژانر
-        await calculateSpotlightShow({
+        const spotlightRes = await calculateSpotlightShow({
           uniqueWatchedIds,
           allUserShowIdsSet,
           trending: trending || [],
           topRated: topRated || [],
           iranian: iranian || [],
+        });
+
+        // ذخیره تمام اطلاعات در کش صفحه اکسپلور
+        const currentCategories = {
+          iranian: iranian || [],
+          trending: trending ? trending.slice(0, 15) : [],
+          topRated: topRated ? topRated.slice(0, 15) : [],
+          korean: korean ? korean.slice(0, 15) : [],
+          anime: anime ? anime.slice(0, 15) : [],
+          teen: teen ? teen.slice(0, 15) : [],
+          miniSeries: miniSeries ? miniSeries.slice(0, 15) : [],
+        };
+
+        setExploreCache({
+          categories: currentCategories,
+          userCustomLists: finalCustomLists,
+          spotlightShow: spotlightRes?.show || null,
+          spotlightReason: spotlightRes?.reason || '',
+          relatedCarousel,
+          watchlistIds: new Set(wIds),
+          watchedIds: wEdIds,
+          allShowIds: allUserShowIds,
+          myFeed: [],
         });
 
       } catch (err: any) {
@@ -565,18 +621,16 @@ function DashboardContent({
 
       if (selectedSpotlight) {
         setSpotlightShow(selectedSpotlight);
-        if (maxCount > 0) {
-          setSpotlightReason(
-            `چون ${maxCount} تا سریال از ژانر «${topGenreName}» تو سریال‌هایی که دیدید هست، پس اینم باید ببینید:`
-          );
-        } else {
-          setSpotlightReason(
-            'بر اساس شاهکارهای دارای شناسنامه و توضیح کامل فارسی در بینجر، این اثر فوق‌العاده برای شما گلچین شده:'
-          );
-        }
+        const reasonText = (maxCount > 0)
+          ? `چون ${maxCount} تا سریال از ژانر «${topGenreName}» تو سریال‌هایی که دیدید هست، پس اینم باید ببینید:`
+          : 'بر اساس شاهکارهای دارای شناسنامه و توضیح کامل فارسی در بینجر، این اثر فوق‌العاده برای شما گلچین شده:';
+        setSpotlightReason(reasonText);
+        return { show: selectedSpotlight, reason: reasonText };
       }
+      return null;
     } catch (e) {
       console.error('Error calculating spotlight show:', e);
+      return null;
     }
   };
 
@@ -1923,63 +1977,5 @@ function OnboardingSteps({ wIds, wEdIds, allUserShowIds, router }: any) {
         </div>
       </div>
     </div>
-  );
-}
-
-// فوتر داشبورد
-function DashboardFooter({
-  footerDesc,
-  footerCopyright,
-  isAdmin = false,
-}: {
-  footerDesc?: string;
-  footerCopyright?: string;
-  isAdmin?: boolean;
-}) {
-  return (
-    <footer className="mt-16 border-t border-white/5 bg-[#080808] relative z-10">
-      <div className="max-w-7xl mx-auto px-6 py-10">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          <div className="col-span-1 md:col-span-2 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-[#ccff00] rounded-lg flex items-center justify-center text-black font-black">B</div>
-              <span className="text-xl font-black text-white">Binger</span>
-            </div>
-            <EditableText
-              settingKey="footer_description"
-              initialValue={footerDesc || 'بینجر پلتفرم هوشمند مدیریت و کشف سریال است. با بینجر همیشه می‌دونی چی ببینی و تا کجا دیدی.'}
-              isAdmin={isAdmin}
-              as="p"
-              description="متن کوتاه معرفی در فوتر"
-              className="text-gray-400 text-xs leading-relaxed max-w-sm text-justify"
-            />
-          </div>
-          <div>
-            <h4 className="font-bold text-white mb-3 text-sm">دسترسی سریع</h4>
-            <ul className="space-y-2 text-xs text-gray-400">
-              <li><Link href="/dashboard" className="hover:text-[#ccff00] transition-colors">داشبورد من</Link></li>
-              <li><Link href="/dashboard/custom-lists/explore" className="hover:text-[#ccff00] transition-colors">کشف لیست‌ها</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-bold text-white mb-3 text-sm">ما را دنبال کنید</h4>
-            <div className="flex gap-3">
-              <Link href="#" className="p-2 bg-white/5 rounded-full hover:bg-[#ccff00] hover:text-black transition-all"><Twitter size={16} /></Link>
-              <Link href="#" className="p-2 bg-white/5 rounded-full hover:bg-[#ccff00] hover:text-black transition-all"><Instagram size={16} /></Link>
-            </div>
-          </div>
-        </div>
-        <div className="border-t border-white/5 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <EditableText
-            settingKey="footer_copyright"
-            initialValue={footerCopyright || '© ۲۰۲۶ تمامی حقوق برای پلتفرم بینجر (Binger) محفوظ است.'}
-            isAdmin={isAdmin}
-            as="p"
-            description="متن کپی‌رایت انتهای صفحات"
-            className="text-[11px] text-gray-500"
-          />
-        </div>
-      </div>
-    </footer>
   );
 }

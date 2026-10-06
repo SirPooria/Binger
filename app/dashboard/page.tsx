@@ -34,6 +34,12 @@ import { ShowCardProgress } from './components/ShowProgressBar';
 import { VipUsername } from './components/VipBadge';
 import { calculateSubscriptionDetails } from '@/lib/subscription';
 import { SubscriptionBadge } from './components/SubscriptionComponents';
+import { 
+  getHomeCache, 
+  setHomeCache, 
+  hasHomeCache, 
+  isHomeCacheStale 
+} from '@/lib/pageCache';
 
 const EpisodeModal = dynamic(() => import('./components/EpisodeModal'), {
   loading: () => (
@@ -151,13 +157,14 @@ export default function BingerHomeScreen() {
     toggleWatchedEpisode,
   } = useWatched();
 
-  const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const cachedHome = getHomeCache();
+  const [loading, setLoading] = useState(!cachedHome);
+  const [currentUser, setCurrentUser] = useState<any>(() => cachedHome?.currentUser || null);
+  const [userProfile, setUserProfile] = useState<any>(() => cachedHome?.userProfile || null);
 
   // دیتای سریال‌ها و رکوردهای تماشا
-  const [trackedShows, setTrackedShows] = useState<any[]>([]);
-  const [watchedRecords, setWatchedRecords] = useState<any[]>([]);
+  const [trackedShows, setTrackedShows] = useState<any[]>(() => cachedHome?.trackedShows || []);
+  const [watchedRecords, setWatchedRecords] = useState<any[]>(() => cachedHome?.watchedRecords || []);
 
   // همگام‌سازی لحظه‌ای با کانتکست سراسری
   useEffect(() => {
@@ -165,14 +172,14 @@ export default function BingerHomeScreen() {
       setWatchedRecords(contextWatchedRecords);
     }
   }, [contextWatchedRecords]);
-  const [seasonEpisodesMap, setSeasonEpisodesMap] = useState<Record<string, any[]>>({});
+  const [seasonEpisodesMap, setSeasonEpisodesMap] = useState<Record<string, any[]>>(() => cachedHome?.seasonEpisodesMap || {});
 
   // تب‌های تقویم: امروز / این هفته / به‌زودی
   const [calendarTab, setCalendarTab] = useState<'today' | 'this_week' | 'upcoming'>('today');
 
   // سوییچ منبع تقویم: سریال‌های من یا ترندهای جهانی
   const [calendarScope, setCalendarScope] = useState<'mine' | 'global'>('mine');
-  const [globalAiringShows, setGlobalAiringShows] = useState<any[]>([]);
+  const [globalAiringShows, setGlobalAiringShows] = useState<any[]>(() => cachedHome?.globalAiringShows || []);
 
   // کارت در حال انیمیشن خروج در نوبت تماشا
   const [animatingCardId, setAnimatingCardId] = useState<number | null>(null);
@@ -256,6 +263,11 @@ export default function BingerHomeScreen() {
 
   // ۱. واکشی اطلاعات جامع کاربر و دیتابیس
   const loadInitialData = async () => {
+    const hasCache = hasHomeCache();
+    if (!hasCache) {
+      setLoading(true);
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -403,6 +415,14 @@ export default function BingerHomeScreen() {
       }
 
       setSeasonEpisodesMap(seasonCache);
+      setHomeCache({
+        currentUser: user,
+        userProfile: profile,
+        trackedShows: showsDetails,
+        watchedRecords: allWatched,
+        seasonEpisodesMap: seasonCache,
+        globalAiringShows: globalShows || [],
+      });
       setLoading(false);
     } catch (err) {
       console.error("Home screen init error:", err);

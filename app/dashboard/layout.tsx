@@ -15,6 +15,8 @@ import { ShowCardProgress } from './components/ShowProgressBar';
 import { WatchlistButton } from './components/WatchlistButton';
 import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
 import { SubscriptionBadge } from './components/SubscriptionComponents';
+import ScrollRestorationWatcher from './components/ScrollRestorationWatcher';
+import { resetScrollPosition } from '@/lib/scrollRestoration';
 
 // ژانرهای برتر برای فیلتر سریع
 const QUICK_GENRES = [
@@ -47,7 +49,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   // تب‌های اصلی اپلیکیشن (هیچ‌وقت دکمه برگشت ندارند)
-  const ROOT_TABS = ['/dashboard', '/dashboard/explore', '/dashboard/lists', '/dashboard/mood', '/dashboard/profile'];
+  const ROOT_TABS = ['/dashboard', '/dashboard/explore', '/dashboard/lists', '/dashboard/mood', '/dashboard/profile', '/dashboard/subscription'];
   const isRootTab = ROOT_TABS.includes(pathname);
 
   // بازگشت هوشمند با مقصد پشتیبان در صورت باز شدن مستقیم لینک
@@ -271,6 +273,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] flex flex-col relative overflow-x-hidden">
+      <ScrollRestorationWatcher />
 
       {/* ================= پنجره سرچ پیشرفته ================= */}
       {showSearchOverlay && (
@@ -535,13 +538,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 w-full space-y-2">
-          <MenuItem icon={<Home size={20} />} label="صفحه اصلی" active={pathname === '/dashboard'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard'); }} />
-          <MenuItem icon={<Compass size={20} />} label="اکسپلور" active={pathname === '/dashboard/explore'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/explore'); }} />
+          <MenuItem icon={<Home size={20} />} label="صفحه اصلی" active={pathname === '/dashboard'} onClick={() => { setIsSidebarOpen(false); resetScrollPosition('/dashboard'); router.push('/dashboard'); }} />
+          <MenuItem icon={<Compass size={20} />} label="اکسپلور" active={pathname === '/dashboard/explore'} onClick={() => { setIsSidebarOpen(false); resetScrollPosition('/dashboard/explore'); router.push('/dashboard/explore'); }} />
           <MenuItem icon={<BookOpen size={20} className="text-[#ccff00]" />} label="مجله بینجر" active={pathname.startsWith('/blog')} onClick={() => { setIsSidebarOpen(false); router.push('/blog'); }} />
           <MenuItem icon={<Feather size={20} className="text-amber-400" />} label="باشگاه منتقدین" active={pathname === '/dashboard/critics'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/critics'); }} />
-          <MenuItem icon={<List size={20} />} label="سریال های من" active={pathname === '/dashboard/lists'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/lists'); }} />
+          <MenuItem icon={<List size={20} />} label="سریال های من" active={pathname === '/dashboard/lists'} onClick={() => { setIsSidebarOpen(false); resetScrollPosition('/dashboard/lists'); router.push('/dashboard/lists'); }} />
           <MenuItem icon={<Sparkles size={20} className="text-purple-400" />} label=" پیشنهاد سریال " active={pathname === '/dashboard/mood'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/mood'); }} />
-          <MenuItem icon={<User size={20} />} label="پروفایل" active={pathname === '/dashboard/profile'} onClick={() => { setIsSidebarOpen(false); router.push('/dashboard/profile'); }} />
+          <MenuItem icon={<User size={20} />} label="پروفایل" active={pathname === '/dashboard/profile'} onClick={() => { setIsSidebarOpen(false); resetScrollPosition('/dashboard/profile'); router.push('/dashboard/profile'); }} />
           <MenuItem 
             icon={<Crown size={20} className={subStatus?.isActive ? "text-amber-400" : "text-gray-400"} />} 
             label="اشتراک VIP" 
@@ -613,17 +616,17 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       {/* --- MOBILE NAVIGATION --- */}
       <div className="md:hidden fixed bottom-0 w-full z-[120]">
         <div className="bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/10 h-20 pb-6 safe-area-pb grid grid-cols-5 items-center relative">
-          <Link href="/dashboard" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="خانه">
+          <Link href="/dashboard" onClick={() => resetScrollPosition('/dashboard')} className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="خانه">
             <Home size={22} />
           </Link>
-          <Link href="/dashboard/explore" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/explore' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="کاوش">
+          <Link href="/dashboard/explore" onClick={() => resetScrollPosition('/dashboard/explore')} className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/explore' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="کاوش">
             <Compass size={22} />
           </Link>
           <div className="h-full"></div>
-          <Link href="/dashboard/lists" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/lists' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="لیست‌ها">
+          <Link href="/dashboard/lists" onClick={() => resetScrollPosition('/dashboard/lists')} className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/lists' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="لیست‌ها">
             <List size={22} />
           </Link>
-          <Link href="/dashboard/profile" className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/profile' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="پروفایل">
+          <Link href="/dashboard/profile" onClick={() => resetScrollPosition('/dashboard/profile')} className={`flex flex-col items-center justify-center h-full transition-all active:scale-90 ${pathname === '/dashboard/profile' ? "text-[#ccff00]" : "text-gray-500"}`} aria-label="پروفایل">
             <User size={22} />
           </Link>
         </div>

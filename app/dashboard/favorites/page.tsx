@@ -11,6 +11,7 @@ import {
 import { ShowCardProgress } from '../components/ShowProgressBar';
 import { MAX_FAVORITES } from '@/lib/favoritesLimit';
 import { useWatched } from '@/lib/watchedContext';
+import { getFavoritesCache, setFavoritesCache, hasFavoritesCache } from '@/lib/pageCache';
 
 export { MAX_FAVORITES };
 
@@ -19,11 +20,12 @@ export default function ManageFavoritesPage() {
   const supabase = createClient() as any;
   const { getWatchedRecords } = useWatched();
 
-  const [loading, setLoading] = useState(true);
+  const cached = getFavoritesCache();
+  const [loading, setLoading] = useState(!cached);
   const [user, setUser] = useState<any>(null);
-  const [favoriteShows, setFavoriteShows] = useState<any[]>([]);
-  const [watchedShows, setWatchedShows] = useState<any[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
+  const [favoriteShows, setFavoriteShows] = useState<any[]>(() => cached?.favoriteShows || []);
+  const [watchedShows, setWatchedShows] = useState<any[]>(() => cached?.watchedShows || []);
+  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(() => cached?.favoriteIds || new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -35,7 +37,9 @@ export default function ManageFavoritesPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoading(true);
+        if (!hasFavoritesCache()) {
+          setLoading(true);
+        }
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           router.replace('/login');
@@ -82,6 +86,11 @@ export default function ManageFavoritesPage() {
 
         setFavoriteShows(favList);
         setWatchedShows(watchedList);
+        setFavoritesCache({
+          favoriteShows: favList,
+          watchedShows: watchedList,
+          favoriteIds: favSet,
+        });
 
       } catch (err) {
         console.error("Error loading favorites manager:", err);

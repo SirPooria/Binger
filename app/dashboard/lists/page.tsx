@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, ArrowRight, ListChecks, Bookmark, Eye, Clock, Tv, CheckCircle } from 'lucide-react';
 import { WatchlistButton } from '../components/WatchlistButton';
 import { useWatched } from '@/lib/watchedContext';
+import { getListsCache, setListsCache, hasListsCache } from '@/lib/pageCache';
 
 export default function MyListsPage() {
   const supabase = createClient() as any;
@@ -16,16 +17,25 @@ export default function MyListsPage() {
   const [activeTab, setActiveTab] = useState<'completed' | 'watched' | 'watchlist'>('watched');
   const [tabInitialized, setTabInitialized] = useState(false);
   const [completedFilter, setCompletedFilter] = useState<'all' | 'upcoming' | 'ended'>('all');
-  const [shows, setShows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   
-  const [watchedStatus, setWatchedStatus] = useState<any>({});
-  const [myShowsCount, setMyShowsCount] = useState({ completed: 0, watched: 0, watchlist: 0 });
+  const initialCache = getListsCache('watched');
+  const [shows, setShows] = useState<any[]>(() => initialCache?.shows || []);
+  const [loading, setLoading] = useState(!initialCache);
+  
+  const [watchedStatus, setWatchedStatus] = useState<any>(() => initialCache?.watchedStatus || {});
+  const [myShowsCount, setMyShowsCount] = useState(() => initialCache?.myShowsCount || { completed: 0, watched: 0, watchlist: 0 });
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'completed' || tab === 'watched' || tab === 'watchlist') {
       setActiveTab(tab);
+      const tabCache = getListsCache(tab);
+      if (tabCache) {
+        setShows(tabCache.shows);
+        setWatchedStatus(tabCache.watchedStatus);
+        setMyShowsCount(tabCache.myShowsCount);
+        setLoading(false);
+      }
     }
     setTabInitialized(true);
   }, []);
@@ -34,9 +44,12 @@ export default function MyListsPage() {
     if (!tabInitialized) return;
 
     const fetchData = async () => {
-      setLoading(true);
-      setShows([]); 
-      setWatchedStatus({});
+      const hasCache = hasListsCache(activeTab);
+      if (!hasCache) {
+        setLoading(true);
+        setShows([]); 
+        setWatchedStatus({});
+      }
 
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -122,15 +135,24 @@ export default function MyListsPage() {
               }
             });
 
-          setWatchedStatus(statusMap);
-          setShows(activeTab === 'watchlist'
+          const currentShows = activeTab === 'watchlist'
             ? waitingShows
-            : activeTab === 'completed' ? completedShows : finalWatchingShows);
-          setMyShowsCount(prev => ({
-            ...prev,
+            : activeTab === 'completed' ? completedShows : finalWatchingShows;
+
+          setWatchedStatus(statusMap);
+          setShows(currentShows);
+          const nextCounts = {
             completed: completedShows.length,
             watched: finalWatchingShows.length,
-          }));
+            watchlist: waitingShowIds.length,
+          };
+          setMyShowsCount(nextCounts);
+
+          setListsCache(activeTab, {
+            shows: currentShows,
+            watchedStatus: statusMap,
+            myShowsCount: nextCounts,
+          });
         }
       } catch (err) {
         console.error("Error loading my lists:", err);
@@ -144,6 +166,13 @@ export default function MyListsPage() {
 
   const changeTab = (tab: 'completed' | 'watched' | 'watchlist') => {
     setActiveTab(tab);
+    const tabCache = getListsCache(tab);
+    if (tabCache) {
+      setShows(tabCache.shows);
+      setWatchedStatus(tabCache.watchedStatus);
+      setMyShowsCount(tabCache.myShowsCount);
+      setLoading(false);
+    }
     router.replace(`/dashboard/lists?tab=${tab}`, { scroll: false });
   };
 

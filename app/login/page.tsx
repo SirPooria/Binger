@@ -407,11 +407,10 @@ export default function LoginPage() {
 
                       <div
                         dir="ltr"
-                        className={`flex items-center w-full bg-black/60 border rounded-2xl transition-all shadow-inner group overflow-hidden ${
-                          isPhoneValid
+                        className={`flex items-center w-full bg-black/60 border rounded-2xl transition-all shadow-inner group overflow-hidden ${isPhoneValid
                             ? 'border-[#ccff00]/60 focus-within:border-[#ccff00] focus-within:ring-1 focus-within:ring-[#ccff00]'
                             : 'border-white/15 focus-within:border-[#ccff00] hover:border-white/30'
-                        }`}
+                          }`}
                       >
                         <div
                           onClick={() => document.getElementById('phone-input')?.focus()}

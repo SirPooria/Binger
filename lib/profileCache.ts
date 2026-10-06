@@ -48,7 +48,35 @@ export function getProfileCacheKey(userId: string): string {
   return `binger_profile_v${PROFILE_CACHE_VERSION}_${userId}`;
 }
 
+let inMemoryProfileCache: ProfileCacheData | null = null;
+
+export function getLatestProfileCache(): ProfileCacheData | null {
+  if (inMemoryProfileCache && Date.now() - inMemoryProfileCache.cachedAt <= PROFILE_CACHE_TTL_MS) {
+    return inMemoryProfileCache;
+  }
+  if (typeof window === 'undefined') return null;
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith(`binger_profile_v${PROFILE_CACHE_VERSION}_`)) {
+        const raw = sessionStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw) as ProfileCacheData;
+          if (parsed && Date.now() - parsed.cachedAt <= PROFILE_CACHE_TTL_MS) {
+            inMemoryProfileCache = parsed;
+            return parsed;
+          }
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export function readProfileCache(userId: string): ProfileCacheData | null {
+  if (inMemoryProfileCache && Date.now() - inMemoryProfileCache.cachedAt <= PROFILE_CACHE_TTL_MS) {
+    return inMemoryProfileCache;
+  }
   if (typeof window === 'undefined' || !userId) return null;
 
   try {
@@ -67,6 +95,7 @@ export function readProfileCache(userId: string): ProfileCacheData | null {
       return null;
     }
 
+    inMemoryProfileCache = data;
     return data;
   } catch {
     return null;
@@ -85,6 +114,7 @@ export function writeProfileCache(
       version: PROFILE_CACHE_VERSION,
       cachedAt: Date.now(),
     };
+    inMemoryProfileCache = payload;
     sessionStorage.setItem(getProfileCacheKey(userId), JSON.stringify(payload));
   } catch {
     // sessionStorage quota exceeded or blocked; graceful degradation
@@ -92,6 +122,7 @@ export function writeProfileCache(
 }
 
 export function invalidateProfileCache(userId: string): void {
+  inMemoryProfileCache = null;
   if (typeof window === 'undefined' || !userId) return;
   try {
     sessionStorage.removeItem(getProfileCacheKey(userId));
@@ -101,13 +132,14 @@ export function invalidateProfileCache(userId: string): void {
 }
 
 export function clearAllProfileCaches(): void {
+  inMemoryProfileCache = null;
   if (typeof window === 'undefined') return;
 
   try {
     const keysToRemove: string[] = [];
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
-      if (key && (key.startsWith('binger_profile_') || key.startsWith('binger_'))) {
+      if (key && key.startsWith('binger_profile_')) {
         keysToRemove.push(key);
       }
     }
