@@ -114,13 +114,24 @@ export default function InsightsPage() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        if (!currentUser) {
-          router.replace('/login');
+        let activeUser: any = null;
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user) {
+          activeUser = userData.user;
+        } else {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user) {
+            activeUser = sessionData.session.user;
+          }
+        }
+
+        if (!activeUser) {
+          window.location.href = '/login';
           return;
         }
         if (cancelled) return;
-        setUser(currentUser);
+        setUser(activeUser);
+        const currentUser = activeUser;
 
         // خواندن پروفایل و وضعیت VIP
         const { data: profileData } = await supabase

@@ -299,12 +299,24 @@ export default function BingerHomeScreen() {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      let activeUser: any = null;
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData?.user) {
+        activeUser = userData.user;
+      } else {
+        // بررسی سشن محلی در صورت اختلال موقت اینترنت یا تغییر IP
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user) {
+          activeUser = sessionData.session.user;
+        }
+      }
+
+      if (!activeUser) {
         window.location.href = '/login';
         return;
       }
-      setCurrentUser(user);
+      setCurrentUser(activeUser);
+      const user = activeUser;
 
       // خواندن پروفایل کاربری
       const { data: profile } = await supabase

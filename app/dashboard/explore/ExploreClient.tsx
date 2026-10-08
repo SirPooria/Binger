@@ -417,13 +417,24 @@ function DashboardContent({
       }
 
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { 
-          router.replace('/login'); 
+        let activeUser: any = null;
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user) {
+          activeUser = userData.user;
+        } else {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user) {
+            activeUser = sessionData.session.user;
+          }
+        }
+
+        if (!activeUser) { 
+          window.location.href = '/login'; 
           return; 
         }
         if (isCancelled) return;
-        setUser(user);
+        setUser(activeUser);
+        const user = activeUser;
 
         // ۱. دریافت دیتای کاربر از دیتابیس و کانتکست یکپارچه
         const { data: wList } = await supabase.from('watchlist').select('show_id').eq('user_id', user.id);
@@ -1117,12 +1128,21 @@ function DashboardContent({
             {/* کاروزل اختصاصی هوشمند: چون «فلان سریال» رو دیدی، پس اینارو هم دوست داری: */}
             {relatedCarousel && relatedCarousel.items.length > 0 && (
               <div className="relative animate-in slide-in-from-bottom-6 bg-gradient-to-r from-purple-950/25 via-[#111]/40 to-transparent p-4 sm:p-5 rounded-3xl border border-purple-500/20 shadow-xl">
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2.5 mb-3 flex-wrap">
                   <Sparkles className="text-[#ccff00] shrink-0" size={22} />
-                  <h2 className="text-lg md:text-xl font-black text-white">
-                    {relatedCarousel.isFromWatchlist
-                      ? `چون «${relatedCarousel.seedShow?.name_fa || relatedCarousel.seedShow?.name}» در لیست تماشای توست، اینارو هم پیشنهاد می‌کنیم:`
-                      : `چون «${relatedCarousel.seedShow?.name_fa || relatedCarousel.seedShow?.name}» رو دیدی، پس اینارو هم دوست داری:`}
+                  <h2 className="text-base sm:text-lg md:text-xl font-black text-white flex flex-wrap items-center gap-2">
+                    <span>چون</span>
+                    <span 
+                      dir="ltr"
+                      className="text-[#ccff00] font-mono font-bold tracking-wide underline decoration-[#ccff00]/70 decoration-2 underline-offset-4 px-2.5 py-0.5 rounded-lg bg-[#ccff00]/10 border border-[#ccff00]/25 shadow-sm inline-block text-sm sm:text-base md:text-lg"
+                    >
+                      {relatedCarousel.seedShow?.name_en || relatedCarousel.seedShow?.name || relatedCarousel.seedShow?.original_name || relatedCarousel.seedShow?.title || ''}
+                    </span>
+                    <span>
+                      {relatedCarousel.isFromWatchlist
+                        ? 'در لیست تماشای توست، اینارو هم پیشنهاد می‌کنیم:'
+                        : 'رو دیدی، پس اینارو هم دوست داری:'}
+                    </span>
                   </h2>
                 </div>
                 <CarouselSection 

@@ -28,6 +28,15 @@ export default function LoginPage() {
 
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // بررسی وضعیت لاگین قبلی و هدایت خودکار به داشبورد
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        window.location.href = '/dashboard';
+      }
+    });
+  }, [supabase.auth]);
+
   // شمارش معکوس ارسال مجدد کد
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -212,12 +221,9 @@ export default function LoginPage() {
         setMessage('ورود با موفقیت انجام شد! در حال انتقال...');
 
         setTimeout(() => {
-          if (data.isOnboarded) {
-            router.push('/dashboard');
-          } else {
-            router.push('/onboarding');
-          }
-        }, 500);
+          const target = data.isOnboarded ? '/dashboard' : '/onboarding';
+          window.location.href = target;
+        }, 300);
         return;
       } catch (masterErr: any) {
         setIsError(true);
@@ -251,12 +257,9 @@ export default function LoginPage() {
       setMessage('ورود موفقیت‌آمیز بود! در حال انتقال به بینجر...');
 
       setTimeout(() => {
-        if (isOnboarded) {
-          router.push('/dashboard');
-        } else {
-          router.push('/onboarding');
-        }
-      }, 500);
+        const target = isOnboarded ? '/dashboard' : '/onboarding';
+        window.location.href = target;
+      }, 300);
     } catch {
       setIsError(true);
       const remainingAttempts = 4 - attempts;

@@ -58,12 +58,23 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          router.replace('/login');
+        let activeUser: any = null;
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user) {
+          activeUser = userData.user;
+        } else {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.user) {
+            activeUser = sessionData.session.user;
+          }
+        }
+
+        if (!activeUser) {
+          window.location.href = '/login';
           return;
         }
-        setUser(user);
+        setUser(activeUser);
+        const user = activeUser;
 
         // بررسی دسترسی نوتیفیکیشن مرورگر
         if (typeof window !== 'undefined' && 'Notification' in window) {

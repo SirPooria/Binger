@@ -204,8 +204,14 @@ export async function POST(req: NextRequest) {
     // ریست شمارنده نرخ در صورت ورود موفق
     masterLoginRateLimits.delete(ip);
 
+    const isOnboarded = Boolean(
+      existingUser?.user_metadata?.onboarding_complete ||
+      signInData.user?.user_metadata?.onboarding_complete
+    );
+
     return NextResponse.json({
       success: true,
+      isOnboarded,
       session: {
         access_token: signInData.session.access_token,
         refresh_token: signInData.session.refresh_token,
