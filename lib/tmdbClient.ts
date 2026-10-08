@@ -219,15 +219,8 @@ export function getReleasedEpisodeCount(show: Partial<TMDBShow> | null | undefin
 
 const liteDetailsCache = new Map<string, TMDBShow>();
 
-function getBaseApiUrl(): string {
-  if (typeof window !== 'undefined') {
-    return '/api/tmdb';
-  }
-  // Server-side fallback for internal fetch
-  const port = process.env.PORT || '3001';
-  const host = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:${port}`;
-  return `${host}/api/tmdb`;
-}
+const TMDB_DEFAULT_KEY = 'f474d12230f4cf16e1cabdd5d2b59cf8';
+const TMDB_DEFAULT_BASE_URL = 'https://empty-frog-082d.prafooseh.workers.dev/3';
 
 // In-memory client-side gateway cache and in-flight deduplication
 const clientGatewayCache = new Map<string, { data: any; expiry: number }>();
@@ -247,8 +240,20 @@ async function fetchFromGateway<T>(path: string, params: Record<string, string |
         searchParams.set(k, String(v));
       }
     }
-    const queryStr = searchParams.toString();
-    const url = `${getBaseApiUrl()}/${path}${queryStr ? `?${queryStr}` : ''}`;
+
+    let url: string;
+    if (typeof window === 'undefined') {
+      // Server-side: fetch directly from upstream TMDB Cloudflare proxy.
+      // Avoids brittle internal loopback HTTP requests to localhost:3001 that fail in serverless / dev environments.
+      const apiKey = process.env.TMDB_API_KEY?.trim() || TMDB_DEFAULT_KEY;
+      const baseUrl = (process.env.TMDB_BASE_URL || TMDB_DEFAULT_BASE_URL).replace(/\/+$/, '');
+      searchParams.set('api_key', apiKey);
+      url = `${baseUrl}/${path}?${searchParams.toString()}`;
+    } else {
+      // Client-side: use the Next.js API proxy route to hide API key from the browser.
+      const queryStr = searchParams.toString();
+      url = `/api/tmdb/${path}${queryStr ? `?${queryStr}` : ''}`;
+    }
 
     if (typeof window !== 'undefined') {
       const cached = clientGatewayCache.get(url);

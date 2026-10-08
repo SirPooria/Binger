@@ -13,6 +13,7 @@ import {
   getImageUrl,
   getBackdropUrl,
   getRelatedMovies,
+  getMovieDetails,
   getProfileUrl,
   type TMDBMovie
 } from '@/lib/tmdbClient';
@@ -47,6 +48,7 @@ export default function MovieDetailsClient({ initialMovie, movieId }: MovieDetai
   const { isMovieWatched, isMovieInWatchlist, isMovieFavorite } = useMovie();
 
   const [movie, setMovie] = useState<TMDBMovie | null>(initialMovie);
+  const [loadingMovie, setLoadingMovie] = useState<boolean>(!initialMovie);
   const [relatedMovies, setRelatedMovies] = useState<TMDBMovie[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(true);
   const [synopsisLang, setSynopsisLang] = useState<'fa' | 'en'>('fa');
@@ -64,22 +66,47 @@ export default function MovieDetailsClient({ initialMovie, movieId }: MovieDetai
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     // 1. Load user
     supabase.auth.getUser().then(({ data: { user } }: any) => {
-      setCurrentUser(user);
+      if (isMounted) setCurrentUser(user);
     });
 
-    // 2. Load related movies
+    // 2. Client-side fetch movie details if not provided by server
+    if (!initialMovie) {
+      setLoadingMovie(true);
+      getMovieDetails(movieId)
+        .then((res) => {
+          if (isMounted && res) {
+            setMovie(res);
+          }
+        })
+        .catch((err) => {
+          console.warn('[MovieDetailsClient] Client fetch error:', err);
+        })
+        .finally(() => {
+          if (isMounted) setLoadingMovie(false);
+        });
+    }
+
+    // 3. Load related movies
     getRelatedMovies(movieId).then((related) => {
-      setRelatedMovies(related);
-      setLoadingRelated(false);
+      if (isMounted) {
+        setRelatedMovies(related);
+        setLoadingRelated(false);
+      }
     }).catch(() => {
-      setLoadingRelated(false);
+      if (isMounted) setLoadingRelated(false);
     });
 
-    // 3. Load comments
+    // 4. Load comments
     loadComments();
-  }, [movieId, supabase]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [movieId, initialMovie, supabase]);
 
   const loadComments = async () => {
     try {
@@ -155,6 +182,48 @@ export default function MovieDetailsClient({ initialMovie, movieId }: MovieDetai
       showToast('لینک صفحه فیلم در کلیپ‌بورد کپی شد 📋');
     }
   };
+
+  if (loadingMovie && !movie) {
+    return (
+      <div dir="rtl" className="min-h-screen bg-[#050505] text-white">
+        {/* Hero Backdrop Skeleton */}
+        <div className="relative w-full h-[380px] md:h-[500px] bg-white/[0.03] animate-pulse">
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent" />
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 h-full flex items-end pb-8">
+            <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 w-full">
+              <div className="w-32 sm:w-44 md:w-52 aspect-[2/3] rounded-2xl bg-white/10 shrink-0 border border-white/10 shadow-2xl animate-pulse" />
+              <div className="space-y-3 w-full max-w-xl text-center sm:text-right">
+                <div className="h-4 w-28 bg-white/10 rounded-full mx-auto sm:mr-0 animate-pulse" />
+                <div className="h-8 md:h-10 w-3/4 bg-white/15 rounded-xl mx-auto sm:mr-0 animate-pulse" />
+                <div className="h-4 w-1/2 bg-white/10 rounded-lg mx-auto sm:mr-0 animate-pulse" />
+                <div className="flex justify-center sm:justify-start gap-2 pt-2">
+                  <div className="h-8 w-24 bg-white/10 rounded-xl animate-pulse" />
+                  <div className="h-8 w-24 bg-white/10 rounded-xl animate-pulse" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-[#0e0e10] border border-white/5 rounded-3xl p-6 space-y-4 animate-pulse">
+              <div className="h-6 w-32 bg-white/10 rounded-lg" />
+              <div className="space-y-2">
+                <div className="h-4 w-full bg-white/5 rounded" />
+                <div className="h-4 w-5/6 bg-white/5 rounded" />
+                <div className="h-4 w-4/6 bg-white/5 rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="bg-[#0e0e10] border border-white/5 rounded-3xl p-6 h-48 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!movie) {
     return (
