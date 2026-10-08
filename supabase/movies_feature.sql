@@ -138,3 +138,60 @@ CREATE POLICY "کاربران لاگین کرده می‌توانند نظر ث�
 CREATE POLICY "کاربران می‌توانند نظر خود را حذف کنند"
     ON public.movie_comments FOR DELETE
     USING (auth.uid() = user_id);
+
+-- ۶. ری‌اکشن‌ها و نظرسنجی اختصاصی فیلم‌ها (Movie Reactions & Character Polls)
+CREATE TABLE IF NOT EXISTS public.movie_reactions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    movie_id BIGINT NOT NULL,
+    reaction TEXT,
+    character_id BIGINT,
+    character_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    UNIQUE(user_id, movie_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_reactions_movie_id ON public.movie_reactions(movie_id);
+CREATE INDEX IF NOT EXISTS idx_movie_reactions_user_id ON public.movie_reactions(user_id);
+
+ALTER TABLE public.movie_reactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "همه می‌توانند ری‌اکشن‌های فیلم‌ها را ببینند" ON public.movie_reactions;
+CREATE POLICY "همه می‌توانند ری‌اکشن‌های فیلم‌ها را ببینند"
+    ON public.movie_reactions FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "کاربران می‌توانند ری‌اکشن فیلم خود را ثبت و ویرایش کنند" ON public.movie_reactions;
+CREATE POLICY "کاربران می‌توانند ری‌اکشن فیلم خود را ثبت و ویرایش کنند"
+    ON public.movie_reactions FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- ۷. امتیازدهی کاربران به فیلم‌ها (Movie Ratings)
+CREATE TABLE IF NOT EXISTS public.movie_ratings (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    movie_id BIGINT NOT NULL,
+    rating NUMERIC NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    UNIQUE(user_id, movie_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movie_ratings_movie_id ON public.movie_ratings(movie_id);
+CREATE INDEX IF NOT EXISTS idx_movie_ratings_user_id ON public.movie_ratings(user_id);
+
+ALTER TABLE public.movie_ratings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "همه می‌توانند امتیازات فیلم‌ها را ببینند" ON public.movie_ratings;
+CREATE POLICY "همه می‌توانند امتیازات فیلم‌ها را ببینند"
+    ON public.movie_ratings FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "کاربران می‌توانند امتیاز خود را ثبت و ویرایش کنند" ON public.movie_ratings;
+CREATE POLICY "کاربران می‌توانند امتیاز خود را ثبت و ویرایش کنند"
+    ON public.movie_ratings FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+

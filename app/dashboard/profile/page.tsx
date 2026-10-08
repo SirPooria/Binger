@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase';
 import { getShowDetailsLite, getBackdropUrl, getImageUrl, getReleasedEpisodeCount } from '@/lib/tmdbClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  Loader2, Zap, MessageSquare, Heart, 
+import {
+  Loader2, Zap, MessageSquare, Heart,
   Plus, Award, X, Clock, Play, User as UserIcon, Crown,
   Lock, CheckCircle, CheckCircle2, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck,
   BarChart3, Sparkles, Pin, Feather, Film
@@ -17,30 +17,30 @@ import { VipUsername, CriticBadge } from '../components/VipBadge';
 import { WatchlistButton } from '../components/WatchlistButton';
 import { MovieCard } from '../components/MovieCard';
 import { CommentRenderer } from '../components/CommentRenderer';
-import { 
-  checkCriticEligibility, 
-  fetchCriticReviewsByUser, 
-  type CriticReviewData 
+import {
+  checkCriticEligibility,
+  fetchCriticReviewsByUser,
+  type CriticReviewData
 } from '@/lib/criticReviews';
-import { 
-  ALL_ACHIEVEMENTS, 
-  getBadgeProgress as calculateBadgeProgress, 
-  type AchievementBadge, 
-  type AchievementUserStats 
+import {
+  ALL_ACHIEVEMENTS,
+  getBadgeProgress as calculateBadgeProgress,
+  type AchievementBadge,
+  type AchievementUserStats
 } from '@/lib/achievements';
-import { 
-  readProfileCache, 
-  writeProfileCache, 
-  clearProfileCache, 
+import {
+  readProfileCache,
+  writeProfileCache,
+  clearProfileCache,
   clearAllProfileCaches,
-  getLatestProfileCache, 
-  type CachedProfileData 
+  getLatestProfileCache,
+  type CachedProfileData
 } from '@/lib/profileCache';
 import { useWatched } from '@/lib/watchedContext';
 import { useMovie } from '@/lib/movieContext';
 
 export default function ProfilePage() {
-  const supabase = createClient() as any; 
+  const supabase = createClient() as any;
   const router = useRouter();
   const { getWatchedRecords } = useWatched();
   const {
@@ -53,7 +53,7 @@ export default function ProfilePage() {
 
   const movieHours = Math.floor(totalMovieWatchTimeMinutes / 60);
   const movieMinutes = totalMovieWatchTimeMinutes % 60;
-  
+
   const initialCache = getLatestProfileCache();
   const [user, setUser] = useState<any>(null);
   const [profileInfo, setProfileInfo] = useState<{
@@ -80,7 +80,7 @@ export default function ProfilePage() {
 
   const [loading, setLoading] = useState(!initialCache);
   const [contentLoading, setContentLoading] = useState(!initialCache);
-  
+
   // Stats
   const [timeStats, setTimeStats] = useState(() => initialCache?.timeStats || { months: 0, days: 0, hours: 0 });
   const [totalEpisodes, setTotalEpisodes] = useState(() => initialCache?.totalEpisodes || 0);
@@ -96,7 +96,7 @@ export default function ProfilePage() {
     savedListCount: 0,
     eventTypes: [] as string[],
   });
-  
+
   // Lists
   const [favorites, setFavorites] = useState<any[]>(() => initialCache?.favorites || []);
   const [watchedShows, setWatchedShows] = useState<any[]>(() => initialCache?.watchedShows || []);
@@ -237,25 +237,25 @@ export default function ProfilePage() {
 
         // ۱. واکشی اطلاعات پروفایل (نام کاربری و بیو)
         const { data: profileData } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', user.id)
-              .single();
-              
-          if (profileData) {
-              const nextProfileInfo = {
-                  username: profileData.username || '',
-                  bio: profileData.bio || '',
-                  avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎',
-                  is_vip: profileData.is_vip === true || profileData.role === 'admin',
-                  role: profileData.role,
-                  created_at: profileData.created_at,
-                  updated_at: profileData.updated_at,
-                  vip_until: (profileData as any).vip_until,
-              };
-              payload.profileInfo = nextProfileInfo as any;
-              setProfileInfo(nextProfileInfo);
-          }
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (profileData) {
+          const nextProfileInfo = {
+            username: profileData.username || '',
+            bio: profileData.bio || '',
+            avatar_url: profileData.avatar_url || user?.user_metadata?.avatar_url || '😎',
+            is_vip: profileData.is_vip === true || profileData.role === 'admin',
+            role: profileData.role,
+            created_at: profileData.created_at,
+            updated_at: profileData.updated_at,
+            vip_until: (profileData as any).vip_until,
+          };
+          payload.profileInfo = nextProfileInfo as any;
+          setProfileInfo(nextProfileInfo);
+        }
 
         // ۲. دریافت اطلاعات تماشا شده‌ها و محاسبه پروگرس‌بارها
         // ۲. دریافت اطلاعات تماشا شده‌ها از کانتکست یکپارچه سراسری
@@ -294,7 +294,7 @@ export default function ProfilePage() {
           savedListCount: 0,
           eventTypes: (eventsRes.data || []).map((item: any) => item.event_type),
         };
-        
+
         const showsDetailsMap: any = {};
 
         if (watchedData && watchedData.length > 0) {
@@ -302,9 +302,9 @@ export default function ProfilePage() {
           payload.totalEpisodes = watchedData.length;
 
           // مرتب‌سازی سریال‌ها از جدیدترین به قدیمی‌ترین
-        const sortedWatched = [...watchedData].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        const uniqueShowIds = Array.from(new Set(sortedWatched.map((i: any) => i.show_id)));
-          
+          const sortedWatched = [...watchedData].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          const uniqueShowIds = Array.from(new Set(sortedWatched.map((i: any) => i.show_id)));
+
           await Promise.all(uniqueShowIds.map(async (id) => {
             const d = await getShowDetailsLite(String(id));
             if (d) showsDetailsMap[String(id)] = d;
@@ -314,9 +314,9 @@ export default function ProfilePage() {
           let totalMinutes = 0;
           watchedData.forEach((item: any) => {
             const show = showsDetailsMap[String(item.show_id)];
-            const runtime = show?.episode_run_time?.length > 0 
-              ? (show.episode_run_time.reduce((a: number, b: number) => a + b, 0) / show.episode_run_time.length) 
-              : 45; 
+            const runtime = show?.episode_run_time?.length > 0
+              ? (show.episode_run_time.reduce((a: number, b: number) => a + b, 0) / show.episode_run_time.length)
+              : 45;
             totalMinutes += runtime;
           });
 
@@ -599,20 +599,20 @@ export default function ProfilePage() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#050505] text-white font-['Vazirmatn'] pb-0 overflow-x-hidden flex flex-col">
-      
+
       {/* --- BADGE MODAL --- */}
       {selectedBadge && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-6 animate-in zoom-in-95 duration-200" onClick={() => setSelectedBadge(null)}>
           <div className="bg-[#1a1a1a] border border-white/10 w-full max-w-sm rounded-3xl p-8 flex flex-col items-center text-center relative shadow-2xl" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedBadge(null)} className="absolute top-4 left-4 bg-white/5 p-2 rounded-full hover:bg-white/10 cursor-pointer"><X size={20} /></button>
-            
+
             <div className={`w-32 h-32 rounded-full flex items-center justify-center text-6xl mb-6 border-4 ${getBadgeProgress(selectedBadge).isUnlocked ? 'bg-[#ccff00]/10 border-[#ccff00] shadow-[0_0_30px_rgba(204,255,0,0.3)]' : 'bg-white/5 border-white/10 grayscale opacity-50'}`}>
               {selectedBadge.icon}
             </div>
-            
+
             <h3 className="text-2xl font-black mb-2">{selectedBadge.title}</h3>
             <p className="text-gray-400 text-sm mb-6 leading-relaxed">{selectedBadge.desc}</p>
-            
+
             {getBadgeProgress(selectedBadge).isUnlocked ? (
               <div className="bg-[#ccff00]/10 text-[#ccff00] px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                 <CheckCircle size={18} /> دریافت شده
@@ -651,14 +651,13 @@ export default function ProfilePage() {
           <div className="absolute bottom-0 w-full px-4 sm:px-6 pb-4 sm:pb-6 flex flex-col items-center z-20 translate-y-6 sm:translate-y-8">
             <div className="relative group cursor-pointer">
               {/* قاب طلایی درخشان دور آواتار مخصوص کاربر VIP */}
-              <div className={`rounded-full transition-all relative z-10 ${
-                ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
-                  ? 'p-1 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 shadow-[0_0_35px_rgba(245,158,11,0.6)]'
-                  : 'p-0'
-              }`}>
-                <button 
-                  onClick={handleEasterEggClick} 
-                  className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden cursor-pointer" 
+              <div className={`rounded-full transition-all relative z-10 ${((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
+                ? 'p-1 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 shadow-[0_0_35px_rgba(245,158,11,0.6)]'
+                : 'p-0'
+                }`}>
+                <button
+                  onClick={handleEasterEggClick}
+                  className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-[#050505] bg-gradient-to-tr from-gray-800 to-gray-600 shadow-2xl flex items-center justify-center text-4xl md:text-5xl overflow-hidden cursor-pointer"
                   title="آواتار پروفایل"
                 >
                   {profileInfo.avatar_url || '😎'}
@@ -666,20 +665,18 @@ export default function ProfilePage() {
               </div>
 
               {/* هاله نور پس‌زمینه (طلایی درخشان برای VIP و سبز نئونی برای عادی) */}
-              <div className={`absolute inset-0 blur-2xl rounded-full transition-opacity ${
-                ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
-                  ? 'bg-amber-400 opacity-40 group-hover:opacity-70'
-                  : 'bg-[#ccff00] opacity-20 group-hover:opacity-40'
-              }`}></div>
+              <div className={`absolute inset-0 blur-2xl rounded-full transition-opacity ${((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
+                ? 'bg-amber-400 opacity-40 group-hover:opacity-70'
+                : 'bg-[#ccff00] opacity-20 group-hover:opacity-40'
+                }`}></div>
             </div>
-            
+
             {/* نمایش نام کاربری و بیو */}
             <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
-              <h1 className={`text-2xl md:text-3xl font-black ltr tracking-tight ${
-                ((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
-                  ? 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]'
-                  : 'text-white'
-              }`}>
+              <h1 className={`text-2xl md:text-3xl font-black ltr tracking-tight ${((profileInfo as any)?.is_vip || (profileInfo as any)?.role === 'admin')
+                ? 'bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.4)]'
+                : 'text-white'
+                }`}>
                 {profileInfo.username || user?.phone || user?.email?.split('@')[0] || 'کاربر بینجر'}
               </h1>
 
@@ -698,25 +695,25 @@ export default function ProfilePage() {
               {/* نشان وضعیت اشتراک با شمارش روزهای باقی‌مانده */}
               <SubscriptionBadge status={subStatus} className="mr-1" />
             </div>
-            
+
             {profileInfo.bio && (
               <p className="text-sm text-gray-400 mt-2 max-w-md max-h-12 overflow-hidden text-center leading-relaxed px-4 line-clamp-2">
                 {profileInfo.bio.slice(0, 120)}
               </p>
             )}
-            
+
             {/* دکمه‌های مدیریتی */}
             <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
               <button onClick={handleShareProfile} className="w-9 h-9 bg-[#ccff00] text-black rounded-full flex items-center justify-center hover:scale-110 transition-transform shadow-[0_0_15px_rgba(204,255,0,0.4)] cursor-pointer" title="اشتراک گذاری پروفایل">
                 <Share2 size={18} />
               </button>
-              
+
               <Link href="/dashboard/settings" className="text-gray-300 text-xs font-bold bg-white/10 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-sm hover:bg-white/20 transition-all text-center">
                 ویرایش پروفایل
               </Link>
 
-              <Link 
-                href="/dashboard/insights" 
+              <Link
+                href="/dashboard/insights"
                 className="flex items-center gap-1.5 text-xs font-black px-4 py-2.5 rounded-full border transition-all text-center shadow-lg group bg-gradient-to-r from-cyan-500/20 via-blue-600/20 to-indigo-500/20 hover:from-cyan-500/30 hover:to-indigo-500/30 border-cyan-400/40 text-cyan-300 hover:scale-105"
                 title="آمار پیشرفته، محبوب‌ترین‌ها و سالنامه تماشا (Binger Wrapped)"
               >
@@ -731,11 +728,10 @@ export default function ProfilePage() {
 
               <Link
                 href="/dashboard/subscription"
-                className={`flex items-center gap-1.5 text-xs font-black px-4 py-2.5 rounded-full border transition-all text-center shadow-lg group ${
-                  subStatus.isActive
-                    ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 hover:from-amber-500/30 hover:to-yellow-500/30 border-amber-400/40 text-amber-300 hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
-                    : 'bg-white/10 hover:bg-white/20 border-white/10 text-gray-300'
-                }`}
+                className={`flex items-center gap-1.5 text-xs font-black px-4 py-2.5 rounded-full border transition-all text-center shadow-lg group ${subStatus.isActive
+                  ? 'bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-600/20 hover:from-amber-500/30 hover:to-yellow-500/30 border-amber-400/40 text-amber-300 hover:scale-105 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                  : 'bg-white/10 hover:bg-white/20 border-white/10 text-gray-300'
+                  }`}
                 title="مدیریت و مشاهده اشتراک VIP"
               >
                 <Crown size={15} className="text-amber-400 group-hover:rotate-6 transition-transform" />
@@ -761,10 +757,10 @@ export default function ProfilePage() {
 
         {/* --- CONTENT --- */}
         <div className="max-w-5xl mx-auto px-4 mt-16 sm:mt-20 space-y-8 sm:space-y-12 mb-20">
-          
+
           {/* کارت وضعیت جامع اشتراک VIP با نمایش دقیق روزهای باقی‌مانده */}
           <SubscriptionStatusCard status={subStatus} />
-          
+
           {/* کارت وضعیت یا نقدهای منتقد رسمی */}
           {criticStatus.isCritic ? (
             <div className="bg-gradient-to-r from-amber-500/15 via-yellow-500/5 to-transparent border border-amber-400/40 rounded-3xl p-6 relative overflow-hidden shadow-[0_0_35px_rgba(245,158,11,0.12)]">
@@ -941,7 +937,7 @@ export default function ProfilePage() {
               </div>
             );
           })()}
-          
+
           {/* STATS GRID */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
@@ -1029,46 +1025,45 @@ export default function ProfilePage() {
             </div>
 
             {/* ویترین افتخارات با تب‌های فیلتر */}
-                <div className="md:col-span-3 bg-white/5 border border-white/10 rounded-3xl p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                      <Award className="text-pink-500" size={16} /> ویترین افتخارات {loading ? '' : `(${ALL_ACHIEVEMENTS.filter(b => getBadgeProgress(b).isUnlocked).length} از ${ALL_ACHIEVEMENTS.length})`}
-                    </h3>
+            <div className="md:col-span-3 bg-white/5 border border-white/10 rounded-3xl p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                  <Award className="text-pink-500" size={16} /> ویترین افتخارات {loading ? '' : `(${ALL_ACHIEVEMENTS.filter(b => getBadgeProgress(b).isUnlocked).length} از ${ALL_ACHIEVEMENTS.length})`}
+                </h3>
 
-                    {/* دکمه‌های فیلتر دسته‌بندی */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-                      {['همه', 'محتوا', 'وفاداری', 'چالشی', 'اجتماعی'].map((cat) => (
-                        <button
-                          key={cat}
-                          onClick={() => setSelectedCategory(cat)}
-                          className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${
-                            selectedCategory === cat
-                              ? 'bg-[#ccff00] text-black shadow-[0_0_12px_rgba(204,255,0,0.3)]'
-                              : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
-                          }`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* گرید اسکرول مدال‌ها */}
-                  {contentLoading ? <ProfileBoxLoading /> : (
-                    <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                      {ALL_ACHIEVEMENTS
-                        .filter(b => selectedCategory === 'همه' || b.category === selectedCategory)
-                        .map((badge) => (
-                          <BadgeItem
-                            key={badge.id}
-                            badge={badge}
-                            progress={getBadgeProgress(badge)}
-                            onClick={() => setSelectedBadge(badge)}
-                          />
-                      ))}
-                    </div>
-                  )}
+                {/* دکمه‌های فیلتر دسته‌بندی */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {['همه', 'محتوا', 'وفاداری', 'چالشی', 'اجتماعی'].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap ${selectedCategory === cat
+                        ? 'bg-[#ccff00] text-black shadow-[0_0_12px_rgba(204,255,0,0.3)]'
+                        : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                        }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
                 </div>
+              </div>
+
+              {/* گرید اسکرول مدال‌ها */}
+              {contentLoading ? <ProfileBoxLoading /> : (
+                <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                  {ALL_ACHIEVEMENTS
+                    .filter(b => selectedCategory === 'همه' || b.category === selectedCategory)
+                    .map((badge) => (
+                      <BadgeItem
+                        key={badge.id}
+                        badge={badge}
+                        progress={getBadgeProgress(badge)}
+                        onClick={() => setSelectedBadge(badge)}
+                      />
+                    ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* کارت خلاصه DNA سریالی و سالنامه تماشا */}
@@ -1105,8 +1100,8 @@ export default function ProfilePage() {
               <h2 className="text-xl font-black flex items-center gap-2">
                 <Layers size={20} className="text-[#ccff00]" /> لیست‌های اختصاصی من {loading ? '' : `(${customLists.length})`}
               </h2>
-              <Link 
-                href="/dashboard/custom-lists" 
+              <Link
+                href="/dashboard/custom-lists"
                 className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-white/10"
               >
                 <Plus size={14} /> مدیریت و ساخت لیست
@@ -1201,11 +1196,11 @@ export default function ProfilePage() {
                         <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-gray-500">
                           <span className="flex items-center gap-1.5">
                             <span>سازنده:</span>
-                            <VipUsername 
-                              username={list.creator.username || 'کاربر بینجر'} 
-                              isVip={list.creator.is_vip || list.creator.role === 'admin'} 
-                              badgeSize={13} 
-                              className="text-xs" 
+                            <VipUsername
+                              username={list.creator.username || 'کاربر بینجر'}
+                              isVip={list.creator.is_vip || list.creator.role === 'admin'}
+                              badgeSize={13}
+                              className="text-xs"
                             />
                           </span>
                         </div>
@@ -1251,7 +1246,7 @@ export default function ProfilePage() {
               <h2 className="text-xl font-black flex items-center gap-2">
                 <Tv size={20} className="text-[#ccff00]" /> آخرین سریال های تماشا شده
               </h2>
-              
+
               <Link
                 href="/dashboard/lists"
                 className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all border border-white/10"
@@ -1261,7 +1256,7 @@ export default function ProfilePage() {
             </div>
 
             {contentLoading ? <ProfileBoxLoading /> : watchedShows.length > 0 ? (
-              <div 
+              <div
                 id="watched-carousel"
                 dir="rtl"
                 onMouseDown={(e) => {
@@ -1340,7 +1335,7 @@ export default function ProfilePage() {
               <h2 className="text-xl font-black flex items-center gap-2">
                 <Film size={20} className="text-amber-400" /> آخرین فیلم‌های تماشا شده {`(${watchedMovies.length})`}
               </h2>
-              
+
               <Link
                 href="/dashboard/lists?type=movies"
                 className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all border border-white/10"
@@ -1379,7 +1374,7 @@ export default function ProfilePage() {
       {activeModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4 animate-in fade-in duration-300" onClick={() => setActiveModal(null)}>
           <div className="bg-[#0f0f0f] border border-white/10 w-full max-w-2xl rounded-[2rem] overflow-hidden flex flex-col shadow-2xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
-            
+
             {/* Header */}
             <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#141414]">
               <h3 className="font-black text-xl text-white flex items-center gap-2">
@@ -1389,15 +1384,15 @@ export default function ProfilePage() {
               </h3>
               <button onClick={() => setActiveModal(null)} className="bg-white/5 p-2 rounded-full hover:bg-white/10 hover:text-red-400 transition-all cursor-pointer"><X size={20} /></button>
             </div>
-            
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-2">
               {modalLoading ? (
                 <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#ccff00]" size={32} /></div>
               ) : modalList.length > 0 ? (
                 modalList.map((item, idx) => (
-                  <div 
-                    key={idx} 
+                  <div
+                    key={idx}
                     onClick={() => { if (item.id) router.push(`/dashboard/user/${item.id}`); }}
                     className="p-4 rounded-2xl flex items-center gap-4 border transition-colors bg-white/[0.03] hover:bg-white/[0.06] border-white/5 cursor-pointer hover:border-white/20"
                   >
@@ -1418,11 +1413,11 @@ export default function ProfilePage() {
                           {item.avatar_url || '👤'}
                         </div>
                         <div className="flex-1 flex flex-col justify-center h-12 min-w-0">
-                          <VipUsername 
-                            username={item.title} 
-                            isVip={item.is_vip} 
-                            badgeSize={14} 
-                            className="text-base font-bold ltr text-left truncate" 
+                          <VipUsername
+                            username={item.title}
+                            isVip={item.is_vip}
+                            badgeSize={14}
+                            className="text-base font-bold ltr text-left truncate"
                           />
                           <span className="text-xs text-gray-500 ltr text-left">{item.subtitle}</span>
                         </div>
@@ -1438,14 +1433,14 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-      
+
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1c1c1c] text-[#ccff00] border border-[#ccff00]/40 px-5 py-2.5 rounded-full text-xs font-bold shadow-2xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4">
           <CheckCircle2 size={16} />
           <span>{toastMessage}</span>
         </div>
       )}
-      
+
       <DashboardFooter />
     </div>
   );
@@ -1480,15 +1475,15 @@ interface BadgeItemProps {
 function BadgeItem({ badge, progress, onClick }: BadgeItemProps) {
   const { isUnlocked, percentage } = progress;
   return (
-    <button 
+    <button
       type="button"
-      onClick={onClick} 
+      onClick={onClick}
       aria-label={`مدال ${badge.title}`}
       className={`shrink-0 flex flex-col items-center gap-2 p-3 rounded-2xl border min-w-[110px] cursor-pointer transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#ccff00] ${isUnlocked ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5 opacity-50 grayscale'}`}
     >
       <div className="text-4xl drop-shadow-md mb-1">{badge.icon}</div>
       <span className={`text-[10px] font-bold ${isUnlocked ? 'text-white' : 'text-gray-500'}`}>{badge.title}</span>
-      
+
       {!isUnlocked && (
         <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden mt-1">
           <div className="h-full bg-gray-400 rounded-full" style={{ width: `${percentage}%` }}></div>
@@ -1509,18 +1504,18 @@ function ShowCard({ show, router }: any) {
   const isCompleted = progress === 100;
 
   return (
-    <div 
-      onClick={() => router.push(`/dashboard/tv/${show.id}`)} 
+    <div
+      onClick={() => router.push(`/dashboard/tv/${show.id}`)}
       className="group cursor-pointer flex flex-col transition-all duration-300 hover:-translate-y-1.5"
     >
       {/* پوستر سریال */}
       <div className="relative aspect-[2/3] rounded-2xl overflow-hidden mb-2 ring-1 ring-white/10 group-hover:ring-[#ccff00]/50 transition-all shadow-lg bg-white/5">
-        <img 
-          src={getSafeImageUrl(show.poster_path)} 
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-          alt={show.name} 
+        <img
+          src={getSafeImageUrl(show.poster_path)}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          alt={show.name}
         />
-        
+
         {/* دکمه افزودن به لیست انتظار */}
         <WatchlistButton showId={show.id} showName={show.name} />
 
@@ -1536,12 +1531,11 @@ function ShowCard({ show, router }: any) {
 
       {/* نوار پیشرفت دقیق زیر هر پوستر */}
       <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mb-1.5">
-        <div 
-          className={`h-full rounded-full transition-all duration-500 ${
-            isCompleted 
-              ? 'bg-[#ccff00] shadow-[0_0_8px_rgba(204,255,0,0.6)]' 
-              : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]'
-          }`}
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${isCompleted
+            ? 'bg-[#ccff00] shadow-[0_0_8px_rgba(204,255,0,0.6)]'
+            : 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)]'
+            }`}
           style={{ width: `${progress}%` }}
         />
       </div>

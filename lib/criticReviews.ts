@@ -350,3 +350,179 @@ export async function hasUserReviewedShow(userId: string, showId: number | strin
     return false;
   }
 }
+
+/**
+ * Fetches all critic reviews for a specific movie
+ */
+export async function fetchCriticReviewsForMovie(movieId: number | string): Promise<CriticReviewData[]> {
+  const supabase = createClient() as any;
+
+  try {
+    const { data, error } = await supabase
+      .from('movie_comments')
+      .select('id, user_id, movie_id, content, created_at')
+      .eq('movie_id', Number(movieId))
+      .like('content', `${CRITIC_PREFIX}%`)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    const userIds = Array.from(new Set(data.map((r: any) => r.user_id).filter(Boolean)));
+    let profilesMap = new Map();
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url, is_vip, role')
+        .in('id', userIds);
+      profilesMap = new Map((profs || []).map((p: any) => [p.id, p]));
+    }
+
+    const reviews: CriticReviewData[] = [];
+
+    for (const row of data) {
+      const parsed = decodeCriticReviewContent(row.content);
+      if (!parsed) continue;
+
+      const profile = profilesMap.get(row.user_id);
+      reviews.push({
+        id: row.id,
+        user_id: row.user_id,
+        show_id: row.movie_id,
+        rating: parsed.rating,
+        verdict: parsed.verdict,
+        title: parsed.title,
+        text: parsed.text,
+        spoiler: parsed.spoiler,
+        created_at: row.created_at,
+        user: {
+          id: row.user_id,
+          username: profile?.username || 'منتقد بینجر',
+          avatar_url: profile?.avatar_url || '😎',
+          is_vip: Boolean(profile?.is_vip || profile?.role === 'admin'),
+          role: profile?.role,
+          is_critic: true,
+        },
+      });
+    }
+
+    return reviews;
+  } catch (err) {
+    console.error('Error fetching movie critic reviews:', err);
+    return [];
+  }
+}
+
+/**
+ * Checks whether a user has submitted a critic review for a movie
+ */
+export async function hasUserReviewedMovie(userId: string, movieId: number | string): Promise<boolean> {
+  const supabase = createClient() as any;
+
+  try {
+    const { data, error } = await supabase
+      .from('movie_comments')
+      .select('id')
+      .eq('movie_id', Number(movieId))
+      .eq('user_id', userId)
+      .like('content', `${CRITIC_PREFIX}%`)
+      .limit(1);
+
+    if (error || !data || data.length === 0) return false;
+    return true;
+  } catch (err) {
+    console.error('Error checking existing movie user review:', err);
+    return false;
+  }
+}
+
+/**
+ * Submits a new critic review for a movie
+ */
+export async function submitMovieCriticReview(params: {
+  userId: string;
+  movieId: number | string;
+  rating: number;
+  verdict: 'masterpiece' | 'recommended' | 'mixed' | 'not_recommended';
+  title: string;
+  text: string;
+  spoiler?: boolean;
+}): Promise<{ success: boolean; error?: string; review?: CriticReviewData }> {
+  const supabase = createClient() as any;
+
+  // 1. Verify Critic Eligibility
+  const status = await fetchUserCriticStatus(params.userId);
+  if (!status.isCritic) {
+    return {
+      success: false,
+      error: 'شما هنوز واجد شرایط منتقد رسمی نیستید (نیاز به اشتراک VIP، بیش از ۱۰۰ نظر و بیش از ۳,۰۰۰ اپیزود تماشا شده).',
+    };
+  }
+
+  // 2. Enforce one review per critic per movie
+  const hasReviewed = await hasUserReviewedMovie(params.userId, params.movieId);
+  if (hasReviewed) {
+    return {
+      success: false,
+      error: 'شما قبلاً برای این فیلم نقد ثبت کرده‌اید. هر منتقد فقط می‌تواند یک نقد برای هر فیلم ثبت کند.',
+    };
+  }
+
+  // 3. Encode Content
+  const encoded = encodeCriticReviewContent({
+    rating: Math.max(1, Math.min(10, params.rating)),
+    verdict: params.verdict,
+    title: params.title.trim(),
+    text: params.text.trim(),
+    spoiler: Boolean(params.spoiler),
+  });
+
+  // 4. Save into movie_comments table
+  const { data, error } = await supabase
+    .from('movie_comments')
+    .insert([
+      {
+        user_id: params.userId,
+        movie_id: Number(params.movieId),
+        content: encoded,
+      },
+    ])
+    .select('id, user_id, movie_id, content, created_at')
+    .single();
+
+  if (error || !data) {
+    return {
+      success: false,
+      error: error?.message || 'خطا در ثبت نقد تخصصی منتقد برای فیلم',
+    };
+  }
+
+  return {
+    success: true,
+    review: {
+      id: data.id,
+      user_id: data.user_id,
+      show_id: data.movie_id,
+      rating: params.rating,
+      verdict: params.verdict,
+      title: params.title,
+      text: params.text,
+      spoiler: Boolean(params.spoiler),
+      created_at: data.created_at,
+    },
+  };
+}
+
+/**
+ * Deletes a movie critic review
+ */
+export async function deleteMovieCriticReview(reviewId: number, userId: string): Promise<boolean> {
+  const supabase = createClient() as any;
+  const { error } = await supabase
+    .from('movie_comments')
+    .delete()
+    .eq('id', reviewId)
+    .eq('user_id', userId);
+
+  return !error;
+}
+

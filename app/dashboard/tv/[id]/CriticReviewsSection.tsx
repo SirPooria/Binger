@@ -11,9 +11,12 @@ import {
   CriticReviewData, 
   CriticStatus, 
   fetchCriticReviewsForShow, 
+  fetchCriticReviewsForMovie,
   fetchUserCriticStatus, 
   submitCriticReview, 
+  submitMovieCriticReview,
   deleteCriticReview,
+  deleteMovieCriticReview,
   canUserSubmitReview
 } from '@/lib/criticReviews';
 import { VipUsername, CriticBadge, VipCheckmark } from '../../components/VipBadge';
@@ -21,7 +24,9 @@ import ConfirmModal from '../../components/ConfirmModal';
 import confetti from 'canvas-confetti';
 
 interface CriticReviewsSectionProps {
-  showId: number | string;
+  showId?: number | string;
+  movieId?: number | string;
+  mediaType?: 'tv' | 'movie';
   showName: string;
   user: any;
 }
@@ -33,7 +38,11 @@ const VERDICT_OPTIONS = [
   { value: 'not_recommended', label: 'پیشنهاد نمی‌شود ⛔', color: 'bg-red-500/20 text-red-300 border-red-500/30' },
 ] as const;
 
-export default function CriticReviewsSection({ showId, showName, user }: CriticReviewsSectionProps) {
+export default function CriticReviewsSection({ showId, movieId, mediaType = 'tv', showName, user }: CriticReviewsSectionProps) {
+  const isMovie = mediaType === 'movie' || Boolean(movieId);
+  const targetId = (isMovie ? movieId : showId) || showId || movieId || '';
+  const mediaLabel = isMovie ? 'فیلم' : 'سریال';
+
   const [reviews, setReviews] = useState<CriticReviewData[]>([]);
   const [loading, setLoading] = useState(true);
   const [criticStatus, setCriticStatus] = useState<CriticStatus | null>(null);
@@ -54,15 +63,16 @@ export default function CriticReviewsSection({ showId, showName, user }: CriticR
 
   // Load reviews and user critic status
   const loadReviews = async () => {
+    if (!targetId) return;
     setLoading(true);
-    const data = await fetchCriticReviewsForShow(showId);
+    const data = isMovie ? await fetchCriticReviewsForMovie(targetId) : await fetchCriticReviewsForShow(targetId);
     setReviews(data);
     setLoading(false);
   };
 
   useEffect(() => {
     loadReviews();
-  }, [showId]);
+  }, [targetId, isMovie]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -86,9 +96,9 @@ export default function CriticReviewsSection({ showId, showName, user }: CriticR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !targetId) return;
     if (hasWrittenReview) {
-      setErrorMsg('شما قبلاً برای این سریال نقد ثبت کرده‌اید. هر منتقد فقط می‌تواند یک نقد برای هر سریال ثبت کند.');
+      setErrorMsg(`شما قبلاً برای این ${mediaLabel} نقد ثبت کرده‌اید. هر منتقد فقط می‌تواند یک نقد برای هر ${mediaLabel} ثبت کند.`);
       return;
     }
     if (!title.trim() || !text.trim()) {
@@ -103,15 +113,25 @@ export default function CriticReviewsSection({ showId, showName, user }: CriticR
     setSubmitting(true);
     setErrorMsg(null);
 
-    const res = await submitCriticReview({
-      userId: user.id,
-      showId,
-      rating,
-      verdict,
-      title,
-      text,
-      spoiler,
-    });
+    const res = isMovie
+      ? await submitMovieCriticReview({
+          userId: user.id,
+          movieId: targetId,
+          rating,
+          verdict,
+          title,
+          text,
+          spoiler,
+        })
+      : await submitCriticReview({
+          userId: user.id,
+          showId: targetId,
+          rating,
+          verdict,
+          title,
+          text,
+          spoiler,
+        });
 
     setSubmitting(false);
 
@@ -146,7 +166,9 @@ export default function CriticReviewsSection({ showId, showName, user }: CriticR
     if (!user?.id || !deleteReviewId) return;
     setIsDeletingReview(true);
     try {
-      const success = await deleteCriticReview(deleteReviewId, user.id);
+      const success = isMovie
+        ? await deleteMovieCriticReview(deleteReviewId, user.id)
+        : await deleteCriticReview(deleteReviewId, user.id);
       if (success) {
         setReviews((prev) => prev.filter((r) => r.id !== deleteReviewId));
       }
