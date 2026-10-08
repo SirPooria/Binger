@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabaseServer';
 import { headers } from 'next/headers';
+import { z } from 'zod';
 
 export interface InitiatePaymentResult {
   success: boolean;
@@ -30,17 +31,20 @@ export async function initiatePayment(planType: 'monthly' | 'yearly'): Promise<I
       };
     }
 
-    // ۲. اعتبارسنجی نوع پلن و تعیین مبلغ به ریال
-    if (planType !== 'monthly' && planType !== 'yearly') {
+    // ۲. اعتبارسنجی نوع پلن با Zod
+    const PaymentPlanSchema = z.enum(['monthly', 'yearly']);
+    const planParsed = PaymentPlanSchema.safeParse(planType);
+    if (!planParsed.success) {
       return {
         success: false,
-        error: 'پلن انتخابی معتبر نیست.',
+        error: 'پلن انتخابی نامعتبر است.',
       };
     }
+    const validPlan = planParsed.data;
 
     // پلن ماهانه: ۱,۴۹۰,۰۰۰ ریال (۱۴۹ هزار تومان)
     // پلن سالانه: ۱۴,۹۰۰,۰۰۰ ریال (۱,۴۹۰,۰۰۰ تومان)
-    const amount = planType === 'yearly' ? 14_900_000 : 1_490_000;
+    const amount = validPlan === 'yearly' ? 14_900_000 : 1_490_000;
 
     // ۳. خواندن اطلاعات درگاه زیبال
     const merchant = process.env.ZIBAL_MERCHANT_ID || '686062d5a45c720018dd0102';

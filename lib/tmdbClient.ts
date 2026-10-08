@@ -69,6 +69,46 @@ export interface TMDBShow {
   }[];
 }
 
+export interface TMDBMovie {
+  id: number;
+  title: string;
+  title_en?: string;
+  title_fa?: string;
+  original_title?: string;
+  overview?: string;
+  overview_en?: string;
+  overview_fa?: string;
+  poster_path: string | null;
+  backdrop_path?: string | null;
+  release_date?: string;
+  runtime?: number;
+  vote_average?: number;
+  vote_count?: number;
+  genre_ids?: number[];
+  genres?: { id: number; name: string }[];
+  status?: string;
+  tagline?: string;
+  budget?: number;
+  revenue?: number;
+  origin_country?: string[];
+  credits?: {
+    cast: {
+      id: number;
+      name: string;
+      character?: string;
+      profile_path: string | null;
+      order?: number;
+    }[];
+    crew: {
+      id: number;
+      name: string;
+      job?: string;
+      department?: string;
+      profile_path: string | null;
+    }[];
+  };
+}
+
 export interface TMDBEpisode {
   id: number;
   name: string;
@@ -923,4 +963,218 @@ export const getMiniSeries = async (page: number = 1): Promise<TMDBShow[]> => {
     page,
   });
   return (data?.results || []).filter((s) => Boolean(s.poster_path));
+};
+
+// =========================================================================
+// MOVIE API CLIENT METHODS (متدهای جامع بخش فیلم‌ها)
+// =========================================================================
+
+export const getTrendingMovies = async (page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('trending/movie/week', {
+    language: 'en-US',
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getPopularMovies = async (page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('movie/popular', {
+    language: 'en-US',
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getTopRatedMovies = async (page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('movie/top_rated', {
+    language: 'en-US',
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getNowPlayingMovies = async (page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('movie/now_playing', {
+    language: 'en-US',
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getUpcomingMovies = async (page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('movie/upcoming', {
+    language: 'en-US',
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const searchMovies = async (query: string): Promise<TMDBMovie[]> => {
+  if (!query || !query.trim()) return [];
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('search/movie', {
+    language: 'en-US',
+    query: query.trim(),
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getMoviesByGenre = async (genreId: number, page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('discover/movie', {
+    language: 'en-US',
+    sort_by: 'popularity.desc',
+    with_genres: String(genreId),
+    'vote_count.gte': 100,
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getIranianMovies = async (page: number = 1): Promise<TMDBMovie[]> => {
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('discover/movie', {
+    language: 'en-US',
+    sort_by: 'popularity.desc',
+    with_origin_country: 'IR',
+    page,
+  });
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
+};
+
+export const getRelatedMovies = async (id: string | number): Promise<TMDBMovie[]> => {
+  const [recommendations, similar] = await Promise.all([
+    fetchFromGateway<{ results: TMDBMovie[] }>(`movie/${id}/recommendations`, { language: 'en-US' }),
+    fetchFromGateway<{ results: TMDBMovie[] }>(`movie/${id}/similar`, { language: 'en-US' }),
+  ]);
+
+  const combined = [...(recommendations?.results || []), ...(similar?.results || [])];
+  const uniqueMovies: TMDBMovie[] = [];
+  const seenIds = new Set<number>();
+
+  for (const movie of combined) {
+    if (movie && movie.id && movie.id !== Number(id) && !seenIds.has(movie.id) && movie.poster_path) {
+      seenIds.add(movie.id);
+      uniqueMovies.push(movie);
+    }
+  }
+
+  return uniqueMovies.slice(0, 10);
+};
+
+export const getMovieCredits = async (id: string | number): Promise<{ cast: any[]; crew: any[] }> => {
+  const data = await fetchFromGateway<{ cast: any[]; crew: any[] }>(`movie/${id}/credits`, { language: 'en-US' });
+  return {
+    cast: data?.cast || [],
+    crew: data?.crew || [],
+  };
+};
+
+export const getMovieDetails = async (id: string | number): Promise<TMDBMovie | null> => {
+  const numId = Number(id);
+
+  // Step A: Check cached_movies table in Supabase
+  if (!isNaN(numId)) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { data: row, error } = await supabase
+          .from('cached_movies')
+          .select('data, updated_at')
+          .eq('id', numId)
+          .maybeSingle();
+
+        if (!error && row && row.data) {
+          const updatedAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+          const isFresh = Date.now() - updatedAt < SHOW_DB_CACHE_TTL_MS;
+          if (isFresh) {
+            return row.data as TMDBMovie;
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn(`[getMovieDetails] Supabase cache read skipped for movie ${id}:`, dbErr);
+    }
+  }
+
+  // Step B: Fetch concurrently in EN and FA
+  const [movieEn, movieFa, credits] = await Promise.all([
+    fetchFromGateway<TMDBMovie>(`movie/${id}`, { language: 'en-US' }).catch(() => null),
+    fetchFromGateway<TMDBMovie>(`movie/${id}`, { language: 'fa-IR' }).catch(() => null),
+    fetchFromGateway<{ cast: any[]; crew: any[] }>(`movie/${id}/credits`, { language: 'en-US' }).catch(() => null),
+  ]);
+
+  const baseMovie = movieEn || movieFa;
+  if (!baseMovie) return null;
+
+  if (movieEn) {
+    baseMovie.title_en = movieEn.title;
+    baseMovie.overview_en = movieEn.overview;
+  }
+
+  if (movieFa) {
+    baseMovie.title_fa = movieFa.title;
+    baseMovie.overview_fa = movieFa.overview;
+    if (movieFa.overview && movieFa.overview.trim() !== '') {
+      baseMovie.overview = movieFa.overview;
+    }
+  }
+
+  if (credits) {
+    baseMovie.credits = {
+      cast: credits.cast || [],
+      crew: credits.crew || [],
+    };
+  }
+
+  // Step C: Background cache into cached_movies
+  if (!isNaN(numId)) {
+    (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase
+            .from('cached_movies')
+            .upsert(
+              {
+                id: numId,
+                data: baseMovie,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+        }
+      } catch (upsertErr) {
+        console.warn(`[getMovieDetails] Background cache upsert failed for movie ${id}:`, upsertErr);
+      }
+    })();
+  }
+
+  return baseMovie;
+};
+
+export const advancedDiscoverMovies = async (params: {
+  page?: number;
+  sort_by?: string;
+  with_genres?: number | string;
+  without_genres?: number | string;
+  with_origin_country?: string;
+  'vote_count.gte'?: number;
+  'vote_average.gte'?: number;
+  'primary_release_date.gte'?: string;
+  'primary_release_date.lte'?: string;
+}): Promise<TMDBMovie[]> => {
+  const queryParams: Record<string, string | number | undefined> = {
+    language: 'en-US',
+    page: params.page || 1,
+    sort_by: params.sort_by || 'popularity.desc',
+    'vote_count.gte': params['vote_count.gte'] ?? 50,
+  };
+
+  if (params.with_genres) queryParams.with_genres = String(params.with_genres);
+  if (params.without_genres) queryParams.without_genres = String(params.without_genres);
+  if (params.with_origin_country) queryParams.with_origin_country = params.with_origin_country;
+  if (params['vote_average.gte']) queryParams['vote_average.gte'] = params['vote_average.gte'];
+  if (params['primary_release_date.gte']) queryParams['primary_release_date.gte'] = params['primary_release_date.gte'];
+  if (params['primary_release_date.lte']) queryParams['primary_release_date.lte'] = params['primary_release_date.lte'];
+
+  const data = await fetchFromGateway<{ results: TMDBMovie[] }>('discover/movie', queryParams);
+  return (data?.results || []).filter(m => Boolean(m.poster_path));
 };

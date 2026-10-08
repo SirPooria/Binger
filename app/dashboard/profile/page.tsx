@@ -9,12 +9,13 @@ import {
   Loader2, Zap, MessageSquare, Heart, 
   Plus, Award, X, Clock, Play, User as UserIcon, Crown,
   Lock, CheckCircle, CheckCircle2, LogOut, Share2, Trophy, Instagram, Twitter, Github, BookmarkPlus, BookmarkCheck, Tv, Layers, BadgeCheck,
-  BarChart3, Sparkles, Pin, Feather
+  BarChart3, Sparkles, Pin, Feather, Film
 } from 'lucide-react';
 import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
 import { SubscriptionBadge, SubscriptionStatusCard } from '../components/SubscriptionComponents';
 import { VipUsername, CriticBadge } from '../components/VipBadge';
 import { WatchlistButton } from '../components/WatchlistButton';
+import { MovieCard } from '../components/MovieCard';
 import { CommentRenderer } from '../components/CommentRenderer';
 import { 
   checkCriticEligibility, 
@@ -32,15 +33,26 @@ import {
   writeProfileCache, 
   clearProfileCache, 
   clearAllProfileCaches,
-  getLatestProfileCache,
+  getLatestProfileCache, 
   type CachedProfileData 
 } from '@/lib/profileCache';
 import { useWatched } from '@/lib/watchedContext';
+import { useMovie } from '@/lib/movieContext';
 
 export default function ProfilePage() {
   const supabase = createClient() as any; 
   const router = useRouter();
   const { getWatchedRecords } = useWatched();
+  const {
+    watchedMovies,
+    favoriteMovies,
+    watchlistMovies,
+    totalWatchedMoviesCount,
+    totalMovieWatchTimeMinutes,
+  } = useMovie();
+
+  const movieHours = Math.floor(totalMovieWatchTimeMinutes / 60);
+  const movieMinutes = totalMovieWatchTimeMinutes % 60;
   
   const initialCache = getLatestProfileCache();
   const [user, setUser] = useState<any>(null);
@@ -936,8 +948,71 @@ export default function ProfilePage() {
               {contentLoading ? <div className="h-16 w-24 bg-black/10 rounded-xl animate-pulse" /> : <>
                 <h3 className="text-black/60 text-xs font-bold uppercase tracking-wider">شما تا به امروز </h3>
                 <div className="text-4xl md:text-5xl font-black mt-2">{totalEpisodes}</div>
-                <p className="text-[10px] font-bold mt-1 opacity-60">اپیروز سریال تماشا کردید</p>
+                <p className="text-[10px] font-bold mt-1 opacity-60">اپیزود سریال تماشا کردید</p>
               </>}
+            </div>
+
+            {/* کارت آمار فیلم‌های سینمایی */}
+            <div className="md:col-span-3 bg-gradient-to-r from-amber-500/10 via-purple-500/5 to-white/[0.02] border border-amber-400/20 rounded-3xl p-6 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <Film size={100} className="text-amber-400" />
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                    <Film size={18} />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-black text-white">آمار تماشای فیلم‌های سینمایی</h3>
+                    <p className="text-[11px] text-gray-400">مجموع آثار سینمایی دیده‌شده و زمان سپری‌شده</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/dashboard/lists?type=movies"
+                    className="text-xs bg-white/5 hover:bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 text-gray-300 hover:text-white transition-all"
+                  >
+                    آرشیو فیلم‌ها ←
+                  </Link>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-gray-400 font-bold block mb-1">فیلم‌های دیده‌شده</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-white">{totalWatchedMoviesCount}</span>
+                    <span className="text-[10px] text-gray-400">اثر</span>
+                  </div>
+                </div>
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-gray-400 font-bold block mb-1">زمان کل تماشای فیلم</span>
+                  <div className="flex items-baseline gap-1.5 ltr font-mono">
+                    <span className="text-2xl font-black text-amber-300">{movieHours}</span>
+                    <span className="text-[10px] text-gray-400">ساعت</span>
+                    {movieMinutes > 0 && (
+                      <>
+                        <span className="text-lg font-bold text-gray-300">{movieMinutes}</span>
+                        <span className="text-[10px] text-gray-400">دقیقه</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-gray-400 font-bold block mb-1">فیلم‌های محبوب</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-red-400">{favoriteMovies.length}</span>
+                    <span className="text-[10px] text-gray-400">اثر</span>
+                  </div>
+                </div>
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5">
+                  <span className="text-[11px] text-gray-400 font-bold block mb-1">در لیست انتظار</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black text-purple-400">{watchlistMovies.length}</span>
+                    <span className="text-[10px] text-gray-400">اثر</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* ویترین افتخارات با تب‌های فیلتر */}
@@ -1210,6 +1285,76 @@ export default function ProfilePage() {
               <div className="w-full py-12 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center gap-3 text-gray-500">
                 <Tv size={32} strokeWidth={1.5} />
                 <p className="text-xs">هنوز هیچ سریالی در لیست تماشا شده‌های شما ثبت نشده است.</p>
+              </div>
+            )}
+          </div>
+
+          {/* ۳. فیلم‌های محبوب من */}
+          <div>
+            <div className="flex justify-between items-end mb-6">
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <Heart className="text-red-500 fill-red-500" size={20} /> محبوب‌ترین فیلم‌های سینمایی {`(${favoriteMovies.length})`}
+              </h2>
+              <Link href="/dashboard/favorites?type=movies" className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all flex items-center gap-2 border border-white/10">
+                <Plus size={14} /> مدیریت
+              </Link>
+            </div>
+            {favoriteMovies.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                {favoriteMovies.map((m) => (
+                  <MovieCard
+                    key={`fav-m-${m.movie_id}`}
+                    movie={{
+                      id: m.movie_id,
+                      title: m.movie_title || 'بدون عنوان',
+                      poster_path: m.poster_path || null,
+                      runtime: m.runtime_minutes || undefined,
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="w-full py-12 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center gap-3 text-gray-500">
+                <Heart size={32} strokeWidth={1.5} className="text-red-500/40" />
+                <p className="text-xs">هنوز هیچ فیلمی را به محبوب‌ها اضافه نکرده‌اید.</p>
+              </div>
+            )}
+          </div>
+
+          {/* ۴. آخرین فیلم‌های سینمایی تماشا شده */}
+          <div className="pb-10">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <Film size={20} className="text-amber-400" /> آخرین فیلم‌های تماشا شده {`(${watchedMovies.length})`}
+              </h2>
+              
+              <Link
+                href="/dashboard/lists?type=movies"
+                className="text-xs bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl transition-all border border-white/10"
+              >
+                مشاهده همه
+              </Link>
+            </div>
+
+            {watchedMovies.length > 0 ? (
+              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar cursor-grab active:cursor-grabbing select-none scroll-smooth">
+                {watchedMovies.slice(0, 20).map((m) => (
+                  <div key={`watched-m-${m.movie_id}`} className="w-[140px] md:w-[160px] shrink-0">
+                    <MovieCard
+                      movie={{
+                        id: m.movie_id,
+                        title: m.movie_title || 'بدون عنوان',
+                        poster_path: m.poster_path || null,
+                        runtime: m.runtime_minutes || undefined,
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="w-full py-12 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center gap-3 text-gray-500">
+                <Film size={32} strokeWidth={1.5} className="text-amber-400/40" />
+                <p className="text-xs">هنوز فیلم سینمایی در لیست دیده‌شده‌های شما ثبت نشده است.</p>
               </div>
             )}
           </div>

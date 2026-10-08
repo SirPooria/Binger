@@ -457,6 +457,135 @@ export type Database = {
           }
         ];
       };
+      watched_movies: {
+        Row: {
+          id: number;
+          user_id: string;
+          movie_id: number;
+          movie_title: string | null;
+          poster_path: string | null;
+          runtime_minutes: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          movie_id: number;
+          movie_title?: string | null;
+          poster_path?: string | null;
+          runtime_minutes?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          movie_id?: number;
+          movie_title?: string | null;
+          poster_path?: string | null;
+          runtime_minutes?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      watchlist_movies: {
+        Row: {
+          id: number;
+          user_id: string;
+          movie_id: number;
+          movie_title: string | null;
+          poster_path: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          movie_id: number;
+          movie_title?: string | null;
+          poster_path?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          movie_id?: number;
+          movie_title?: string | null;
+          poster_path?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      favorite_movies: {
+        Row: {
+          id: number;
+          user_id: string;
+          movie_id: number;
+          movie_title: string | null;
+          poster_path: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          movie_id: number;
+          movie_title?: string | null;
+          poster_path?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          movie_id?: number;
+          movie_title?: string | null;
+          poster_path?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      cached_movies: {
+        Row: {
+          id: number;
+          data: Json;
+          updated_at: string;
+        };
+        Insert: {
+          id: number;
+          data: Json;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          data?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      movie_comments: {
+        Row: {
+          id: number;
+          user_id: string;
+          movie_id: number;
+          content: string;
+          created_at: string;
+          parent_id: number | null;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          movie_id: number;
+          content: string;
+          created_at?: string;
+          parent_id?: number | null;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          movie_id?: number;
+          content?: string;
+          created_at?: string;
+          parent_id?: number | null;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

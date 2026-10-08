@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase';
 import { getShowWithCredits, getImageUrl, type TMDBShow } from '@/lib/tmdbClient';
 import { VipUsername } from '../components/VipBadge';
 import { useWatched } from '@/lib/watchedContext';
+import { useMovie } from '@/lib/movieContext';
+import { MovieCard } from '../components/MovieCard';
 
 interface WatchedRow {
   show_id: number;
@@ -78,6 +80,32 @@ export default function InsightsPage() {
   const [showsMap, setShowsMap] = useState<Record<string, TMDBShow>>({});
   const [activeTab, setActiveTab] = useState<'overview' | 'actors' | 'directors' | 'dna' | 'wrapped'>('overview');
   const [copiedWrapped, setCopiedWrapped] = useState(false);
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'shows' | 'movies'>('all');
+
+  const {
+    watchedMovies,
+    favoriteMovies,
+    watchlistMovies,
+    totalWatchedMoviesCount,
+    totalMovieWatchTimeMinutes,
+  } = useMovie();
+
+  const movieStats = useMemo(() => {
+    const count = watchedMovies.length;
+    const minutes = totalMovieWatchTimeMinutes;
+    const hours = Math.round(minutes / 60);
+    const days = (hours / 24).toFixed(1);
+    const avgDuration = count > 0 ? Math.round(minutes / count) : 0;
+    return {
+      count,
+      minutes,
+      hours,
+      days,
+      avgDuration,
+      favoritesCount: favoriteMovies.length,
+      watchlistCount: watchlistMovies.length,
+    };
+  }, [watchedMovies, totalMovieWatchTimeMinutes, favoriteMovies, watchlistMovies]);
 
   // ۱. دریافت اطلاعات کاربر و سابقه نامحدود تماشا
   useEffect(() => {
@@ -501,8 +529,223 @@ export default function InsightsPage() {
           </div>
         )}
 
-        {/* تب‌های دسته‌بندی آمار */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-8 no-scrollbar">
+        {/* فیلتر نوع رسانه */}
+        <div className="flex items-center gap-2 mb-6 bg-white/5 p-1.5 rounded-2xl border border-white/10 w-fit">
+          <button
+            onClick={() => setMediaFilter('all')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              mediaFilter === 'all'
+                ? 'bg-gradient-to-r from-cyan-400 to-emerald-400 text-black shadow-lg font-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            همه آثار (سریال + فیلم)
+          </button>
+          <button
+            onClick={() => setMediaFilter('shows')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+              mediaFilter === 'shows'
+                ? 'bg-[#ccff00] text-black shadow-lg font-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Tv size={14} />
+            سریال‌ها ({analytics.totalEpisodes} قسمت)
+          </button>
+          <button
+            onClick={() => setMediaFilter('movies')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+              mediaFilter === 'movies'
+                ? 'bg-amber-400 text-black shadow-lg font-black'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Film size={14} />
+            فیلم‌های سینمایی ({movieStats.count} فیلم)
+          </button>
+        </div>
+
+        {/* بنر تجمیعی سرگرمی کاربر در حالت همه آثار */}
+        {mediaFilter === 'all' && (
+          <div className="bg-gradient-to-r from-cyan-950/40 via-purple-950/30 to-amber-950/30 border border-white/10 rounded-3xl p-6 mb-8 relative overflow-hidden shadow-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  <Sparkles size={20} className="text-amber-400" />
+                  مجموع سبک زندگی سینمایی و سریالی شما
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  مجموع کل زمان صرف‌شده برای تماشای شاهکارهای سینمایی و سریال‌های تلویزیونی
+                </p>
+              </div>
+
+              <div className="bg-white/10 border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2 self-start sm:self-auto">
+                <span className="text-xs text-gray-400">مجموع کل زمان:</span>
+                <span className="text-sm font-black text-[#ccff00] font-mono">
+                  {(analytics.totalHours + movieStats.hours).toLocaleString('fa-IR')} ساعت
+                </span>
+              </div>
+            </div>
+
+            {/* نوار تقسیم سهم سریال در برابر فیلم */}
+            {analytics.totalHours + movieStats.hours > 0 && (() => {
+              const totalEntertainmentHours = analytics.totalHours + movieStats.hours;
+              const tvPercent = Math.round((analytics.totalHours / totalEntertainmentHours) * 100);
+              const moviePercent = 100 - tvPercent;
+              return (
+                <div className="space-y-2 mt-4">
+                  <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden flex">
+                    <div
+                      style={{ width: `${tvPercent}%` }}
+                      className="h-full bg-cyan-400 transition-all duration-500"
+                      title={`سریال‌ها: ${tvPercent}%`}
+                    />
+                    <div
+                      style={{ width: `${moviePercent}%` }}
+                      className="h-full bg-amber-400 transition-all duration-500"
+                      title={`فیلم‌های سینمایی: ${moviePercent}%`}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-cyan-400 flex items-center gap-1.5">
+                      <Tv size={13} />
+                      سریال‌ها: {analytics.totalHours.toLocaleString('fa-IR')} ساعت ({tvPercent}٪)
+                    </span>
+                    <span className="text-amber-400 flex items-center gap-1.5">
+                      <Film size={13} />
+                      فیلم‌های سینمایی: {movieStats.hours.toLocaleString('fa-IR')} ساعت ({moviePercent}٪)
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* اگر فیلتر فقط روی فیلم باشد: نمایش کامل آمار اختصاصی فیلم‌ها */}
+        {mediaFilter === 'movies' ? (
+          <div className="space-y-10 animate-in fade-in duration-300">
+            {/* کارت‌های خلاصه آمار فیلم‌ها */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-[#121212] border border-white/10 rounded-3xl p-5 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Film size={80} className="text-amber-400" />
+                </div>
+                <span className="text-xs font-bold text-gray-400 block mb-2">فیلم‌های سینمایی دیده‌شده</span>
+                <strong className="text-3xl md:text-4xl font-black text-amber-300">
+                  {movieStats.count.toLocaleString('fa-IR')} <span className="text-sm text-gray-400 font-bold">اثر</span>
+                </strong>
+                <span className="text-[11px] text-gray-500 block mt-1">
+                  میانگین هر اثر: {movieStats.avgDuration} دقیقه
+                </span>
+              </div>
+
+              <div className="bg-[#121212] border border-white/10 rounded-3xl p-5 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Clock size={80} className="text-cyan-400" />
+                </div>
+                <span className="text-xs font-bold text-gray-400 block mb-2">مجموع زمان تماشای فیلم</span>
+                <strong className="text-3xl md:text-4xl font-black text-cyan-300">
+                  {movieStats.hours.toLocaleString('fa-IR')} <span className="text-sm text-gray-400 font-bold">ساعت</span>
+                </strong>
+                <span className="text-[11px] text-gray-500 block mt-1">
+                  معادل {movieStats.days} روز تماشای بدون وقفه
+                </span>
+              </div>
+
+              <div className="bg-[#121212] border border-white/10 rounded-3xl p-5 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Heart size={80} className="text-red-500" />
+                </div>
+                <span className="text-xs font-bold text-gray-400 block mb-2">فیلم‌های محبوب</span>
+                <strong className="text-3xl md:text-4xl font-black text-red-400">
+                  {movieStats.favoritesCount.toLocaleString('fa-IR')} <span className="text-sm text-gray-400 font-bold">اثر</span>
+                </strong>
+                <span className="text-[11px] text-gray-500 block mt-1">
+                  منتخب شما در ویترین پروفایل
+                </span>
+              </div>
+
+              <div className="bg-[#121212] border border-white/10 rounded-3xl p-5 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Compass size={80} className="text-purple-400" />
+                </div>
+                <span className="text-xs font-bold text-gray-400 block mb-2">در لیست انتظار تماشا</span>
+                <strong className="text-3xl md:text-4xl font-black text-purple-300">
+                  {movieStats.watchlistCount.toLocaleString('fa-IR')} <span className="text-sm text-gray-400 font-bold">فیلم</span>
+                </strong>
+                <span className="text-[11px] text-gray-500 block mt-1">
+                  آماده برای تماشا در نوبت بعد
+                </span>
+              </div>
+            </div>
+
+            {/* آخرین فیلم‌های تماشاشده */}
+            <div className="bg-[#121212] border border-white/10 rounded-3xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <Film className="text-amber-400" size={18} />
+                  <span>آخرین فیلم‌های دیده‌شده توسط شما</span>
+                </h3>
+                <Link href="/dashboard/lists?type=movies" className="text-xs text-amber-400 hover:underline">
+                  مشاهده همه ←
+                </Link>
+              </div>
+
+              {watchedMovies.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {watchedMovies.slice(0, 10).map((m) => (
+                    <MovieCard
+                      key={`insights-m-${m.movie_id}`}
+                      movie={{
+                        id: m.movie_id,
+                        title: m.movie_title || 'بدون عنوان',
+                        poster_path: m.poster_path || null,
+                        runtime: m.runtime_minutes || undefined,
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-gray-500 text-xs">
+                  هنوز هیچ فیلمی را علامت نزده‌اید. با تماشای فیلم‌ها و ثبت آن‌ها، آمار سینمایی شما شکل خواهد گرفت.
+                </div>
+              )}
+            </div>
+
+            {/* فیلم‌های محبوب */}
+            {favoriteMovies.length > 0 && (
+              <div className="bg-[#121212] border border-red-500/20 rounded-3xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <Heart className="text-red-500 fill-red-500" size={18} />
+                    <span>شاهکارهای منتخب در لیست محبوب‌های شما</span>
+                  </h3>
+                  <Link href="/dashboard/favorites?type=movies" className="text-xs text-red-400 hover:underline">
+                    مدیریت محبوب‌ها ←
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {favoriteMovies.map((m) => (
+                    <MovieCard
+                      key={`insights-fav-m-${m.movie_id}`}
+                      movie={{
+                        id: m.movie_id,
+                        title: m.movie_title || 'بدون عنوان',
+                        poster_path: m.poster_path || null,
+                        runtime: m.runtime_minutes || undefined,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* تب‌های دسته‌بندی آمار */}
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-8 no-scrollbar">
           {[
             { id: 'overview', label: 'خلاصه و ساعات تماشا', icon: <Clock size={15} /> },
             { id: 'actors', label: 'محبوب‌ترین بازیگران', icon: <Users size={15} />, vipOnly: true },
@@ -1115,6 +1358,8 @@ export default function InsightsPage() {
             </div>
           )}
         </section>
+        </>
+        )}
 
       </div>
     </div>

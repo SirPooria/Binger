@@ -6,13 +6,19 @@ import Link from 'next/link';
 import {
   Home, Search, List, User, LogOut, Crown,
   X, Sparkles, Menu, Loader2, Star, ChevronRight, SlidersHorizontal,
-  RotateCcw, Globe, Flame, Film, ChevronDown, Plus, Check, Compass, Feather, BookOpen
+  RotateCcw, Globe, Flame, Film, Tv, ChevronDown, Plus, Check, Compass, Feather, BookOpen
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { searchShows, advancedDiscoverShows, getPopularShows, getImageUrl } from '@/lib/tmdbClient';
+import {
+  searchShows, advancedDiscoverShows, getPopularShows, getImageUrl,
+  searchMovies, getPopularMovies, advancedDiscoverMovies, type TMDBMovie
+} from '@/lib/tmdbClient';
 import { WatchedProvider } from '@/lib/watchedContext';
+import { MovieProvider } from '@/lib/movieContext';
 import { ShowCardProgress } from './components/ShowProgressBar';
 import { WatchlistButton } from './components/WatchlistButton';
+import { MovieWatchlistButton } from './components/MovieWatchlistButton';
+import { MovieWatchedButton } from './components/MovieWatchedButton';
 import { calculateSubscriptionDetails, SubscriptionStatus } from '@/lib/subscription';
 import { SubscriptionBadge } from './components/SubscriptionComponents';
 import ScrollRestorationWatcher from './components/ScrollRestorationWatcher';
@@ -57,7 +63,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
     } else {
-      if (pathname.startsWith('/dashboard/tv')) router.push('/dashboard/explore');
+      if (pathname.startsWith('/dashboard/tv') || pathname.startsWith('/dashboard/movie')) router.push('/dashboard/explore');
       else if (pathname.startsWith('/dashboard/custom-lists/')) router.push('/dashboard/custom-lists/explore');
       else if (pathname.startsWith('/dashboard/custom-lists')) router.push('/dashboard/profile');
       else if (pathname.startsWith('/dashboard/user/')) router.push('/dashboard/explore');
@@ -79,8 +85,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // استیت‌های جستجو
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchMediaType, setSearchMediaType] = useState<'all' | 'tv' | 'movie'>('all');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -167,7 +173,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // بارگذاری هوشمند: اگر چیزی سرچ نشده، بهترین سریال‌های تاریخ به صورت رندوم لود شوند
+  // بارگذاری هوشمند: اگر چیزی سرچ نشده، بهترین آثار تاریخ به صورت رندوم لود شوند
   useEffect(() => {
     if (!showSearchOverlay) return;
 
@@ -175,12 +181,30 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       setSearchPage(1);
       setHasMoreResults(true);
 
-      // حالت ۱: هیچ متنی و هیچ فیلتری زده نشده -> لود رندوم بهترین سریال‌های تاریخ
+      const randomPage = Math.floor(Math.random() * 3) + 1;
+
+      // حالت ۱: هیچ متنی و هیچ فیلتری زده نشده -> لود آثار پرطرفدار تاریخ
       if (!hasActiveFilters && searchQuery.trim().length === 0) {
         setIsSearching(true);
-        const randomPage = Math.floor(Math.random() * 4) + 1;
-        const topShows = await getPopularShows(randomPage);
-        setSearchResults(topShows || []);
+        if (searchMediaType === 'movie') {
+          const topMovies = await getPopularMovies(randomPage);
+          setSearchResults((topMovies || []).map(m => ({ ...m, media_type: 'movie' })));
+        } else if (searchMediaType === 'tv') {
+          const topShows = await getPopularShows(randomPage);
+          setSearchResults((topShows || []).map(s => ({ ...s, media_type: 'tv' })));
+        } else {
+          const [topShows, topMovies] = await Promise.all([
+            getPopularShows(randomPage),
+            getPopularMovies(randomPage),
+          ]);
+          const mixed: any[] = [];
+          const maxLen = Math.max(topShows.length, topMovies.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (topShows[i]) mixed.push({ ...topShows[i], media_type: 'tv' });
+            if (topMovies[i]) mixed.push({ ...topMovies[i], media_type: 'movie' });
+          }
+          setSearchResults(mixed);
+        }
         setIsSearching(false);
         return;
       }
@@ -188,36 +212,66 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       // حالت ۲: فیلتر پیشرفته فعال است (بدون متن)
       if (hasActiveFilters && searchQuery.trim().length === 0) {
         setIsSearching(true);
-        const results = await advancedDiscoverShows({
-          genreId: selectedGenre,
-          minRating: selectedRating,
-          originCountry: selectedCountry,
-          sortBy: selectedSort,
-          page: 1
-        });
-        setSearchResults(results || []);
+        if (searchMediaType === 'movie') {
+          const mResults = await advancedDiscoverMovies({
+            with_genres: selectedGenre || undefined,
+            'vote_average.gte': selectedRating || undefined,
+            with_origin_country: selectedCountry || undefined,
+            sort_by: selectedSort,
+            page: 1,
+          });
+          setSearchResults((mResults || []).map(m => ({ ...m, media_type: 'movie' })));
+        } else {
+          const sResults = await advancedDiscoverShows({
+            genreId: selectedGenre,
+            minRating: selectedRating,
+            originCountry: selectedCountry,
+            sortBy: selectedSort,
+            page: 1
+          });
+          setSearchResults((sResults || []).map(s => ({ ...s, media_type: 'tv' })));
+        }
         setIsSearching(false);
         return;
       }
 
-      // حالت ۳: کاربر اسم سریال تایپ کرده
+      // حالت ۳: کاربر اسم فیلم یا سریال تایپ کرده
       if (searchQuery.trim().length > 1) {
         setIsSearching(true);
-        let results = await searchShows(searchQuery);
-
-        if (results && results.length > 0) {
+        if (searchMediaType === 'movie') {
+          let mResults = await searchMovies(searchQuery);
+          if (selectedGenre) mResults = mResults.filter((m: any) => m.genre_ids?.includes(selectedGenre));
+          if (selectedRating) mResults = mResults.filter((m: any) => (m.vote_average || 0) >= selectedRating);
+          setSearchResults((mResults || []).map(m => ({ ...m, media_type: 'movie' })));
+        } else if (searchMediaType === 'tv') {
+          let sResults = await searchShows(searchQuery);
+          if (selectedGenre) sResults = sResults.filter((s: any) => s.genre_ids?.includes(selectedGenre));
+          if (selectedRating) sResults = sResults.filter((s: any) => (s.vote_average || 0) >= selectedRating);
+          if (selectedCountry) sResults = sResults.filter((s: any) => s.origin_country?.includes(selectedCountry));
+          setSearchResults((sResults || []).map(s => ({ ...s, media_type: 'tv' })));
+        } else {
+          const [sResults, mResults] = await Promise.all([
+            searchShows(searchQuery),
+            searchMovies(searchQuery),
+          ]);
+          let fShows = sResults || [];
+          let fMovies = mResults || [];
           if (selectedGenre) {
-            results = results.filter((s: any) => s.genre_ids?.includes(selectedGenre));
+            fShows = fShows.filter((s: any) => s.genre_ids?.includes(selectedGenre));
+            fMovies = fMovies.filter((m: any) => m.genre_ids?.includes(selectedGenre));
           }
           if (selectedRating) {
-            results = results.filter((s: any) => (s.vote_average || 0) >= selectedRating);
+            fShows = fShows.filter((s: any) => (s.vote_average || 0) >= selectedRating);
+            fMovies = fMovies.filter((m: any) => (m.vote_average || 0) >= selectedRating);
           }
-          if (selectedCountry) {
-            results = results.filter((s: any) => s.origin_country?.includes(selectedCountry));
+          const mixed: any[] = [];
+          const maxLen = Math.max(fShows.length, fMovies.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (fShows[i]) mixed.push({ ...fShows[i], media_type: 'tv' });
+            if (fMovies[i]) mixed.push({ ...fMovies[i], media_type: 'movie' });
           }
+          setSearchResults(mixed);
         }
-
-        setSearchResults(results || []);
         setIsSearching(false);
       } else {
         setSearchResults([]);
@@ -226,7 +280,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
     const delayDebounceFn = setTimeout(loadInitialOrFiltered, 350);
     return () => clearTimeout(delayDebounceFn);
-  }, [showSearchOverlay, searchQuery, selectedGenre, selectedRating, selectedCountry, selectedSort, hasActiveFilters]);
+  }, [showSearchOverlay, searchQuery, searchMediaType, selectedGenre, selectedRating, selectedCountry, selectedSort, hasActiveFilters]);
 
   // لود ۲۰ سریال بعدی با کلیک روی دکمه "نمایش سریال‌های بیشتر"
   const handleLoadMore = async () => {
@@ -287,7 +341,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <input
                   autoFocus
                   type="text"
-                  placeholder="نام سریال را تایپ کنید..."
+                  placeholder={searchMediaType === 'movie' ? 'نام فیلم سینمایی را تایپ کنید...' : searchMediaType === 'tv' ? 'نام سریال را تایپ کنید...' : 'نام فیلم یا سریال را تایپ کنید...'}
                   className="bg-transparent text-white text-base sm:text-lg font-bold flex-1 outline-none placeholder:text-gray-600"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -315,6 +369,45 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-gray-400 hover:text-white transition-all cursor-pointer"
                 >
                   <X size={20} />
+                </button>
+              </div>
+
+              {/* تب‌های تفکیک مدیا: همه | سریال‌ها | فیلم‌ها */}
+              <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setSearchMediaType('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    searchMediaType === 'all'
+                      ? 'bg-[#ccff00] text-black shadow-md font-black'
+                      : 'bg-white/5 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  همه آثار
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMediaType('tv')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    searchMediaType === 'tv'
+                      ? 'bg-purple-500 text-white shadow-md font-black'
+                      : 'bg-white/5 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Tv size={13} />
+                  <span>سریال‌ها</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMediaType('movie')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    searchMediaType === 'movie'
+                      ? 'bg-amber-400 text-black shadow-md font-black'
+                      : 'bg-white/5 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Film size={13} />
+                  <span>فیلم‌ها</span>
                 </button>
               </div>
 
@@ -445,41 +538,77 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     )}
                   </div>
 
-                  {/* گرید سریال‌ها */}
+                  {/* گرید نتایج (فیلم و سریال با تفکیک بصری کامل) */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6 pb-8">
-                    {searchResults.map((show, idx) => (
-                      <div
-                        key={`${show.id}-${idx}`}
-                        onClick={() => {
-                          setShowSearchOverlay(false);
-                          router.push(`/dashboard/tv/${show.id}`);
-                        }}
-                        className="group relative aspect-[2/3] bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer border border-white/5 hover:border-[#ccff00]/50 transition-all hover:scale-105 shadow-xl"
-                      >
-                        <img
-                          src={getImageUrl(show.poster_path)}
-                          className="w-full h-full object-cover"
-                          alt={show.name}
-                        />
-                        {/* دکمه افزودن به لیست انتظار */}
-                        <WatchlistButton showId={show.id} showName={show.name} />
+                    {searchResults.map((item, idx) => {
+                      const isMovie = item.media_type === 'movie' || (!item.media_type && Boolean(item.title));
+                      const itemTitle = isMovie ? (item.title_fa || item.title || 'فیلم سینمایی') : item.name;
+                      const itemYear = isMovie
+                        ? (item.release_date ? item.release_date.substring(0, 4) : '')
+                        : (item.first_air_date ? item.first_air_date.substring(0, 4) : '');
 
-                        {/* نشانگر درصد پیشرفت در بالای پوستر */}
-                        <ShowCardProgress showId={show.id} show={show} showBar={false} />
+                      return (
+                        <div
+                          key={`${item.id}-${item.media_type || 'item'}-${idx}`}
+                          onClick={() => {
+                            setShowSearchOverlay(false);
+                            if (isMovie) {
+                              router.push(`/dashboard/movie/${item.id}`);
+                            } else {
+                              router.push(`/dashboard/tv/${item.id}`);
+                            }
+                          }}
+                          className="group relative aspect-[2/3] bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer border border-white/5 hover:border-[#ccff00]/50 transition-all hover:scale-105 shadow-xl"
+                        >
+                          <img
+                            src={getImageUrl(item.poster_path)}
+                            className="w-full h-full object-cover"
+                            alt={itemTitle}
+                          />
 
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-3 opacity-90 group-hover:opacity-100 transition-opacity">
-                          <h3 className="text-xs font-bold text-white line-clamp-1">{show.name}</h3>
-                          <div className="flex items-center justify-between mt-1 text-[10px] text-gray-400">
-                            <span className="text-[#ccff00] font-bold flex items-center gap-1">
-                              <Star size={10} fill="currentColor" /> {show.vote_average ? show.vote_average.toFixed(1) : '-'}
-                            </span>
-                            <span>{show.first_air_date ? show.first_air_date.substring(0, 4) : ''}</span>
+                          {/* بج تفکیک نوع اثر: فیلم یا سریال */}
+                          <div className="absolute top-2.5 right-2.5 z-10">
+                            {isMovie ? (
+                              <span className="px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md border border-amber-400/30 text-[10px] font-black text-amber-300 flex items-center gap-1 shadow-md">
+                                <Film size={10} />
+                                <span>فیلم</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md border border-purple-400/30 text-[10px] font-black text-purple-300 flex items-center gap-1 shadow-md">
+                                <Tv size={10} />
+                                <span>سریال</span>
+                              </span>
+                            )}
                           </div>
-                          {/* نوار پیشرفت زیر کارت در بخش سرچ و پیشنهاد بینجر */}
-                          <ShowCardProgress showId={show.id} show={show} showBadge={false} />
+
+                          {/* دکمه‌های اکشن اختصاصی */}
+                          <div className="absolute top-2.5 left-2.5 z-10">
+                            {isMovie ? (
+                              <MovieWatchlistButton movieId={item.id} movie={item} iconSize={12} className="p-1.5" />
+                            ) : (
+                              <WatchlistButton showId={item.id} showName={item.name} iconSize={12} className="p-1.5" />
+                            )}
+                          </div>
+
+                          {!isMovie && (
+                            <ShowCardProgress showId={item.id} show={item} showBar={false} />
+                          )}
+
+                          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-3 opacity-90 group-hover:opacity-100 transition-opacity">
+                            <h3 className="text-xs font-bold text-white line-clamp-1">{itemTitle}</h3>
+                            <div className="flex items-center justify-between mt-1 text-[10px] text-gray-400">
+                              <span className="text-[#ccff00] font-bold flex items-center gap-1">
+                                <Star size={10} fill="currentColor" /> {item.vote_average ? item.vote_average.toFixed(1) : '-'}
+                              </span>
+                              <span>{itemYear}</span>
+                            </div>
+                            {!isMovie && (
+                              <ShowCardProgress showId={item.id} show={item} showBadge={false} />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* دکمه لود بیشتر (+۲۰ سریال) */}
@@ -690,7 +819,9 @@ function MenuItem({ icon, label, active = false, badge, onClick }: MenuItemProps
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <WatchedProvider>
-      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+      <MovieProvider>
+        <DashboardLayoutInner>{children}</DashboardLayoutInner>
+      </MovieProvider>
     </WatchedProvider>
   );
 }

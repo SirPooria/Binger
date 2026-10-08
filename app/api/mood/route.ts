@@ -100,10 +100,7 @@ export async function POST(req: NextRequest) {
 
     const { message, watchedShowNames } = parsed.data;
 
-    const apiKey = process.env.GROQ_API_KEY?.trim();
-    if (!apiKey) {
-      return NextResponse.json({ error: 'سرویس هوش مصنوعی در حال حاضر در دسترس نیست' }, { status: 503 });
-    }
+    const apiKey = process.env.GROQ_API_KEY?.trim() || '';
 
     const supabase = await createClient();
     supabaseClient = supabase;
@@ -267,47 +264,59 @@ function getIntelligentFallbackRecommendations(message: string, watchedShows: st
   };
 }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const CANDIDATE_MODELS = [
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'qwen/qwen3.8-27b',
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+    ];
 
-    const baseUrl = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
     let groqRes: Response | null = null;
     let groqFailed = false;
 
-    try {
-      const sendRequest = async (modelName: string) => {
-        return await fetch(`${baseUrl}/chat/completions`, {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: message }
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.7,
-          }),
-        });
-      };
+    if (apiKey) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const baseUrl = (process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
 
-      // Try primary model: llama-3.3-70b-versatile
-      groqRes = await sendRequest('llama-3.3-70b-versatile');
+      try {
+        for (const modelName of CANDIDATE_MODELS) {
+          try {
+            const res = await fetch(`${baseUrl}/chat/completions`, {
+              method: 'POST',
+              signal: controller.signal,
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: modelName,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: message }
+                ],
+                response_format: { type: 'json_object' },
+                temperature: 0.7,
+              }),
+            });
 
-      // Fallback to llama-3.1-8b-instant if primary fails with 5xx/429
-      if (!groqRes.ok && (groqRes.status >= 500 || groqRes.status === 429)) {
-        groqRes = await sendRequest('llama-3.1-8b-instant');
+            if (res.ok) {
+              groqRes = res;
+              break;
+            }
+          } catch {
+            // مدل بعدی بررسی می‌شود
+          }
+        }
+        clearTimeout(timeoutId);
+      } catch (fetchErr: unknown) {
+        clearTimeout(timeoutId);
+        groqFailed = true;
+        console.warn('Groq fetch network error, activating fallback engine:', fetchErr);
       }
-
-      clearTimeout(timeoutId);
-    } catch (fetchErr: unknown) {
-      clearTimeout(timeoutId);
+    } else {
       groqFailed = true;
-      console.warn('Groq fetch network error, activating fallback engine:', fetchErr);
     }
 
     if (!groqRes || !groqRes.ok || groqFailed) {

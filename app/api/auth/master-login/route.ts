@@ -2,44 +2,63 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { validateIranPhoneNumber } from '@/lib/validation/phone';
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
 
-// خواندن متغیر محیطی با اولویت process.env، سپس فایل .env.local و سپس fallback
-function getEnvVar(name: string, fallback: string = ''): string {
-  if (process.env[name]) return process.env[name]!;
-  try {
-    const envPath = path.join(process.cwd(), '.env.local');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith(`${name}=`)) {
-          const val = trimmed.substring(`${name}=`.length).trim();
-          if (val) return val;
-        }
+// Rate limiting in-memory map to prevent brute-force attacks on master login
+interface RateLimitTracker {
+  count: number;
+  resetAt: number;
+}
+const masterLoginRateLimits = new Map<string, RateLimitTracker>();
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_ATTEMPTS = 5; // max 5 attempts per IP per 10 minutes
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = masterLoginRateLimits.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    masterLoginRateLimits.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    if (masterLoginRateLimits.size > 1000) {
+      for (const [k, v] of masterLoginRateLimits.entries()) {
+        if (now > v.resetAt) masterLoginRateLimits.delete(k);
       }
     }
-  } catch {
-    // ignore
+    return false;
   }
-  return fallback;
-}
 
-const DEFAULT_URL = 'https://cirdpdixhxhdsgldfpav.supabase.co';
-const DEFAULT_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpcmRwZGl4aHhoZHNnbGRmcGF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1ODk5NDQsImV4cCI6MjA5OTE2NTk0NH0.S9P_yKi_YghWa3LCbg66ZR-Sl7PSJhYt4BH_QkvZWTs';
-const DEFAULT_SERVICE = Buffer.from('c2Jfc2VjcmV0XzZYNkxsZlk2eHU2UmlCNEhOaXhQNlFfMlRyeC02Um4=', 'base64').toString('utf-8');
+  if (entry.count >= MAX_ATTEMPTS) {
+    return true;
+  }
+
+  entry.count++;
+  return false;
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown-ip';
+
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { error: 'تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً ۱۰ دقیقه بعد دوباره امتحان کنید.' },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { phone, code } = body;
 
-    const masterCode = getEnvVar('MASTER_LOGIN_CODE', '318160');
+    const masterCode = process.env.MASTER_LOGIN_CODE?.trim() || '318160';
 
     // اعتبارسنجی کد اختصاصی ۶ رقمی
     const cleanCode = typeof code === 'string' ? code.trim() : '';
-    if (cleanCode !== masterCode && cleanCode !== '318160' && cleanCode !== '18160') {
+    const isMasterValid =
+      cleanCode === masterCode ||
+      (process.env.NODE_ENV !== 'production' && (cleanCode === '318160' || cleanCode === '18160'));
+
+    if (!isMasterValid) {
       return NextResponse.json(
         { error: 'کد تایید وارد شده معتبر نیست.' },
         { status: 401 }
@@ -55,12 +74,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabaseUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL', DEFAULT_URL).replace(/\/$/, '');
-    const supabaseAnonKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY', DEFAULT_ANON);
-    const serviceRoleKey = getEnvVar('SUPABASE_SERVICE_ROLE_KEY', DEFAULT_SERVICE);
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '') || '';
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Missing Supabase Service Role Key configuration');
+      console.error('[Master Login] Missing Supabase Service Role Key configuration');
       return NextResponse.json(
         { error: 'تنظیمات کلید ادمین در سرور یافت نشد.' },
         { status: 500 }
@@ -81,7 +100,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (listError) {
-      console.error('Admin listUsers error:', listError);
+      console.error('[Master Login] Admin listUsers error:', listError);
     }
 
     const existingUser = usersData?.users?.find(
@@ -118,7 +137,7 @@ export async function POST(req: NextRequest) {
             phone_confirm: true,
           });
         } else {
-          console.error('Failed to create user:', createError);
+          console.error('[Master Login] Failed to create user:', createError);
           return NextResponse.json(
             { error: 'خطا در ایجاد حساب کاربری.' },
             { status: 500 }
@@ -135,7 +154,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (updateError) {
-        console.error('Failed to update user password:', updateError);
+        console.error('[Master Login] Failed to update user password:', updateError);
         return NextResponse.json(
           { error: 'خطا در به‌روزرسانی نشست کاربری.' },
           { status: 500 }
@@ -148,41 +167,57 @@ export async function POST(req: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    let { data: loginData, error: loginError } = await client.auth.signInWithPassword({
+    const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
       phone: normalizedWithPlus,
       password: deterministicPassword,
     });
 
-    if (loginError || !loginData?.session) {
-      // تلاش مجدد بدون کاراکتر +
-      const retry = await client.auth.signInWithPassword({
-        phone: normalizedDigits,
-        password: deterministicPassword,
-      });
-      loginData = retry.data;
-      loginError = retry.error;
-    }
-
-    if (loginError || !loginData?.session) {
-      console.error('Failed to generate session:', loginError);
+    if (signInError || !signInData.session) {
+      console.error('[Master Login] Sign in error:', signInError);
       return NextResponse.json(
-        { error: loginError?.message || 'خطا در صدور نشست ورود.' },
+        { error: 'خطا در ورود به حساب کاربری.' },
         { status: 500 }
       );
     }
 
-    const isOnboarded = Boolean(
-      loginData.user?.user_metadata?.onboarding_complete
-    );
+    // ایجاد پروفایل اولیه در صورت عدم وجود
+    if (targetUserId) {
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('id', targetUserId)
+        .maybeSingle();
+
+      if (!profile) {
+        const username = `کاربر_${normalizedDigits.slice(-4)}`;
+        await admin.from('profiles').insert({
+          id: targetUserId,
+          phone: normalizedWithPlus,
+          username,
+          avatar_url: '😎',
+          role: 'user',
+          is_vip: false,
+        });
+      }
+    }
+
+    // ریست شمارنده نرخ در صورت ورود موفق
+    masterLoginRateLimits.delete(ip);
 
     return NextResponse.json({
       success: true,
-      session: loginData.session,
-      user: loginData.user,
-      isOnboarded,
+      session: {
+        access_token: signInData.session.access_token,
+        refresh_token: signInData.session.refresh_token,
+        expires_at: signInData.session.expires_at,
+        user: {
+          id: signInData.user.id,
+          phone: signInData.user.phone,
+        },
+      },
     });
   } catch (err: any) {
-    console.error('Master login route error:', err);
+    console.error('[Master Login] Unexpected exception:', err);
     return NextResponse.json(
       { error: err?.message || 'خطای غیرمنتظره در سرور.' },
       { status: 500 }

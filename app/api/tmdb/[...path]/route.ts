@@ -118,7 +118,11 @@ function getTtlForPath(fullPath: string): { ttlMs: number; cacheControlHeader: s
     fullPath.startsWith('trending/') ||
     fullPath.startsWith('discover/') ||
     fullPath === 'tv/on_the_air' ||
-    fullPath === 'tv/top_rated'
+    fullPath === 'tv/top_rated' ||
+    fullPath === 'movie/now_playing' ||
+    fullPath === 'movie/popular' ||
+    fullPath === 'movie/top_rated' ||
+    fullPath === 'movie/upcoming'
   ) {
     return {
       ttlMs: TWELVE_HOURS_MS,
@@ -135,6 +139,7 @@ function getTtlForPath(fullPath: string): { ttlMs: number; cacheControlHeader: s
 
 // Strict path allowlist validation
 const ALLOWED_PATH_PATTERNS = [
+  // TV endpoints
   /^trending\/tv\/week$/,
   /^discover\/tv$/,
   /^search\/tv$/,
@@ -147,6 +152,24 @@ const ALLOWED_PATH_PATTERNS = [
   /^tv\/\d+\/recommendations$/,
   /^tv\/\d+\/similar$/,
   /^tv\/\d+\/reviews$/,
+
+  // Movie endpoints
+  /^trending\/movie\/week$/,
+  /^trending\/movie\/day$/,
+  /^discover\/movie$/,
+  /^search\/movie$/,
+  /^search\/multi$/,
+  /^movie\/now_playing$/,
+  /^movie\/popular$/,
+  /^movie\/top_rated$/,
+  /^movie\/upcoming$/,
+  /^movie\/\d+$/,
+  /^movie\/\d+\/credits$/,
+  /^movie\/\d+\/recommendations$/,
+  /^movie\/\d+\/similar$/,
+  /^movie\/\d+\/reviews$/,
+
+  // Person
   /^person\/\d+$/,
 ];
 
@@ -175,6 +198,11 @@ const ALLOWED_QUERY_PARAMS = new Set([
   'first_air_date.lte',
   'air_date.gte',
   'air_date.lte',
+  'primary_release_date.gte',
+  'primary_release_date.lte',
+  'release_date.gte',
+  'release_date.lte',
+  'primary_release_year',
   'append_to_response',
   'with_keywords',
   'with_type',

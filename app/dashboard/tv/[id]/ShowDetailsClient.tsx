@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 import {
   Star, Loader2, Check, Plus, Share2, Play, Info, RotateCcw,
   ChevronDown, ChevronUp, Tag, CheckCircle2, Search, Users,
-  Feather, Award, GitFork
+  Feather, Award, GitFork, ArrowRight
 } from 'lucide-react';
 import { ShowCardProgress } from '../../components/ShowProgressBar';
 import { WatchlistButton } from '../../components/WatchlistButton';
@@ -674,6 +674,17 @@ export default function ShowDetailsClient({ initialShow, showId: propShowId }: {
           <img src={getBackdropUrl(show.backdrop_path)} className="w-full h-full object-cover opacity-60" alt={show.name} />
           <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent"></div>
           <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent"></div>
+        </div>
+
+        {/* دکمه بازگشت */}
+        <div className="absolute top-4 right-4 z-20">
+          <button
+            onClick={() => router.back()}
+            className="px-3.5 py-2 rounded-xl bg-black/60 hover:bg-black/90 backdrop-blur-md border border-white/10 hover:border-[#ccff00]/40 text-xs font-bold text-gray-300 hover:text-white flex items-center gap-1.5 transition-all shadow-lg cursor-pointer active:scale-95"
+          >
+            <ArrowRight size={14} />
+            <span>بازگشت</span>
+          </button>
         </div>
 
         <div className="relative w-full p-4 sm:p-6 md:p-12 flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-end z-10 pt-20 pb-8 md:pb-16">

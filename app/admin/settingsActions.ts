@@ -75,6 +75,14 @@ export async function getSettings(): Promise<{ success: boolean; settings: SiteS
   }
 }
 
+import { z } from 'zod';
+
+const UpdateSettingSchema = z.object({
+  key: z.string().min(1, 'شناسه کلید الزامی است').max(100).regex(/^[a-zA-Z0-9_-]+$/, 'شناسه کلید باید معتبر باشد'),
+  value: z.string().max(20000, 'طول متن بیش از حد مجاز است'),
+  description: z.string().max(500).optional(),
+});
+
 /**
  * Server Action: ایجاد یا ویرایش یک متغیر متنی (Update or Upsert Setting)
  * همراه با به‌روزرسانی آنی کش کل سایت با revalidatePath('/', 'layout')
@@ -84,13 +92,21 @@ export async function updateSetting(
   value: string,
   description?: string
 ): Promise<SettingsActionResponse> {
-  const cleanKey = key?.trim();
-  if (!cleanKey) {
-    return { success: false, error: 'شناسه کلید (setting_key) الزامی است.' };
+  const cleanKey = key?.trim()?.toLowerCase()?.replace(/[^a-z0-9_]/g, '_');
+  const parsed = UpdateSettingSchema.safeParse({
+    key: cleanKey,
+    value: value ?? '',
+    description: description?.trim() || undefined,
+  });
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message || 'اطلاعات ورودی نامعتبر است.',
+    };
   }
 
-  // کلید باید ساختار معتبر اسلاگ انگلیسی داشته باشد (مثال: hero_title یا footer_text)
-  const normalizedKey = cleanKey.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  const { key: normalizedKey, value: validValue, description: validDesc } = parsed.data;
 
   try {
     const { authorized, user, supabase } = await verifyAdminSession();
@@ -106,12 +122,12 @@ export async function updateSetting(
 
     const payload: Record<string, any> = {
       setting_key: normalizedKey,
-      setting_value: value ?? '',
+      setting_value: validValue,
       updated_at: nowIso,
     };
 
-    if (description !== undefined) {
-      payload.description = description?.trim() || null;
+    if (validDesc !== undefined) {
+      payload.description = validDesc;
     }
 
     const { data, error } = await db

@@ -73,8 +73,33 @@ export async function GET(request: NextRequest) {
         .eq('track_id', trackId)
         .maybeSingle();
 
-      if (txFetchErr) {
-        console.error('[Payment Verify] Error finding transaction record:', txFetchErr);
+      if (txFetchErr || !tx) {
+        console.error('[Payment Verify] Transaction record not found or error:', { trackId, txFetchErr });
+        return NextResponse.redirect(`${baseUrl.replace(/\/$/, '')}/vip/failed?trackId=${trackId}&reason=invalid_transaction`);
+      }
+
+      // دفاع در برابر Replay Attack: اگر تراکنش قبلاً با موفقیت پردازش شده، بدون شارژ مجدد ریدایرکت شود
+      if (tx.status === 'success') {
+        console.log('[Payment Verify] Transaction was already verified (idempotent):', trackId);
+        const redirectUrl = new URL(`${baseUrl.replace(/\/$/, '')}/vip/success`);
+        redirectUrl.searchParams.set('trackId', trackId);
+        redirectUrl.searchParams.set('refNumber', tx.ref_number || refNumber);
+        if (tx.plan_type) redirectUrl.searchParams.set('plan', tx.plan_type);
+        redirectUrl.searchParams.set('replayed', 'true');
+        return NextResponse.redirect(redirectUrl.toString());
+      }
+
+      // بررسی تطابق مبلغ پرداختی با مبلغ ثبت‌شده در دیتابیس (جلوگیری از دستکاری مبلغ)
+      if (verifyData.amount && tx.amount && Number(verifyData.amount) !== Number(tx.amount)) {
+        console.error('[Payment Verify] Amount mismatch tampering detected:', {
+          expected: tx.amount,
+          received: verifyData.amount,
+        });
+        await adminSupabase
+          .from('transactions')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('track_id', trackId);
+        return NextResponse.redirect(`${baseUrl.replace(/\/$/, '')}/vip/failed?trackId=${trackId}&reason=amount_mismatch`);
       }
 
       // ۲. بروزرسانی تراکنش به وضعیت موفق
@@ -88,7 +113,7 @@ export async function GET(request: NextRequest) {
         .eq('track_id', trackId);
 
       // ۳. فعال‌سازی اکانت VIP برای کاربر در جدول profiles
-      if (tx?.user_id) {
+      if (tx.user_id) {
         // خواندن وضعیت فعلی پروفایل کاربر برای محاسبه تمدید دقیق
         const { data: currentProfile } = await adminSupabase
           .from('profiles')

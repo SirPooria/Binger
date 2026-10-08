@@ -10,17 +10,20 @@ import {
   getShowDetails, getShowWithCredits, getIranianShows, getTopRatedShows,
   getKoreanShows, getTeenShows, getMiniSeries, getAnimeShows,
   searchShows, advancedDiscoverShows,
-  getShowsByGenre, getReleasedEpisodeCount, getRelatedShowsForShow
+  getShowsByGenre, getReleasedEpisodeCount, getRelatedShowsForShow,
+  getTrendingMovies, getTopRatedMovies, getNowPlayingMovies, getIranianMovies,
+  getMoviesByGenre, searchMovies, advancedDiscoverMovies, type TMDBMovie
 } from '@/lib/tmdbClient';
 import { 
   AlertTriangle, Plus, Info, Check, Bookmark, 
   Activity, ChevronLeft, ChevronRight, Twitter, Instagram, Sparkles,
   ArrowLeft, Flame, Star, Search, SlidersHorizontal, RotateCcw,
-  X, Layers, Globe, Eye, Tv, Share2, Lock, Clapperboard, Loader2, Compass
+  X, Layers, Globe, Eye, Tv, Film, Share2, Lock, Clapperboard, Loader2, Compass
 } from 'lucide-react';
 import { ShowCardProgress } from '../components/ShowProgressBar';
 import { VipUsername } from '../components/VipBadge';
 import { WatchlistButton } from '../components/WatchlistButton';
+import { MovieCard } from '../components/MovieCard';
 import { useWatched } from '@/lib/watchedContext';
 import EditableText from '@/app/components/EditableText';
 import DashboardFooter from '../components/DashboardFooter';
@@ -180,6 +183,32 @@ function DashboardContent({
   const [spotlightShow, setSpotlightShow] = useState<any | null>(() => cached?.spotlightShow || null);
   const [spotlightReason, setSpotlightReason] = useState<string>(() => cached?.spotlightReason || '');
 
+  // Explore Tab: TV Shows vs Movies
+  const [exploreTab, setExploreTab] = useState<'tv' | 'movie'>('tv');
+  const [movieCategories, setMovieCategories] = useState<{
+    trending: TMDBMovie[];
+    topRated: TMDBMovie[];
+    nowPlaying: TMDBMovie[];
+    iranian: TMDBMovie[];
+    action: TMDBMovie[];
+    comedy: TMDBMovie[];
+    animation: TMDBMovie[];
+    drama: TMDBMovie[];
+    sciFi: TMDBMovie[];
+  }>({
+    trending: [],
+    topRated: [],
+    nowPlaying: [],
+    iranian: [],
+    action: [],
+    comedy: [],
+    animation: [],
+    drama: [],
+    sciFi: [],
+  });
+  const [loadingMovies, setLoadingMovies] = useState(false);
+  const [movieDataLoaded, setMovieDataLoaded] = useState(false);
+
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
@@ -225,28 +254,46 @@ function DashboardContent({
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        if (searchQuery.trim()) {
-          const results = await searchShows(searchQuery.trim());
-          let filtered = results || [];
-
-          if (selectedGenre) {
-            filtered = filtered.filter((s: any) => s.genre_ids?.includes(selectedGenre));
+        if (exploreTab === 'movie') {
+          if (searchQuery.trim()) {
+            const results = await searchMovies(searchQuery.trim());
+            let filtered = results || [];
+            if (selectedGenre) filtered = filtered.filter((m: any) => m.genre_ids?.includes(selectedGenre));
+            if (selectedRating) filtered = filtered.filter((m: any) => (m.vote_average || 0) >= selectedRating);
+            setSearchResults(filtered.filter((m: any) => m.poster_path));
+          } else {
+            const results = await advancedDiscoverMovies({
+              with_genres: selectedGenre || undefined,
+              'vote_average.gte': selectedRating || undefined,
+              with_origin_country: selectedCountry || undefined,
+              sort_by: selectedSort,
+            });
+            setSearchResults((results || []).filter((m: any) => m.poster_path));
           }
-          if (selectedRating) {
-            filtered = filtered.filter((s: any) => (s.vote_average || 0) >= selectedRating);
-          }
-          if (selectedCountry) {
-            filtered = filtered.filter((s: any) => s.origin_country?.includes(selectedCountry));
-          }
-          setSearchResults(filtered.filter((s: any) => s.poster_path));
         } else {
-          const results = await advancedDiscoverShows({
-            genreId: selectedGenre,
-            minRating: selectedRating,
-            originCountry: selectedCountry,
-            sortBy: selectedSort,
-          });
-          setSearchResults((results || []).filter((s: any) => s.poster_path));
+          if (searchQuery.trim()) {
+            const results = await searchShows(searchQuery.trim());
+            let filtered = results || [];
+
+            if (selectedGenre) {
+              filtered = filtered.filter((s: any) => s.genre_ids?.includes(selectedGenre));
+            }
+            if (selectedRating) {
+              filtered = filtered.filter((s: any) => (s.vote_average || 0) >= selectedRating);
+            }
+            if (selectedCountry) {
+              filtered = filtered.filter((s: any) => s.origin_country?.includes(selectedCountry));
+            }
+            setSearchResults(filtered.filter((s: any) => s.poster_path));
+          } else {
+            const results = await advancedDiscoverShows({
+              genreId: selectedGenre,
+              minRating: selectedRating,
+              originCountry: selectedCountry,
+              sortBy: selectedSort,
+            });
+            setSearchResults((results || []).filter((s: any) => s.poster_path));
+          }
         }
       } catch (err) {
         console.error('Search / Filter error:', err);
@@ -256,19 +303,102 @@ function DashboardContent({
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedGenre, selectedRating, selectedCountry, selectedSort, hasActiveFilters]);
+  }, [searchQuery, selectedGenre, selectedRating, selectedCountry, selectedSort, hasActiveFilters, exploreTab]);
+
+  const loadMovieData = async () => {
+    if (movieDataLoaded || loadingMovies) return;
+    setLoadingMovies(true);
+    try {
+      const [trending, topRated, nowPlaying, iranian, action, comedy, animation, drama, sciFi] = await Promise.all([
+        getTrendingMovies(1),
+        getTopRatedMovies(1),
+        getNowPlayingMovies(1),
+        getIranianMovies(1),
+        getMoviesByGenre(28, 1),
+        getMoviesByGenre(35, 1),
+        getMoviesByGenre(16, 1),
+        getMoviesByGenre(18, 1),
+        getMoviesByGenre(878, 1),
+      ]);
+      setMovieCategories({
+        trending: trending || [],
+        topRated: topRated || [],
+        nowPlaying: nowPlaying || [],
+        iranian: iranian || [],
+        action: action || [],
+        comedy: comedy || [],
+        animation: animation || [],
+        drama: drama || [],
+        sciFi: sciFi || [],
+      });
+      setMovieDataLoaded(true);
+    } catch (err) {
+      console.error('Error loading movie explore feed:', err);
+    } finally {
+      setLoadingMovies(false);
+    }
+  };
+
+  // --- حفظ و بازگردانی هوشمند اسکرول هنگام جابجایی بین صفحات ---
+  useEffect(() => {
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          if (window.scrollY > 0) {
+            sessionStorage.setItem('binger_explore_scroll', String(window.scrollY));
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      const savedScroll = sessionStorage.getItem('binger_explore_scroll');
+      if (savedScroll) {
+        const y = parseInt(savedScroll, 10);
+        if (!isNaN(y) && y > 0) {
+          const t1 = setTimeout(() => {
+            window.scrollTo({ top: y, behavior: 'instant' });
+          }, 40);
+          const t2 = setTimeout(() => {
+            window.scrollTo({ top: y, behavior: 'instant' });
+          }, 180);
+          return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+          };
+        }
+      }
+    }
+  }, [loading]);
 
   // --- Main Data Initialization ---
   useEffect(() => {
     let isCancelled = false;
 
     const initData = async () => {
-      // اگر کش اکسپلور وجود دارد و معتبر است، لودینگ نکن و فقط سریعاً واچ‌لیست کاربر را سینک کن
+      // اگر کش اکسپلور وجود دارد و معتبر است، لودینگ نکن و داده‌های کامل را بلافاصله نمایش بده
       const hasCache = hasExploreCache();
       const isFresh = hasCache && !isExploreCacheStale();
 
-      if (isFresh) {
+      if (isFresh && cached) {
         setLoading(false);
+        setCategories(cached.categories);
+        setUserCustomLists(cached.userCustomLists || []);
+        setSpotlightShow(cached.spotlightShow);
+        setSpotlightReason(cached.spotlightReason);
+        setRelatedCarousel(cached.relatedCarousel);
+        setMyFeed(cached.myFeed || []);
+        setWatchlistIds(cached.watchlistIds || new Set());
+        setWatchedIds(cached.watchedIds || []);
+        setAllShowIds(cached.allShowIds || []);
+
         try {
           const { data: { user } } = await supabase.auth.getUser();
           if (user && !isCancelled) {
@@ -312,7 +442,7 @@ function DashboardContent({
 
         // ۲. محاسبه هوشمند «ادامه تماشا»
         // فقط سریال‌هایی که کاربر شروع کرده و در حال حاضر اپیزودهای پخش‌شده و موجودی دارد که ندیده است.
-        // سریال‌هایی که در آینده پخش خواهند شد یا مواردی که کاربر تا قسمت‌های فعلی را کامل دیده نباید نمایش داده شوند.
+        let finalContinueWatching: any[] = [];
         if (uniqueWatchedIds.length > 0) {
           const candidateWatchedIds = uniqueWatchedIds.slice(0, 40);
           const myShowsRaw = await Promise.all(
@@ -334,22 +464,19 @@ function DashboardContent({
             const totalReleasedEps = getReleasedEpisodeCount(show);
             const userWatchedCount = watchedCountMap.get(show.id) || 0;
 
-            // فقط در صورتی که:
-            // ۱. حداقل یک قسمت تا الان پخش شده باشد
-            // ۲. کاربر حداقل یک قسمت از آن را دیده باشد
-            // ۳. کاربر هنوز همه قسمت‌های پخش‌شده و موجود را ندیده باشد (یعنی اپیزودهای جدید یا ادامه نیافته دارد)
             if (totalReleasedEps > 0 && userWatchedCount > 0 && userWatchedCount < totalReleasedEps) {
               continueWatchingShows.push(show);
             }
           }
 
-          if (!isCancelled) setMyFeed(continueWatchingShows.slice(0, 15));
+          finalContinueWatching = continueWatchingShows.slice(0, 15);
+          if (!isCancelled) setMyFeed(finalContinueWatching);
         } else {
           if (!isCancelled) setMyFeed([]);
         }
 
         // ۲.۵. کاروزل پیشنهادی شخصی‌سازی‌شده: «چون فلان سریال رو دیدی، پس اینارو هم دوست داری:»
-        // انتخاب رندوم یک سریال از سابقه تماشای کاربر در هر بار بارگذاری صفحه
+        let calculatedRelated: any = null;
         if (uniqueWatchedIds.length > 0) {
           const randomSeedId = uniqueWatchedIds[Math.floor(Math.random() * uniqueWatchedIds.length)];
           try {
@@ -359,10 +486,11 @@ function DashboardContent({
               const relatedShows = await getRelatedShowsForShow(randomSeedId, primaryGenreId, 20);
               const cleanRelated = relatedShows.filter((s) => s.id !== randomSeedId);
               if (cleanRelated.length > 0 && !isCancelled) {
-                setRelatedCarousel({
+                calculatedRelated = {
                   seedShow,
                   items: cleanRelated,
-                });
+                };
+                setRelatedCarousel(calculatedRelated);
               }
             }
           } catch (err) {
@@ -378,11 +506,12 @@ function DashboardContent({
               const relatedShows = await getRelatedShowsForShow(randomSeedId, primaryGenreId, 20);
               const cleanRelated = relatedShows.filter((s) => s.id !== randomSeedId);
               if (cleanRelated.length > 0 && !isCancelled) {
-                setRelatedCarousel({
+                calculatedRelated = {
                   seedShow,
                   isFromWatchlist: true,
                   items: cleanRelated,
-                });
+                };
+                setRelatedCarousel(calculatedRelated);
               }
             }
           } catch (err) {
@@ -391,13 +520,6 @@ function DashboardContent({
         }
 
         // ۳. دریافت ۷ دسته‌بندی اصلی طبق خواسته کاربر:
-        // - یک ردیف مخصوص سریال‌های ایرانی
-        // - سریال‌های ترند
-        // - برترین سریال‌ها
-        // - سریال‌های کره‌ای جدید
-        // - سریال‌های تینیجری
-        // - بهترین مینی‌سریال‌ها
-        // - لیست‌های برتری که کاربرا ساختن
         const fetchSafely = async (fn: () => Promise<any>, fallback: any[] = []) => {
           try { return await fn(); } catch (e) { return fallback; }
         };
@@ -410,7 +532,6 @@ function DashboardContent({
           fetchSafely(getAnimeShows, []),
           fetchSafely(getTeenShows, []),
           fetchSafely(getMiniSeries, []),
-          // دریافت لیست‌های عمومی کاربران از سوپابیس برای کاروسل اکسپلور
           supabase
             .from('user_lists')
             .select(`
@@ -429,7 +550,7 @@ function DashboardContent({
 
         if (isCancelled) return;
 
-        setCategories({
+        const currentCategories = {
           iranian: iranian || [],
           trending: trending ? trending.slice(0, 15) : [],
           topRated: topRated ? topRated.slice(0, 15) : [],
@@ -437,7 +558,9 @@ function DashboardContent({
           anime: anime ? anime.slice(0, 15) : [],
           teen: teen ? teen.slice(0, 15) : [],
           miniSeries: miniSeries ? miniSeries.slice(0, 15) : [],
-        });
+        };
+
+        setCategories(currentCategories);
 
         // غنی‌سازی اطلاعات سازندگان و تعداد ذخیره‌شدن‌های هر لیست عمومی
         let finalCustomLists: any[] = [];
@@ -473,7 +596,6 @@ function DashboardContent({
             save_count: saveCounts[String(l.id)] || 0,
           }));
 
-          // سورت دقیق بر اساس تعداد ذخیره‌شدن‌ها به ترتیب نزولی (پرطرفدارترین‌ها اول)
           enrichedLists.sort((a: any, b: any) => {
             if ((b.save_count || 0) !== (a.save_count || 0)) {
               return (b.save_count || 0) - (a.save_count || 0);
@@ -486,7 +608,6 @@ function DashboardContent({
         }
 
         // ۴. الگوریتم هوشمند پیشنهاد ویژه بالا کنار DNA سینمایی
-        // شرط قطعی: فقط سریالی که برایش «توضیح فارسی» وجود دارد + یادداشت دلیل بر اساس ژانر
         const spotlightRes = await calculateSpotlightShow({
           uniqueWatchedIds,
           allUserShowIdsSet,
@@ -496,26 +617,16 @@ function DashboardContent({
         });
 
         // ذخیره تمام اطلاعات در کش صفحه اکسپلور
-        const currentCategories = {
-          iranian: iranian || [],
-          trending: trending ? trending.slice(0, 15) : [],
-          topRated: topRated ? topRated.slice(0, 15) : [],
-          korean: korean ? korean.slice(0, 15) : [],
-          anime: anime ? anime.slice(0, 15) : [],
-          teen: teen ? teen.slice(0, 15) : [],
-          miniSeries: miniSeries ? miniSeries.slice(0, 15) : [],
-        };
-
         setExploreCache({
           categories: currentCategories,
           userCustomLists: finalCustomLists,
           spotlightShow: spotlightRes?.show || null,
           spotlightReason: spotlightRes?.reason || '',
-          relatedCarousel,
+          relatedCarousel: calculatedRelated,
           watchlistIds: new Set(wIds),
           watchedIds: wEdIds,
           allShowIds: allUserShowIds,
-          myFeed: [],
+          myFeed: finalContinueWatching,
         });
 
       } catch (err: any) {
@@ -697,12 +808,43 @@ function DashboardContent({
           </div>
           <div className="hidden sm:flex items-center gap-2 text-[11px] text-gray-500 font-mono">
             <span className="w-2 h-2 rounded-full bg-[#ccff00] animate-pulse" />
-            <span>پایش لحظه‌ای کالکشن‌های سینمایی بینجر</span>
+            <span>پایش لحظه‌ای کالکشن‌های سینمایی و سریالی بینجر</span>
           </div>
         </div>
 
+        {/* ================= تب‌بار تفکیک کامل: سریال‌ها | فیلم‌ها ================= */}
+        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10 w-full sm:w-fit backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setExploreTab('tv')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+              exploreTab === 'tv'
+                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.35)]'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Tv size={16} />
+            <span>سریال‌ها</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setExploreTab('movie');
+              loadMovieData();
+            }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+              exploreTab === 'movie'
+                ? 'bg-[#ccff00] text-black shadow-[0_0_20px_rgba(204,255,0,0.35)]'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Film size={16} />
+            <span>فیلم‌های سینمایی</span>
+          </button>
+        </div>
+
         {/* ================= ۱. سیستم جستجو و فیلتر پیشرفته در بالای صفحه ================= */}
-        <div className="bg-[#111] border border-white/10 rounded-3xl p-4 md:p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+        <div className="bg-[#111] border border-white/10 rounded-3xl p-3.5 sm:p-5 md:p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           <div className="flex flex-col md:flex-row gap-3 items-center">
             
             {/* اینپوت سرچ زنده */}
@@ -712,8 +854,8 @@ function DashboardContent({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="جستجوی سریع هر سریالی در جهان (فارسی، انگلیسی یا کلمات کلیدی)..."
-                className="w-full bg-[#080808] border border-white/15 focus:border-[#ccff00] rounded-2xl pr-12 pl-10 py-3.5 text-sm text-white placeholder-gray-500 outline-none transition-all shadow-inner"
+                placeholder={exploreTab === 'movie' ? "جستجوی فیلم سینمایی (فارسی، انگلیسی)..." : "جستجوی سریال (فارسی، انگلیسی، ژانر)..."}
+                className="w-full bg-[#080808] border border-white/15 focus:border-[#ccff00] rounded-2xl pr-12 pl-10 py-3 sm:py-3.5 text-xs sm:text-sm text-white placeholder-gray-500 outline-none transition-all shadow-inner"
               />
               {searchQuery && (
                 <button
@@ -890,14 +1032,18 @@ function DashboardContent({
               </div>
             ) : searchResults.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-                {searchResults.map((show) => (
-                  <ShowCard
-                    key={show.id}
-                    show={show}
-                    isAdded={watchlistIds.has(show.id)}
-                    onClick={() => router.push(`/dashboard/tv/${show.id}`)}
-                    onToggle={() => toggleWatchlist(show.id)}
-                  />
+                {searchResults.map((item) => (
+                  exploreTab === 'movie' ? (
+                    <MovieCard key={item.id} movie={item} />
+                  ) : (
+                    <ShowCard
+                      key={item.id}
+                      show={item}
+                      isAdded={watchlistIds.has(item.id)}
+                      onClick={() => router.push(`/dashboard/tv/${item.id}`)}
+                      onToggle={() => toggleWatchlist(item.id)}
+                    />
+                  )
                 ))}
               </div>
             ) : (
@@ -920,6 +1066,12 @@ function DashboardContent({
 
         {/* اگر سرچ فعال نباشد، محتوای غنی کاروسلی اکسپلور نمایش داده می‌شود */}
         {!hasActiveFilters && (
+          exploreTab === 'movie' ? (
+            <MovieExploreFeed
+              categories={movieCategories}
+              loading={loadingMovies}
+            />
+          ) : (
           <>
             {/* ۱. راهنمای مراحل اولیه کاربر (Onboarding Gamification) */}
             <OnboardingSteps 
@@ -1135,11 +1287,133 @@ function DashboardContent({
               </div>
             )}
           </>
+          )
         )}
 
       </div>
 
       <DashboardFooter footerDesc={footerDesc} footerCopyright={footerCopyright} isAdmin={isAdmin} />
+    </div>
+  );
+}
+
+// کامپوننت فید اختصاصی فیلم‌ها در اکسپلور
+function MovieExploreFeed({
+  categories,
+  loading,
+}: {
+  categories: any;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-10 animate-pulse">
+        <div className="w-full h-64 bg-white/5 rounded-3xl" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="space-y-4">
+            <div className="w-48 h-6 bg-white/10 rounded-lg" />
+            <div className="flex gap-4 overflow-hidden">
+              {[1, 2, 3, 4, 5].map((j) => (
+                <div key={j} className="w-40 h-60 bg-white/5 rounded-2xl shrink-0" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const spotlightMovie = categories.trending?.[0];
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-300">
+      {/* Movie Spotlight Hero */}
+      {spotlightMovie && (
+        <div className="relative rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-black via-black/85 to-transparent p-6 sm:p-8 md:p-10 shadow-2xl flex flex-col md:flex-row items-center gap-6 md:gap-8">
+          {spotlightMovie.backdrop_path && (
+            <img
+              src={getBackdropUrl(spotlightMovie.backdrop_path, 'w1280')}
+              alt={spotlightMovie.title}
+              className="absolute inset-0 w-full h-full object-cover opacity-25 filter blur-[1px] pointer-events-none"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none" />
+
+          <div className="relative z-10 w-36 sm:w-44 md:w-52 shrink-0 aspect-[2/3] rounded-2xl overflow-hidden border border-white/20 shadow-2xl">
+            <img
+              src={getImageUrl(spotlightMovie.poster_path, 'w500')}
+              alt={spotlightMovie.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          <div className="relative z-10 flex-1 space-y-3 text-center md:text-right">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#ccff00]/15 border border-[#ccff00]/30 text-[#ccff00] text-xs font-black">
+              <Sparkles size={13} />
+              <span>پیشنهاد سینمایی ویژه هفته</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">
+              {spotlightMovie.title_fa || spotlightMovie.title}
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-300 line-clamp-3 max-w-2xl leading-relaxed font-light">
+              {spotlightMovie.overview_fa || spotlightMovie.overview || 'روایتی هیجان‌انگیز از یکی از محبوب‌ترین آثار سینمایی این هفته به انتخاب کاربران بینجر.'}
+            </p>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
+              <Link
+                href={`/dashboard/movie/${spotlightMovie.id}`}
+                className="px-5 py-2.5 rounded-xl bg-[#ccff00] hover:bg-[#b3e600] text-black font-black text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+              >
+                <Film size={15} />
+                <span>مشاهده فیلم و ثبت در سابقه</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* کاروسل‌های فیلم‌ها */}
+      <MovieCarouselRow title="🔥 داغ‌ترین فیلم‌های هفته" movies={categories.trending} badge="ترند" />
+      <MovieCarouselRow title="⭐ شاهکارهای تاریخ سینما" movies={categories.topRated} badge="برترین‌ها" />
+      <MovieCarouselRow title="🍿 فیلم‌های تازه و در حال اکران" movies={categories.nowPlaying} badge="جدید" />
+      <MovieCarouselRow title="🇮🇷 سینمای ایران" movies={categories.iranian} badge="ایرانی" />
+      <MovieCarouselRow title="💥 اکشن و هیجان‌انگیز" movies={categories.action} badge="اکشن" />
+      <MovieCarouselRow title="😂 کمدی و سرگرمی" movies={categories.comedy} badge="کمدی" />
+      <MovieCarouselRow title="🎨 انیمیشن‌های سینمایی" movies={categories.animation} badge="انیمیشن" />
+      <MovieCarouselRow title="🎭 شاهکارهای درام" movies={categories.drama} badge="درام" />
+      <MovieCarouselRow title="🚀 علمی‌تخیلی و فانتزی" movies={categories.sciFi} badge="علمی‌تخیلی" />
+    </div>
+  );
+}
+
+function MovieCarouselRow({
+  title,
+  movies,
+  badge,
+}: {
+  title: string;
+  movies: TMDBMovie[];
+  badge?: string;
+}) {
+  if (!movies || movies.length === 0) return null;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-2 mr-2 border-r-4 border-[#ccff00]">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-black text-white">{title}</h2>
+          {badge && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-white/10 text-gray-300">
+              {badge}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-1 px-1 no-scrollbar">
+        {movies.map((movie) => (
+          <div key={movie.id} className="w-36 sm:w-44 md:w-48 shrink-0">
+            <MovieCard movie={movie} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1530,14 +1804,14 @@ function CinematicIdentityCard({
           <div className="text-xs font-bold bg-purple-500/10 border border-purple-500/20 text-purple-300 px-2.5 sm:px-3 py-1.5 rounded-xl">
             گرایش سینمایی: {dnaData.specialty.name}
           </div>
-          <div className="text-xs font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 px-2.5 sm:px-3 py-1.5 rounded-xl ltr">
+          <div className="text-xs font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 px-2.5 sm:px-3 py-1.5 rounded-xl">
             {dnaData.specialtyHours} ساعت در این ژانر
           </div>
           <div className="relative group/tag cursor-help">
             <span className="text-xs font-bold bg-pink-500/10 border border-pink-500/20 text-pink-300 px-2.5 sm:px-3 py-1.5 rounded-xl block">
               تیپ: {dnaData.archetype}
             </span>
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/tag:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
+            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-2 w-52 max-w-[85vw] p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/tag:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
               {dnaData.archetypeDesc}
             </div>
           </div>
@@ -1554,7 +1828,7 @@ function CinematicIdentityCard({
               {dnaData.topCreator}
             </strong>
             {dnaData.topCreatorShows?.length > 0 && (
-              <div className="absolute bottom-full right-0 sm:right-1/2 sm:translate-x-1/2 mb-2 w-64 p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/creator:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
+              <div className="absolute bottom-full right-0 sm:right-1/2 sm:translate-x-1/2 mb-2 w-64 max-w-[85vw] p-2.5 bg-[#111] text-gray-300 text-[10px] rounded-xl opacity-0 group-hover/creator:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-white/10 shadow-2xl text-center leading-relaxed">
                 <strong className="text-[#ccff00] block mb-1">دلیل انتخاب در هویت سینمایی:</strong>
                 به خاطر کارگردانی و خلق:
                 <span className="text-white font-bold block mt-0.5">
@@ -1697,7 +1971,7 @@ function SpotlightShowCard({ show, reason, isAdded, onToggle, router }: any) {
   const genres = show.genres?.slice(0, 3).map((g: any) => g.name).join(' • ') || '';
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-[#0f0f0f] flex flex-col justify-end min-h-[380px] p-6 group">
+    <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-[#0f0f0f] flex flex-col justify-end min-h-[320px] sm:min-h-[360px] p-4 sm:p-6 md:p-8 group">
       {/* عکس کاور پس‌زمینه */}
       <div className="absolute inset-0 z-0">
         {backdrop ? (
@@ -1714,12 +1988,12 @@ function SpotlightShowCard({ show, reason, isAdded, onToggle, router }: any) {
       </div>
 
       {/* محتوای روی کارت */}
-      <div className="relative z-10 space-y-3">
+      <div className="relative z-10 space-y-2.5 sm:space-y-3">
         
         {/* نشان بج و امتیاز */}
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold bg-[#ccff00] text-black px-3 py-1 rounded-full shadow-[0_0_15px_rgba(204,255,0,0.4)] flex items-center gap-1.5">
-            <Sparkles size={13} /> پیشنهاد ویژه بر اساس سلیقه شما
+          <span className="text-[10px] sm:text-[11px] font-bold bg-[#ccff00] text-black px-2.5 sm:px-3 py-1 rounded-full shadow-[0_0_15px_rgba(204,255,0,0.4)] flex items-center gap-1.5">
+            <Sparkles size={12} /> پیشنهاد ویژه بر اساس سلیقه شما
           </span>
 
           <span className="text-xs bg-black/60 backdrop-blur-md border border-white/15 px-2.5 py-1 rounded-full text-amber-400 font-black flex items-center gap-1">
@@ -1729,36 +2003,41 @@ function SpotlightShowCard({ show, reason, isAdded, onToggle, router }: any) {
 
         {/* بنر توضیح دلیل انتخاب برای کاربر بر اساس ژانرهای تماشا شده */}
         {reason && (
-          <div className="bg-[#ccff00]/15 border border-[#ccff00]/30 rounded-2xl p-3 text-xs text-[#ccff00] font-bold leading-relaxed flex items-start gap-2 shadow-inner">
-            <Sparkles size={16} className="shrink-0 mt-0.5 text-[#ccff00]" />
+          <div className="bg-[#ccff00]/15 border border-[#ccff00]/30 rounded-2xl p-2.5 sm:p-3 text-[11px] sm:text-xs text-[#ccff00] font-bold leading-relaxed flex items-start gap-2 shadow-inner">
+            <Sparkles size={15} className="shrink-0 mt-0.5 text-[#ccff00]" />
             <span>{reason}</span>
           </div>
         )}
 
         {/* نام سریال و متادیتا */}
         <div>
-          <h3 className="text-xl md:text-2xl font-black text-white drop-shadow-md">
+          <h3 className="text-lg sm:text-xl md:text-2xl font-black text-white drop-shadow-md break-words">
             {show.name || show.original_name}
           </h3>
-          <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-gray-400 mt-1">
             {year && <span>{year}</span>}
             {genres && <span>• {genres}</span>}
-            <span className="text-emerald-400 text-[11px] font-bold">✓ دارای توضیح فارسی</span>
+            <span className="text-emerald-400 text-[10px] sm:text-[11px] font-bold">✓ دارای توضیح فارسی</span>
           </div>
         </div>
 
         {/* خلاصه داستان فارسی */}
         {show.overview && (
-          <p className="text-xs text-gray-300 line-clamp-3 leading-relaxed text-justify">
+          <p className="text-xs text-gray-300 line-clamp-3 sm:line-clamp-4 leading-relaxed text-justify font-light">
             {show.overview}
           </p>
         )}
 
         {/* دکمه‌های اکشن */}
-        <div className="pt-2 flex items-center gap-3">
+        <div className="pt-2 flex items-center gap-2 sm:gap-3">
           <button
-            onClick={() => router.push(`/dashboard/tv/${show.id}`)}
-            className="flex-1 bg-[#ccff00] hover:bg-[#b3e600] text-black font-black py-2.5 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(204,255,0,0.3)] active:scale-95 cursor-pointer"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('binger_explore_scroll', String(window.scrollY));
+              }
+              router.push(`/dashboard/tv/${show.id}`);
+            }}
+            className="flex-1 bg-[#ccff00] hover:bg-[#b3e600] text-black font-black py-2.5 sm:py-3 px-4 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(204,255,0,0.3)] active:scale-95 cursor-pointer"
           >
             <Eye size={16} />
             <span>مشاهده و شروع سریال</span>
@@ -1766,7 +2045,7 @@ function SpotlightShowCard({ show, reason, isAdded, onToggle, router }: any) {
 
           <button
             onClick={onToggle}
-            className={`p-2.5 rounded-xl border backdrop-blur-md transition-all cursor-pointer ${
+            className={`p-2.5 sm:p-3 rounded-xl border backdrop-blur-md transition-all cursor-pointer ${
               isAdded
                 ? 'bg-[#ccff00] text-black border-[#ccff00]'
                 : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
@@ -1812,7 +2091,7 @@ function CarouselSection({ title, items, router, watchlistIds, onToggle, badge }
       {title && (
         <div className="flex items-center justify-between px-2 mr-2 border-r-4 border-[#ccff00]">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg md:text-xl font-black text-white/95">{title}</h2>
+            <h2 className="text-base sm:text-lg md:text-xl font-black text-white/95">{title}</h2>
             {badge && (
               <span className="text-[10px] font-bold bg-white/10 px-2 py-0.5 rounded-md text-gray-300">
                 {badge}
@@ -1842,7 +2121,7 @@ function CarouselSection({ title, items, router, watchlistIds, onToggle, badge }
 
         <div 
           ref={rowRef} 
-          className={`flex gap-3.5 sm:gap-4 overflow-x-auto px-2 py-3 no-scrollbar scroll-smooth cursor-grab relative z-10 ${
+          className={`flex gap-3 sm:gap-4 overflow-x-auto px-1 sm:px-2 py-3 no-scrollbar scroll-smooth cursor-grab relative z-10 ${
             isDragging ? 'cursor-grabbing snap-none' : 'snap-x'
           }`}
           onMouseDown={handleMouseDown}
@@ -1851,11 +2130,18 @@ function CarouselSection({ title, items, router, watchlistIds, onToggle, badge }
           onMouseMove={handleMouseMove}
         >
           {items.map((show: any) => (
-            <div key={show.id} className="snap-center shrink-0 w-[130px] sm:w-[150px] md:w-[165px]">
+            <div key={show.id} className="snap-start shrink-0 w-[125px] sm:w-[145px] md:w-[160px]">
               <ShowCard 
                 show={show} 
                 isAdded={watchlistIds.has(show.id)} 
-                onClick={() => !isDragging && router.push(`/dashboard/tv/${show.id}`)} 
+                onClick={() => {
+                  if (!isDragging) {
+                    if (typeof window !== 'undefined') {
+                      sessionStorage.setItem('binger_explore_scroll', String(window.scrollY));
+                    }
+                    router.push(`/dashboard/tv/${show.id}`);
+                  }
+                }} 
                 onToggle={() => onToggle(show.id)} 
               />
             </div>
@@ -1868,9 +2154,16 @@ function CarouselSection({ title, items, router, watchlistIds, onToggle, badge }
 
 // کارت سریال استاندارد
 function ShowCard({ show, isAdded, onClick, onToggle }: any) {
+  const handleClick = (e: React.MouseEvent) => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('binger_explore_scroll', String(window.scrollY));
+    }
+    if (onClick) onClick(e);
+  };
+
   return (
     <div 
-      onClick={onClick} 
+      onClick={handleClick} 
       className="group relative aspect-[2/3] bg-[#1a1a1a] rounded-2xl overflow-hidden cursor-pointer border border-white/5 hover:border-[#ccff00]/50 transition-all duration-300 hover:scale-105 hover:shadow-[0_0_25px_rgba(204,255,0,0.15)] hover:z-20"
     >
       <img 
@@ -1887,10 +2180,10 @@ function ShowCard({ show, isAdded, onClick, onToggle }: any) {
       {/* نشانگر درصد پیشرفت در بالای پوستر */}
       <ShowCardProgress showId={show.id} show={show} showBar={false} />
       
-      <div className="absolute bottom-0 p-2.5 sm:p-3 w-full">
-        <h3 className="text-xs font-bold text-white line-clamp-1 drop-shadow-md">{show.name}</h3>
+      <div className="absolute bottom-0 p-2 sm:p-2.5 w-full">
+        <h3 className="text-[11px] sm:text-xs font-bold text-white line-clamp-1 drop-shadow-md break-words">{show.name}</h3>
         
-        <div className="flex justify-between items-center mt-1 text-[10px] text-gray-400">
+        <div className="flex justify-between items-center mt-1 text-[9px] sm:text-[10px] text-gray-400">
           <span className="ltr">{show.first_air_date ? show.first_air_date.substring(0, 4) : ''}</span>
           {show.vote_average > 0 && (
             <span className="text-[#ccff00] flex items-center gap-0.5 bg-black/60 px-1.5 py-0.5 rounded border border-white/10 font-bold">

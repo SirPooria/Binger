@@ -96,12 +96,12 @@ export default function HomePageClient({
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="inline-block w-1.5 h-1.5 bg-[#ccff00]" />
-            <span className="tracking-widest uppercase text-neutral-300">BINGER // OPERATING SYSTEM FOR CINEPHILES</span>
+            <span className="tracking-wider text-neutral-300 font-bold">بینجر // پلتفرم هوشمند مدیریت و کشف سریال</span>
           </div>
           <div className="hidden sm:flex items-center gap-4 text-neutral-500">
-            <span>RELEASE: 2026.4</span>
+            <span>نسخه ۲۰۲۶</span>
             <span>•</span>
-            <span>SERVER: TEH-NODE-01</span>
+            <span>سرویس ابری پایدار</span>
           </div>
         </div>
       </div>
@@ -312,25 +312,21 @@ export default function HomePageClient({
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-white/10">
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-neutral-400 uppercase tracking-widest">[ ARCHIVE // 01 ]</div>
             <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">آرشیو جامع</div>
             <div className="text-xs text-neutral-300">ردیابی و مدیریت هزاران اپیزود سریال</div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-neutral-400 uppercase tracking-widest">[ PERSONAS // 02 ]</div>
             <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">۱۶ سبک</div>
             <div className="text-xs text-neutral-300">هویت و تحلیل تخصصی سلیقه</div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-neutral-400 uppercase tracking-widest">[ INTEGRITY // 03 ]</div>
             <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight">سپر اسپویل</div>
             <div className="text-xs text-neutral-300">تحلیل‌های تفکیک‌شده بدون افشای داستان</div>
           </div>
 
           <div className="p-6 sm:p-8 space-y-2">
-            <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">[ RADAR AI // 04 ]</div>
             <div className="text-3xl sm:text-4xl font-black text-[#ccff00] font-mono tracking-tight">رادار مود</div>
             <div className="text-xs text-neutral-300">پیشنهاد هوشمند طبق حس لحظه</div>
           </div>
@@ -344,9 +340,6 @@ export default function HomePageClient({
         {/* Section Header */}
         <div className="border-b border-white/10 pb-10 mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-3 max-w-2xl">
-            <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">
-              // ARCHITECTURAL CONSOLE
-            </div>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">
               میز فرمان سینمایی بینجر
             </h2>
@@ -354,8 +347,8 @@ export default function HomePageClient({
               جایگزین یادداشت‌های پراکنده، اکسل و جستجوهای فرسایشی. ۴ ابزار اختصاصی برای کسانی که جدی سریال می‌بینند.
             </p>
           </div>
-          <div className="font-mono text-xs text-neutral-500">
-            SYS: CORE-ENGINE-V2
+          <div className="text-xs text-neutral-400 font-bold bg-white/5 border border-white/10 px-3 py-1.5 rounded-full w-fit">
+            هسته هوشمند بینجر
           </div>
         </div>
 
@@ -366,9 +359,6 @@ export default function HomePageClient({
             {/* Left Content Column */}
             <div className="lg:col-span-5 p-6 sm:p-10 flex flex-col justify-between space-y-6">
               <div className="space-y-4">
-                <div className="font-mono text-xs text-[#ccff00] tracking-wider uppercase font-bold">
-                  [ 01 // WATCH QUEUE & RADAR ]
-                </div>
                 <h3 className="text-2xl sm:text-3xl font-black text-white leading-snug">
                   نوبت تماشا: دیگر گم نمی‌کنی فصل قبل کجا بودی
                 </h3>
@@ -377,17 +367,17 @@ export default function HomePageClient({
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-white/10 flex items-center gap-6 text-xs font-mono text-neutral-400">
-                <span>AUTOPILOT: ACTIVE</span>
+              <div className="pt-4 border-t border-white/10 flex items-center gap-6 text-xs text-neutral-400">
+                <span className="text-[#ccff00]">● همگام‌سازی لحظه‌ای</span>
                 <span>•</span>
-                <span>SYNC: INSTANT</span>
+                <span>پایش هوشمند فصل‌ها</span>
               </div>
             </div>
 
             {/* Right Live Timeline Widget (Integrated, NO Card-in-Card) */}
             <div className="lg:col-span-7 p-6 sm:p-10 bg-black flex flex-col justify-center space-y-6">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <span className="font-mono text-xs text-neutral-400">ACTIVE PLAYHEAD // اپیزود در حال تماشا</span>
+                <span className="text-xs text-neutral-400 font-medium">اپیزود در حال تماشا</span>
                 <span className="font-mono text-xs text-[#ccff00]">پخش اپیزود جدید: فردا ۲۱:۳۰</span>
               </div>
 
@@ -397,12 +387,12 @@ export default function HomePageClient({
                     <span className="text-lg font-black text-white">Breaking Bad</span>
                     <span className="font-mono text-xs text-neutral-400 bg-neutral-900 border border-white/10 px-2 py-0.5">TV-MA</span>
                   </div>
-                  <div className="font-mono text-sm text-[#ccff00]">S05·E14 // Ozymandias</div>
+                  <div className="font-mono text-sm text-[#ccff00]">فصل ۵ · قسمت ۱۴ // Ozymandias</div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <div className="text-left font-mono text-xs text-neutral-500">
-                    <div>PROGRESS</div>
+                    <div>وضعیت تماشا</div>
                     <div className="text-white font-bold">۸۵٪ تکمیل</div>
                   </div>
                   <button className="bg-[#ccff00] hover:bg-[#b8e600] text-black px-4 py-2.5 font-mono text-xs font-bold flex items-center gap-2 cursor-pointer transition-colors">
@@ -433,9 +423,6 @@ export default function HomePageClient({
           {/* Column 01: DNA & Persona */}
           <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
             <div className="space-y-3">
-              <div className="font-mono text-xs text-white uppercase font-bold">
-                [ 02 // CINEMA DNA ]
-              </div>
               <h3 className="text-xl font-black text-white">
                 شناسنامه و هویت سینمایی اختصاصی
               </h3>
@@ -463,9 +450,6 @@ export default function HomePageClient({
           {/* Column 02: Mood AI Assistant */}
           <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
             <div className="space-y-3">
-              <div className="font-mono text-xs text-[#ccff00] uppercase font-bold">
-                [ 03 // MOOD RADAR AI ]
-              </div>
               <h3 className="text-xl font-black text-white">
                 دستیار هوشمند بر اساس حس لحظه
               </h3>
@@ -488,9 +472,6 @@ export default function HomePageClient({
           {/* Column 03: Spoiler-Free Ledger */}
           <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
             <div className="space-y-3">
-              <div className="font-mono text-xs text-white uppercase font-bold">
-                [ 04 // SPOILER-SHIELD ]
-              </div>
               <h3 className="text-xl font-black text-white">
                 باشگاه منتقدین بدون افشای داستان
               </h3>
@@ -517,9 +498,6 @@ export default function HomePageClient({
       {/* --- FULL-WIDTH CINEMATIC CALLOUT (NO FLOATING ROUNDED CARDS) --- */}
       <section className="relative z-10 border-y border-white/10 bg-[#080808] py-20 px-4 sm:px-8">
         <div className="max-w-4xl mx-auto text-center space-y-6">
-          <div className="font-mono text-xs text-[#ccff00] uppercase tracking-widest">
-            // READY FOR DISCOVERY
-          </div>
           <h3 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight">
             آماده‌ای پرونده سریالیت را <br />
             <span className="text-[#ccff00]">حرفه‌ای و منظم</span> مدیریت کنی؟

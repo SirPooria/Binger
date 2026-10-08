@@ -7,9 +7,12 @@ import {
   getSeasonDetails,
   getImageUrl,
   getGlobalAiringShows,
-  getBackdropUrl
+  getBackdropUrl,
+  getTrendingMovies,
+  type TMDBMovie
 } from '@/lib/tmdbClient';
 import { useWatched } from '@/lib/watchedContext';
+import { useMovie } from '@/lib/movieContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -27,10 +30,12 @@ import {
   Tv,
   Film,
   TrendingUp,
-  Award
+  Award,
+  BookmarkPlus
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { ShowCardProgress } from './components/ShowProgressBar';
+import { MovieCard } from './components/MovieCard';
 import { VipUsername } from './components/VipBadge';
 import { calculateSubscriptionDetails } from '@/lib/subscription';
 import { SubscriptionBadge } from './components/SubscriptionComponents';
@@ -156,6 +161,31 @@ export default function BingerHomeScreen() {
     getWatchedRecords,
     toggleWatchedEpisode,
   } = useWatched();
+
+  const {
+    watchedMovies,
+    watchlistMovies,
+    favoriteMovies,
+    totalWatchedMoviesCount,
+    totalMovieWatchTimeMinutes,
+  } = useMovie();
+
+  const [dashboardMode, setDashboardMode] = useState<'shows' | 'movies'>('shows');
+  const [trendingMovies, setTrendingMovies] = useState<TMDBMovie[]>([]);
+  const [moviesLoading, setMoviesLoading] = useState(false);
+
+  const movieHours = Math.floor(totalMovieWatchTimeMinutes / 60);
+  const movieMinutes = totalMovieWatchTimeMinutes % 60;
+
+  useEffect(() => {
+    if (dashboardMode === 'movies' && trendingMovies.length === 0) {
+      setMoviesLoading(true);
+      getTrendingMovies(1)
+        .then(movies => setTrendingMovies(movies || []))
+        .catch(console.error)
+        .finally(() => setMoviesLoading(false));
+    }
+  }, [dashboardMode, trendingMovies.length]);
 
   const cachedHome = getHomeCache();
   const [loading, setLoading] = useState(!cachedHome);
@@ -902,8 +932,45 @@ export default function BingerHomeScreen() {
         )}
 
         {/* ========================================================================= */}
-        {/* نوار خلاصه آمار تماشا (Quick Stats Strip - بسیار شیک و خلوت) */}
+        {/* سوییچر مدرن بین داشبورد سریال‌ها و داشبورد سینما */}
         {/* ========================================================================= */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 w-fit shadow-inner">
+            <button
+              onClick={() => setDashboardMode('shows')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer ${
+                dashboardMode === 'shows'
+                  ? 'bg-[#ccff00] text-black shadow-[0_0_15px_rgba(204,255,0,0.3)]'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Tv size={15} />
+              <span>سریال‌های من</span>
+            </button>
+            <button
+              onClick={() => setDashboardMode('movies')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer ${
+                dashboardMode === 'movies'
+                  ? 'bg-amber-400 text-black shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Film size={15} />
+              <span>سینما و فیلم‌ها</span>
+              {watchlistMovies.length > 0 && (
+                <span className="bg-black/30 text-[11px] px-1.5 py-0.5 rounded-full font-mono">
+                  {watchlistMovies.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {dashboardMode === 'shows' ? (
+          <>
+            {/* ========================================================================= */}
+            {/* نوار خلاصه آمار تماشا (Quick Stats Strip - بسیار شیک و خلوت) */}
+            {/* ========================================================================= */}
         {loading ? (
           <StatsBarSkeleton />
         ) : trackedShows.length > 0 && (
@@ -1376,6 +1443,165 @@ export default function BingerHomeScreen() {
               )}
             </section>
           </>
+        )}
+      </>
+    ) : (
+          <div className="space-y-10 animate-in fade-in duration-300">
+            {/* نوار خلاصه آمار سینما */}
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+              <div className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 rounded-2xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 transition-all">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <Film size={16} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] sm:text-xs text-gray-400 truncate">فیلم‌های دیده‌شده</span>
+                  <span className="text-xs sm:text-sm font-black font-mono text-white mt-0.5">
+                    {totalWatchedMoviesCount} <span className="text-[10px] font-sans text-gray-500 font-normal">اثر</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 rounded-2xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 transition-all">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+                  <Clock size={16} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] sm:text-xs text-gray-400 truncate">زمان تماشای فیلم</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-xs sm:text-sm font-black font-mono text-cyan-300">
+                      {movieHours}
+                    </span>
+                    <span className="text-[10px] font-sans text-gray-400">ساعت</span>
+                    {movieMinutes > 0 && (
+                      <span className="text-[10px] font-mono text-gray-400">{movieMinutes}دقیقه</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 rounded-2xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 transition-all">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                  <BookmarkPlus size={16} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] sm:text-xs text-gray-400 truncate">لیست انتظار فیلم‌ها</span>
+                  <span className="text-xs sm:text-sm font-black font-mono text-purple-300 mt-0.5">
+                    {watchlistMovies.length} <span className="text-[10px] font-sans text-gray-500 font-normal">فیلم</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* بخش اول سینما: فیلم‌های آماده برای تماشا در لیست انتظار */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                    <BookmarkPlus size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-white">نوبت تماشای فیلم (لیست انتظار شما)</h2>
+                    <p className="text-[11px] text-gray-400">فیلم‌هایی که برای تماشا نشان کرده‌اید</p>
+                  </div>
+                </div>
+                <Link href="/dashboard/lists?type=movies&tab=watchlist" className="text-xs text-[#ccff00] hover:underline font-bold">
+                  مشاهده همه ←
+                </Link>
+              </div>
+
+              {watchlistMovies.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {watchlistMovies.slice(0, 8).map((m) => (
+                    <MovieCard
+                      key={`dash-wl-${m.movie_id}`}
+                      movie={{
+                        id: m.movie_id,
+                        title: m.movie_title || 'بدون عنوان',
+                        poster_path: m.poster_path || null,
+                        runtime: m.runtime_minutes || undefined,
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white/[0.02] border border-dashed border-white/10 rounded-3xl p-8 text-center space-y-2">
+                  <Film size={36} className="text-gray-600 mx-auto mb-2" />
+                  <h3 className="text-sm font-bold text-gray-300">لیست انتظار فیلم‌های شما خالی است</h3>
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                    فیلم‌های جذاب را پیدا کنید و با دکمه بوکمارک به لیست انتظار اضافه کنید تا هر زمان فرصت داشتید سراغشان بروید.
+                  </p>
+                  <Link
+                    href="/dashboard/explore?tab=movies"
+                    className="inline-flex items-center gap-1.5 bg-[#ccff00] text-black px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#b3e600] transition-colors mt-2"
+                  >
+                    <span>کاوش فیلم‌های برتر</span>
+                  </Link>
+                </div>
+              )}
+            </section>
+
+            {/* بخش دوم سینما: آخرین فیلم‌های تماشاشده */}
+            {watchedMovies.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                      <CheckCircle2 size={18} />
+                    </div>
+                    <h2 className="text-base sm:text-lg font-black text-white">آخرین فیلم‌های دیده‌شده</h2>
+                  </div>
+                  <Link href="/dashboard/lists?type=movies&tab=watched" className="text-xs text-gray-400 hover:text-white">
+                    آرشیو کامل ({watchedMovies.length}) ←
+                  </Link>
+                </div>
+
+                <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth">
+                  {watchedMovies.slice(0, 10).map((m) => (
+                    <div key={`dash-watched-${m.movie_id}`} className="w-[140px] sm:w-[160px] shrink-0">
+                      <MovieCard
+                        movie={{
+                          id: m.movie_id,
+                          title: m.movie_title || 'بدون عنوان',
+                          poster_path: m.poster_path || null,
+                          runtime: m.runtime_minutes || undefined,
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* بخش سوم سینما: فیلم‌های ترند و پیشنهادی روز */}
+            <section className="space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <Flame size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-white">فیلم‌های داغ و محبوب هفته</h2>
+                    <p className="text-[11px] text-gray-400">محبوب‌ترین فیلم‌های سینمایی حال حاضر جهان</p>
+                  </div>
+                </div>
+                <Link href="/dashboard/explore?tab=movies" className="text-xs text-amber-400 hover:underline font-bold">
+                  کاوش همه ←
+                </Link>
+              </div>
+
+              {moviesLoading ? (
+                <div className="flex justify-center py-12 text-[#ccff00]">
+                  <Loader2 className="animate-spin" size={32} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {trendingMovies.slice(0, 10).map((movie) => (
+                    <MovieCard key={`dash-trend-${movie.id}`} movie={movie} />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
         )}
 
       </main>
